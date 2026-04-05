@@ -1,0 +1,24 @@
+# Web framework
+fastapi[standard]>=0.128.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+
+# Agent core
+pydantic-ai[anthropic,openai,duckduckgo,mcp]>=1.0.0
+
+# RAG
+llama-index>=0.14.0
+llama-index-vector-stores-postgres>=0.4.0
+llama-index-embeddings-openai>=0.3.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.30.0
+alembic>=1.14.0
+pgvector>=0.3.0
+
+# File processing
+unstructured[all-docs]
+
+# Utilities
+python-dotenv>=1.0.0
