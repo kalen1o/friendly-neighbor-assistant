@@ -8,17 +8,18 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SourceAttribution } from "@/components/source-attribution";
-import type { Source } from "@/lib/api";
+import type { Source, MessageMetrics } from "@/lib/api";
 
 interface MessageBubbleProps {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
   sources?: Source[] | null;
+  metrics?: MessageMetrics | null;
   onEdit?: (newContent: string) => void;
 }
 
-export function MessageBubble({ role, content, isStreaming, sources, onEdit }: MessageBubbleProps) {
+export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit }: MessageBubbleProps) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -135,8 +136,8 @@ export function MessageBubble({ role, content, isStreaming, sources, onEdit }: M
             )}
           </div>
         )}
-        {!isUser && sources && sources.length > 0 && (
-          <SourceAttribution sources={sources} />
+        {!isUser && (sources?.length || metrics) && (
+          <SourceAttribution sources={sources || []} metrics={metrics} />
         )}
       </div>
     </div>

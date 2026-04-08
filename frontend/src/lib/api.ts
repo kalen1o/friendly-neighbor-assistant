@@ -9,13 +9,21 @@ export interface ChatSummary {
 }
 
 export interface Source {
-  type: "document" | "web";
+  type: "document" | "web" | "skill";
   text?: string;
   filename?: string;
   score?: number;
   title?: string;
   url?: string;
   snippet?: string;
+  tool?: string;
+}
+
+export interface MessageMetrics {
+  latency?: number;
+  tokens_input?: number;
+  tokens_output?: number;
+  tokens_total?: number;
 }
 
 export interface MessageOut {
@@ -25,6 +33,7 @@ export interface MessageOut {
   content: string;
   created_at: string;
   sources?: Source[] | null;
+  metrics?: MessageMetrics | null;
 }
 
 export interface ChatDetail {
@@ -86,6 +95,7 @@ export interface SSECallbacks {
   onMessage: (chunk: string) => void;
   onTitle: (title: string) => void;
   onSources?: (sources: Source[]) => void;
+  onMetrics?: (metrics: MessageMetrics) => void;
   onDone: () => void;
   onError: (error: string) => void;
 }
@@ -154,6 +164,11 @@ export function sendMessage(
             case "sources":
               try {
                 callbacks.onSources?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "metrics":
+              try {
+                callbacks.onMetrics?.(JSON.parse(data));
               } catch {}
               break;
             case "done":
@@ -372,4 +387,85 @@ export async function deleteHook(hookId: number): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete hook");
+}
+
+// ── MCP Types ──
+
+export interface McpServerOut {
+  id: number;
+  name: string;
+  url: string;
+  description: string | null;
+  auth_type: string;
+  enabled: boolean;
+  tool_count: number;
+  enabled_tool_count: number;
+  created_at: string;
+}
+
+export interface McpToolOut {
+  id: number;
+  server_id: number;
+  tool_name: string;
+  description: string | null;
+  input_schema: string | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+// ── MCP CRUD ──
+
+export async function listMcpServers(): Promise<McpServerOut[]> {
+  const res = await fetch(`${API_BASE}/api/mcp/servers`);
+  if (!res.ok) throw new Error("Failed to list MCP servers");
+  return res.json();
+}
+
+export async function createMcpServer(server: {
+  name: string;
+  url: string;
+  description?: string;
+  auth_type?: string;
+  auth_token?: string;
+}): Promise<McpServerOut> {
+  const res = await fetch(`${API_BASE}/api/mcp/servers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(server),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to add server" }));
+    throw new Error(err.detail || "Failed to add server");
+  }
+  return res.json();
+}
+
+export async function deleteMcpServer(serverId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/mcp/servers/${serverId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete server");
+}
+
+export async function refreshMcpTools(serverId: number): Promise<McpToolOut[]> {
+  const res = await fetch(`${API_BASE}/api/mcp/servers/${serverId}/refresh`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to refresh tools");
+  return res.json();
+}
+
+export async function listMcpTools(serverId: number): Promise<McpToolOut[]> {
+  const res = await fetch(`${API_BASE}/api/mcp/servers/${serverId}/tools`);
+  if (!res.ok) throw new Error("Failed to list tools");
+  return res.json();
+}
+
+export async function updateMcpTool(
+  toolId: number,
+  updates: { enabled?: boolean }
+): Promise<McpToolOut> {
+  const res = await fetch(`${API_BASE}/api/mcp/tools/${toolId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("Failed to update tool");
+  return res.json();
 }

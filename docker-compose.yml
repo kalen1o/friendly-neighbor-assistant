@@ -18,6 +18,21 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── Redis Cache ──
+  redis:
+    image: redis:7-alpine
+    container_name: fn-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # ── FastAPI Backend ──
   backend:
     build:
@@ -35,6 +50,8 @@ services:
       - uploaded_docs:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -59,3 +76,4 @@ services:
 volumes:
   pgdata:
   uploaded_docs:
+  redisdata:

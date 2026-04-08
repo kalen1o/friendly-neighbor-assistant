@@ -76,6 +76,9 @@ local-db: ## Start only PostgreSQL in Docker
 local-db-down: ## Stop local PostgreSQL
 	docker compose -f docker-compose.local.yml down
 
+local-redis: ## Start Redis for local dev
+	docker compose -f docker-compose.local.yml up -d redis
+
 local-backend: ## Run backend natively (requires local Python + deps)
 	cd backend && DATABASE_URL=postgresql+asyncpg://friendly:friendly_secret@localhost:5432/friendly_neighbor uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 

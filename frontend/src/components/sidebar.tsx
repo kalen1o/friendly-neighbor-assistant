@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Plus, FileText, Zap, Anchor } from "lucide-react";
+import { Plus, FileText, Zap, Anchor, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -104,6 +104,17 @@ export function Sidebar() {
             </div>
             <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
               Hooks
+            </span>
+          </button>
+          <button
+            onClick={() => router.push("/mcp")}
+            className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm transition-all hover:border-primary/30 hover:bg-accent hover:shadow-md"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 transition-colors group-hover:bg-purple-500/20">
+              <Plug className="h-4 w-4 text-purple-500" />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+              MCP
             </span>
           </button>
         </div>

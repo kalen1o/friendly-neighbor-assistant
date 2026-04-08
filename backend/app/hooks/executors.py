@@ -12,13 +12,19 @@ _rate_limit_store: Dict[int, list] = {}
 
 
 async def execute_log_messages(context: HookContext, hook: HookDefinition):
-    """Log every message exchange."""
+    """Log every message exchange and calculate latency."""
+    start = context.metadata.get("start_time")
+    if start:
+        duration = round(time.time() - start, 2)
+        context.metadata["latency_seconds"] = duration
     logger.info(
         f"[MESSAGE] chat={context.chat_id} "
         f"user=\"{context.user_message[:80]}\" "
         f"response_len={len(context.response)} "
         f"skills={context.skills_used} "
-        f"sources={len(context.sources)}"
+        f"sources={len(context.sources)} "
+        f"latency={context.metadata.get('latency_seconds', '?')}s "
+        f"tokens={context.metadata.get('tokens_total', '?')}"
     )
 
 
@@ -28,6 +34,9 @@ async def execute_token_counter(context: HookContext, hook: HookDefinition):
     output_chars = len(context.response)
     input_tokens = input_chars // 4
     output_tokens = output_chars // 4
+    context.metadata["tokens_input"] = input_tokens
+    context.metadata["tokens_output"] = output_tokens
+    context.metadata["tokens_total"] = input_tokens + output_tokens
     logger.info(
         f"[TOKENS] input={input_tokens} output={output_tokens} "
         f"total={input_tokens + output_tokens} chat={context.chat_id}"

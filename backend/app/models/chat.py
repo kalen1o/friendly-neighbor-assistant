@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -37,5 +37,9 @@ class Message(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     sources_json: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    latency: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    tokens_input: Mapped[Optional[int]] = mapped_column(Integer, default=None)
+    tokens_output: Mapped[Optional[int]] = mapped_column(Integer, default=None)
+    tokens_total: Mapped[Optional[int]] = mapped_column(Integer, default=None)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")

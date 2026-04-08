@@ -16,6 +16,13 @@ class MessageCreate(BaseModel):
     content: str
 
 
+class MessageMetrics(BaseModel):
+    latency: Optional[float] = None
+    tokens_input: Optional[int] = None
+    tokens_output: Optional[int] = None
+    tokens_total: Optional[int] = None
+
+
 class MessageOut(BaseModel):
     id: int
     chat_id: int
@@ -23,6 +30,7 @@ class MessageOut(BaseModel):
     content: str
     created_at: datetime
     sources: Optional[List[Dict[str, Any]]] = None
+    metrics: Optional[MessageMetrics] = None
 
     model_config = {"from_attributes": True}
 
@@ -35,6 +43,14 @@ class MessageOut(BaseModel):
                 sources = json.loads(msg.sources_json)
             except (json.JSONDecodeError, TypeError):
                 pass
+        metrics = None
+        if msg.latency is not None or msg.tokens_total is not None:
+            metrics = MessageMetrics(
+                latency=msg.latency,
+                tokens_input=msg.tokens_input,
+                tokens_output=msg.tokens_output,
+                tokens_total=msg.tokens_total,
+            )
         return cls(
             id=msg.id,
             chat_id=msg.chat_id,
@@ -42,6 +58,7 @@ class MessageOut(BaseModel):
             content=msg.content,
             created_at=msg.created_at,
             sources=sources,
+            metrics=metrics,
         )
 
 

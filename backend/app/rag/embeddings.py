@@ -5,12 +5,18 @@ import openai
 from app.config import Settings
 
 
+def _embedding_client(settings: Settings) -> openai.AsyncOpenAI:
+    api_key = settings.embedding_api_key or settings.openai_api_key
+    base_url = settings.embedding_base_url or settings.openai_base_url
+    return openai.AsyncOpenAI(
+        api_key=api_key,
+        **({"base_url": base_url} if base_url else {}),
+    )
+
+
 async def generate_embedding(text: str, settings: Settings) -> List[float]:
     """Generate embedding for a single text."""
-    client = openai.AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        **({"base_url": settings.openai_base_url} if settings.openai_base_url else {}),
-    )
+    client = _embedding_client(settings)
     response = await client.embeddings.create(
         model=settings.embedding_model,
         input=text,
@@ -23,13 +29,9 @@ async def generate_embeddings_batch(texts: List[str], settings: Settings) -> Lis
     if not texts:
         return []
 
-    client = openai.AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        **({"base_url": settings.openai_base_url} if settings.openai_base_url else {}),
-    )
+    client = _embedding_client(settings)
 
-    # OpenAI supports batches up to ~8000 tokens per request
-    # Process in batches of 100 to be safe
+    # Process in batches of 100
     all_embeddings: List[List[float]] = []
     batch_size = 100
 

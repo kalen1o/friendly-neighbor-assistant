@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ChatMessages, type DisplayMessage } from "@/components/chat-messages";
 import { ChatInput } from "@/components/chat-input";
-import { getChat, sendMessage, type Source } from "@/lib/api";
+import { getChat, sendMessage, type Source, type MessageMetrics } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
@@ -30,6 +30,8 @@ export default function ChatPage() {
   const doneRef = useRef(false);
   // Sources received from SSE for the current response
   const sourcesRef = useRef<Source[] | null>(null);
+  // Metrics received from SSE for the current response
+  const metricsRef = useRef<MessageMetrics | null>(null);
   // Skills used during the current response
   const skillsUsedRef = useRef<string[]>([]);
   // Typewriter interval ID
@@ -59,12 +61,14 @@ export default function ChatPage() {
         // All characters revealed and stream is done — finalize
         stopTypewriter();
         const finalContent = fullTextRef.current;
-        const finalSources = sourcesRef.current;
+        const allSources = sourcesRef.current || [];
+        const realSources = allSources.filter((s) => s.type !== "skill");
         const finalSkills = [...skillsUsedRef.current];
+        const finalMetrics = metricsRef.current;
         if (finalContent) {
           setMessages((msgs) => [
             ...msgs,
-            { role: "assistant", content: finalContent, sources: finalSources, skillsUsed: finalSkills.length > 0 ? finalSkills : null },
+            { role: "assistant", content: finalContent, sources: realSources.length > 0 ? realSources : null, skillsUsed: finalSkills.length > 0 ? finalSkills : null, metrics: finalMetrics },
           ]);
         }
         setStreamingContent("");
@@ -72,6 +76,7 @@ export default function ChatPage() {
         fullTextRef.current = "";
         revealedRef.current = 0;
         sourcesRef.current = null;
+        metricsRef.current = null;
         skillsUsedRef.current = [];
         doneRef.current = false;
         setIsStreaming(false);
@@ -86,11 +91,20 @@ export default function ChatPage() {
     try {
       const chat = await getChat(chatId);
       setMessages(
-        chat.messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          sources: m.sources || null,
-        }))
+        chat.messages.map((m) => {
+          const allSources = m.sources || [];
+          const realSources = allSources.filter((s) => s.type !== "skill");
+          const skills = allSources
+            .filter((s) => s.type === "skill" && s.tool)
+            .map((s) => s.tool!);
+          return {
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            sources: realSources.length > 0 ? realSources : null,
+            skillsUsed: skills.length > 0 ? skills : null,
+            metrics: m.metrics || null,
+          };
+        })
       );
       setError(null);
     } catch (e) {
@@ -110,6 +124,7 @@ export default function ChatPage() {
     revealedRef.current = 0;
     doneRef.current = false;
     sourcesRef.current = null;
+    metricsRef.current = null;
     skillsUsedRef.current = [];
     setActiveSkills([]);
     setIsStreaming(true);
@@ -129,6 +144,9 @@ export default function ChatPage() {
             setActiveSkills([...skillsUsedRef.current]);
           }
         }
+      },
+      onMetrics: (metrics) => {
+        metricsRef.current = metrics;
       },
       onSources: (sources) => {
         sourcesRef.current = sources;

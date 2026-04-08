@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
-from app.agent.agent import run_agent
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.hooks.executors import register_all_hook_executors
@@ -133,61 +132,34 @@ async def send_message(
             yield {"event": "done", "data": ""}
             return
 
-        # Use potentially modified message
         user_msg_content = hook_ctx.modifications.get("message_replace", body.content)
 
         # 2. pre_skills hooks
         hook_ctx = await hook_registry.run_hooks("pre_skills", hook_ctx)
 
-        actions = []
+        # Build agent context (tools + knowledge prompts)
+        from app.agent.agent import build_agent_context, create_tool_executor
+        tool_defs, knowledge_prompts, registry = await build_agent_context(db, settings)
+        tool_executor = await create_tool_executor(registry, db, settings)
 
-        async def on_action(text):
-            actions.append(text)
-
-        # Run agent: selects and executes skills
-        agent_result = await run_agent(
-            user_message=user_msg_content,
-            chat_history=[],
-            db=db,
-            settings=settings,
-            on_action=on_action,
-        )
-
-        # Yield all action events
-        for action_text in actions:
-            yield {"event": "action", "data": action_text}
-
-        context_parts = agent_result["context_parts"]
-        sources = agent_result["sources"]
-        knowledge_prompts = agent_result["knowledge_prompts"]
-
-        # 3. post_skills hooks
-        hook_ctx.skills_used = [a.replace("Using ", "").replace("...", "") for a in actions if a.startswith("Using ")]
-        hook_ctx.sources = sources
-        hook_ctx.context_parts = context_parts
+        # 3. post_skills hooks (tools are registered, not yet called)
         hook_ctx.knowledge_prompts = knowledge_prompts
         hook_ctx = await hook_registry.run_hooks("post_skills", hook_ctx)
 
-        # 4. Build message history for LLM
+        # Build message history
         await db.refresh(chat, ["messages"])
         llm_messages = [
             {"role": m.role, "content": m.content} for m in chat.messages
         ]
 
-        # Inject knowledge skill prompts + tool context into the message
-        augment_parts = []
-
+        # Inject knowledge prompts into the last user message
         if hook_ctx.knowledge_prompts:
-            augment_parts.append("Follow these additional instructions:\n" + "\n\n".join(hook_ctx.knowledge_prompts))
-
-        if hook_ctx.context_parts:
-            augment_parts.append("Use the following context to help answer. Cite sources when relevant:\n\n" + "\n\n".join(hook_ctx.context_parts))
-
-        if augment_parts:
-            augmented_content = (
-                f"{user_msg_content}\n\n---\n" + "\n\n---\n".join(augment_parts)
+            augmented = (
+                f"{user_msg_content}\n\n---\n"
+                f"Follow these additional instructions:\n"
+                + "\n\n".join(hook_ctx.knowledge_prompts)
             )
-            llm_messages[-1] = {"role": "user", "content": augmented_content}
+            llm_messages[-1] = {"role": "user", "content": augmented}
 
         # 4. pre_llm hooks
         hook_ctx.llm_messages = llm_messages
@@ -195,15 +167,38 @@ async def send_message(
 
         yield {"event": "action", "data": "Generating response..."}
 
-        # Stream LLM response
+        # Track tool calls for sources and badges
+        skills_used = []
+        tool_actions = []
+
+        async def on_tool_call_track(tool_name):
+            if tool_name not in skills_used:
+                skills_used.append(tool_name)
+            tool_actions.append(f"Using {tool_name}...")
+
+        # Stream with native tool calling
+        from app.llm.provider import stream_with_tools
         full_response = ""
         try:
-            async for chunk in stream_llm_response(llm_messages, settings):
+            async for chunk in stream_with_tools(
+                llm_messages, settings,
+                tools=tool_defs if tool_defs else None,
+                tool_executor=tool_executor,
+                on_tool_call=on_tool_call_track,
+            ):
+                # Yield any pending tool actions
+                while tool_actions:
+                    yield {"event": "action", "data": tool_actions.pop(0)}
                 full_response += chunk
                 yield {"event": "message", "data": chunk}
 
+            # Yield any remaining tool actions
+            while tool_actions:
+                yield {"event": "action", "data": tool_actions.pop(0)}
+
             # 5. post_llm hooks
             hook_ctx.response = full_response
+            hook_ctx.skills_used = skills_used
             hook_ctx = await hook_registry.run_hooks("post_llm", hook_ctx)
 
             # Apply modifications
@@ -213,8 +208,27 @@ async def send_message(
                 full_response += hook_ctx.modifications["response_append"]
                 yield {"event": "message", "data": hook_ctx.modifications["response_append"]}
 
-            # Save assistant message with sources
-            sources_json = json.dumps(sources) if sources else None
+            # Build sources: actual sources from tool results + skill labels
+            sources_data = []
+            seen_urls = set()
+            if hasattr(tool_executor, "collected_sources"):
+                for src in tool_executor.collected_sources:
+                    key = src.get("url") or src.get("filename")
+                    if key and key in seen_urls:
+                        continue
+                    if key:
+                        seen_urls.add(key)
+                    sources_data.append(src)
+            # Add skill labels for tools that didn't return specific sources
+            sourced_tools = {s.get("tool") for s in sources_data if s.get("tool")}
+            for s in skills_used:
+                if s not in sourced_tools:
+                    sources_data.append({"type": "skill", "tool": s})
+            if sources_data:
+                yield {"event": "sources", "data": json.dumps(sources_data)}
+
+            # Save assistant message
+            sources_json = json.dumps(sources_data) if skills_used else None
             assistant_msg = Message(
                 chat_id=chat_id,
                 role="assistant",
@@ -225,10 +239,6 @@ async def send_message(
             chat.updated_at = func.now()
             await db.commit()
 
-            # Send sources to frontend
-            if sources:
-                yield {"event": "sources", "data": json.dumps(sources)}
-
             # Auto-title
             if chat.title is None:
                 title = await _generate_title(body.content, full_response, settings)
@@ -236,9 +246,26 @@ async def send_message(
                 await db.commit()
                 yield {"event": "title", "data": title}
 
-            # 6. post_message hooks
+            # 6. post_message hooks (latency calculated here)
             hook_ctx.response = full_response
+            hook_ctx.sources = sources_data
             hook_ctx = await hook_registry.run_hooks("post_message", hook_ctx)
+
+            # Collect metrics from hooks and persist
+            metrics = {}
+            if "latency_seconds" in hook_ctx.metadata:
+                metrics["latency"] = hook_ctx.metadata["latency_seconds"]
+            if "tokens_total" in hook_ctx.metadata:
+                metrics["tokens_input"] = hook_ctx.metadata["tokens_input"]
+                metrics["tokens_output"] = hook_ctx.metadata["tokens_output"]
+                metrics["tokens_total"] = hook_ctx.metadata["tokens_total"]
+            if metrics:
+                assistant_msg.latency = metrics.get("latency")
+                assistant_msg.tokens_input = metrics.get("tokens_input")
+                assistant_msg.tokens_output = metrics.get("tokens_output")
+                assistant_msg.tokens_total = metrics.get("tokens_total")
+                await db.commit()
+                yield {"event": "metrics", "data": json.dumps(metrics)}
 
             yield {"event": "done", "data": ""}
 

@@ -3,11 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.cache.redis import close_redis, init_redis
 from app.config import get_settings
 from app.db.engine import dispose_engine, init_engine
 from app.routers.chats import router as chats_router
 from app.routers.documents import router as documents_router
 from app.routers.hooks import router as hooks_router
+from app.routers.mcp import router as mcp_router
 from app.routers.skills import router as skills_router
 
 
@@ -15,7 +17,9 @@ from app.routers.skills import router as skills_router
 async def lifespan(app: FastAPI):
     settings = get_settings()
     init_engine(settings)
+    await init_redis(settings)
     yield
+    await close_redis()
     await dispose_engine()
 
 
@@ -39,3 +43,4 @@ app.include_router(chats_router)
 app.include_router(documents_router)
 app.include_router(skills_router)
 app.include_router(hooks_router)
+app.include_router(mcp_router)

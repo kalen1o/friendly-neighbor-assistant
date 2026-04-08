@@ -3,13 +3,14 @@
 import { useEffect, useRef } from "react";
 import { MessageBubble } from "@/components/message-bubble";
 import { Badge } from "@/components/ui/badge";
-import type { Source } from "@/lib/api";
+import type { Source, MessageMetrics } from "@/lib/api";
 
 export interface DisplayMessage {
   role: "user" | "assistant";
   content: string;
   sources?: Source[] | null;
   skillsUsed?: string[] | null;
+  metrics?: MessageMetrics | null;
 }
 
 interface ChatMessagesProps {
@@ -22,18 +23,20 @@ interface ChatMessagesProps {
 }
 
 function SkillBadges({ skills }: { skills: string[] }) {
-  if (!skills.length) return null;
+  const unique = [...new Set(skills)];
+  if (!unique.length) return null;
   return (
     <div className="flex flex-wrap gap-1.5 pl-1">
-      {skills.map((skill) => (
+      {unique.map((skill) => (
         <Badge key={skill} variant="secondary" className="gap-1 text-[10px]">
           <span className="h-1 w-1 rounded-full bg-primary" />
-          {skill}
+          {skill.replace(/_/g, " ")}
         </Badge>
       ))}
     </div>
   );
 }
+
 
 export function ChatMessages({ messages, streamingContent, isLoading, actionText, activeSkills = [], onEditMessage }: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -57,6 +60,7 @@ export function ChatMessages({ messages, streamingContent, isLoading, actionText
               role={msg.role}
               content={msg.content}
               sources={msg.sources}
+              metrics={msg.role === "assistant" ? msg.metrics : undefined}
               onEdit={msg.role === "user" && onEditMessage ? (newContent) => onEditMessage(i, newContent) : undefined}
             />
           </div>

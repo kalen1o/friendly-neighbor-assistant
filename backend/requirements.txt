@@ -18,6 +18,9 @@ pypdf>=5.0.0
 # Embeddings
 tiktoken>=0.8.0
 
+# Redis cache
+redis[hiredis]>=5.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 
@@ -25,7 +28,7 @@ python-dotenv>=1.0.0
 pydantic-settings>=2.0.0
 
 # Agent core (Phase 4)
-pydantic-ai[anthropic,openai,duckduckgo]>=1.0.0
+pydantic-ai>=1.0.0
 ddgs>=8.0.0
 
 # LLM SDKs
