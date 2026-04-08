@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DocumentUpload } from "@/components/document-upload";
 import { DocumentList } from "@/components/document-list";
 import {
@@ -91,9 +93,10 @@ export default function DocumentsPage() {
         <h1 className="text-2xl font-semibold">Knowledge Base</h1>
 
         {error && (
-          <div className="rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         <DocumentUpload onUpload={handleUpload} disabled={uploading} />

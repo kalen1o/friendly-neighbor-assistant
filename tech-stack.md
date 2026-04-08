@@ -6,16 +6,16 @@
 |------------------|---------------------------------|---------|---------|
 | Frontend         | Next.js (React)                 | 15+     | `next@latest` |
 | Backend / API    | FastAPI (Python)                | 0.128+  | `fastapi[standard]` |
-| Agent Core       | Pydantic AI                     | 1.0+    | `pydantic-ai[anthropic,openai,duckduckgo]` |
-| RAG Framework    | LlamaIndex                      | 0.14+   | `llama-index` |
+| Agent Core       | Skill Registry + LLM selection  | custom  | `app.skills.registry` |
+| RAG Chunking     | Custom paragraph slider         | custom  | `app.rag.chunking` |
 | Database         | PostgreSQL                      | 16+     | — |
-| Vector DB        | pgvector (temporary → Qdrant)   | 0.8.2   | `pgvector` (extension) + `pgvector-python` |
+| Vector DB        | pgvector (HNSW cosine index)    | 0.8.2   | `pgvector` (extension) + `pgvector-python` |
 | Embeddings       | OpenAI `text-embedding-3-small` | —       | via `openai` SDK |
-| AI Provider      | Anthropic Claude / OpenAI       | —       | via Pydantic AI |
-| Web Search       | DuckDuckGo                      | 8.0+    | `duckduckgo-search` |
+| AI Provider      | Any OpenAI-compatible           | —       | `anthropic` + `openai` SDKs |
+| Web Search       | DuckDuckGo                      | 8.0+    | `ddgs` |
+| File Parsing     | pypdf + python-docx             | —       | `pypdf`, `python-docx` |
 | Task Queue       | FastAPI BackgroundTasks          | —       | built into FastAPI |
 | ORM              | SQLAlchemy + Alembic            | 2.0+ / 1.14+ | `sqlalchemy[asyncio]` + `alembic` |
-| File Processing  | Unstructured                    | latest  | `unstructured[all-docs]` |
 | Containerization | Docker + Docker Compose         | 27+     | `docker compose` |
 | Task Runner      | Makefile                        | —       | `make` |
 

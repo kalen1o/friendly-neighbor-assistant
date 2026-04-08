@@ -1,38 +1,55 @@
 # Friendly Neighbor
 
-An AI-powered chatbot agent that connects to your preferred AI provider, surfs the internet when needed, learns from your documents via RAG, and grows smarter over time through extensible skills, hooks, and MCP integrations.
+An AI-powered chatbot agent that connects to any OpenAI-compatible provider, searches the web and your documents via RAG, and extends its capabilities through a markdown-based skill system.
 
 ## Features
 
 ### Core Chat
 - **Multi-conversation support** — Create and manage separate chats organized by topic
-- **Persistent chat history** — All messages and conversations stored in a database
-- **AI provider integration** — Connect via API key to your chosen AI model
-- **Document management tab** — Upload, view, and delete documents from within the chat UI; see which documents are in your knowledge base and their processing status
+- **Persistent chat history** — All messages and conversations stored in PostgreSQL
+- **Streaming responses** — Real-time token streaming via Server-Sent Events (SSE)
+- **Auto-generated titles** — Chat titles created automatically after first response
+- **Typewriter effect** — Smooth character-by-character rendering in the UI
+
+### AI Provider Support
+- **Anthropic Claude** — Claude Sonnet and other models
+- **OpenAI** — GPT-4o and other models
+- **Any OpenAI-compatible API** — Z.ai (GLM-5), OpenRouter, Ollama, LiteLLM, etc.
+- Configurable via `.env` — switch providers without code changes
 
 ### RAG Knowledge Base
-- **Document upload** — Users upload files (PDF, TXT, DOCX, Markdown, etc.) to build a personal knowledge base
-- **Chunking pipeline** — Documents are split into optimized chunks with configurable strategy (fixed-size, semantic, recursive)
-- **Vector embeddings** — Chunks are embedded and stored in a vector database for fast similarity search
-- **Semantic search** — Retrieve the most relevant chunks for any query using vector similarity
+- **Document upload** — PDF, DOCX, TXT, Markdown, HTML, CSV
+- **Paragraph-based chunking** — Sliding window (A+B, B+C, C+D) with smart merging of short paragraphs and splitting of long ones
+- **Vector embeddings** — OpenAI `text-embedding-3-small`, stored in pgvector
+- **Semantic search** — Cosine similarity with HNSW indexing
+- **Background processing** — Upload returns immediately, processing runs async
+- **Source attribution** — Collapsible sources section shows which documents informed the answer
 
-### Smart Query Routing
-The agent classifies each user message and decides the best strategy:
+### Smart Agent with Skills
+The agent uses an LLM to select which skills to run for each message:
 
-| Route              | When                                                        |
-|--------------------|-------------------------------------------------------------|
-| **Answer directly** | General knowledge, simple questions, casual conversation    |
-| **Search knowledge base** | Query relates to uploaded documents or domain-specific data |
-| **Research the web** | Needs real-time info, news, or data not in the knowledge base |
-| **KB + Web combo**  | Combines internal documents with live web data for a complete answer |
+| Skill | Type | What it does |
+|-------|------|-------------|
+| `web_search` | tool | DuckDuckGo search + page content fetching |
+| `knowledge_base` | tool | RAG retrieval over uploaded documents |
+| `web_reader` | tool | Fetch and extract content from a URL |
+| `datetime_info` | tool | Current date, time, timezone conversions |
+| `calculate` | tool | Math expressions and unit conversions |
+| `summarize` | tool | Summarize text using LLM |
+| `coding_assistant` | knowledge | Enhanced coding-focused responses |
+| `writing_assistant` | knowledge | Enhanced writing/editing responses |
+| `summarize_all_docs` | workflow | Digest of all uploaded documents |
 
-- **Confidence scoring** — The agent evaluates its confidence and falls back to research when uncertain
-- **Source attribution** — Cites which documents, chunks, or URLs informed the answer
+- **Markdown-based skill definitions** — Skills defined as `.md` files with frontmatter
+- **Two-stage loading** — Lightweight skill index (names only) loaded per request, full skill loaded on-demand
+- **User-created skills** — Create custom skills from the UI, stored in DB
+- **Toggle on/off** — Enable/disable any skill without removing it
 
-### Extensibility
-- **Skills** — Add new capabilities as modular skills the agent can invoke
-- **Hooks** — Define pre/post-action hooks to customize agent behavior (e.g., logging, validation, transformations)
-- **MCP (Model Context Protocol)** — Connect external tools and services to expand what the agent can do
+### Web Search
+- **DuckDuckGo integration** — Free, no API key required
+- **Page content fetching** — Fetches actual page content from top results (not just snippets)
+- **Query expansion** — Abbreviations auto-expanded (HCM → Ho Chi Minh City Vietnam)
+- **Source links** — Web sources shown as clickable links in the UI
 
 ## Tech Stack
 
@@ -40,147 +57,191 @@ The agent classifies each user message and decides the best strategy:
 
 | Layer            | Technology                        |
 |------------------|-----------------------------------|
-| Frontend         | Next.js (React) + Tailwind + shadcn/ui |
-| Backend / API    | FastAPI (Python)                  |
-| Agent Core       | Pydantic AI (brain + query routing) |
-| RAG Framework    | LlamaIndex (chunking + retrieval) |
-| Database         | PostgreSQL                        |
-| Vector DB        | pgvector (temporary, Qdrant later) |
+| Frontend         | Next.js 15 + Tailwind CSS + shadcn/ui |
+| Backend / API    | FastAPI (Python 3.12)             |
+| Agent Core       | Skill Registry + LLM-based skill selection |
+| Database         | PostgreSQL 16                     |
+| Vector DB        | pgvector (HNSW cosine index)      |
 | Embeddings       | OpenAI `text-embedding-3-small`   |
-| AI Provider      | Anthropic Claude / OpenAI         |
-| Web Search       | DuckDuckGo (free, no API key)     |
-| Task Queue       | FastAPI BackgroundTasks            |
-| ORM              | SQLAlchemy + Alembic              |
-| File Processing  | Unstructured                      |
+| AI Provider      | Any OpenAI-compatible (Z.ai, Anthropic, OpenAI) |
+| Web Search       | DuckDuckGo (`ddgs`)               |
+| ORM              | SQLAlchemy 2.0 (async) + Alembic  |
 | Containerization | Docker + Docker Compose            |
-| Task Runner      | Makefile                           |
 
 ## Getting Started
 
 ### Prerequisites
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- An API key from Anthropic or OpenAI
+- An API key from any OpenAI-compatible provider
 
-### Installation
+### Quick Start
 
 ```bash
-# Clone the repository
+# Clone and setup
 git clone https://github.com/<your-org>/friendly-neighbor-assistant.git
 cd friendly-neighbor-assistant
-
-# First-time setup — creates .env from template
 make init
 
 # Edit .env with your API keys
 nano .env
+
+# Start everything
+make build && make up
+
+# Run database migrations
+make migrate
 ```
 
-### Running
+Open `http://localhost:3000` — start chatting.
 
-```bash
-# Start everything (database, backend, frontend)
-make up
+### Environment Variables
 
-# Check logs
-make logs
+```env
+# AI Provider — choose one
+AI_PROVIDER=openai                          # "anthropic" or "openai"
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://api.z.ai/api/paas/v4  # leave empty for OpenAI direct
+OPENAI_MODEL=glm-5                         # model name
 
-# Open the app
-# Frontend: http://localhost:3000
-# Backend API docs: http://localhost:8000/docs
+# Or use Anthropic
+# AI_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=your-anthropic-key
 ```
 
-### Common Commands
+### Local Development (native, with HMR)
 
 ```bash
-make up              # Start all services
-make down            # Stop all services
-make logs            # Tail all logs
-make migrate         # Run database migrations
-make shell-backend   # Open bash in backend container
-make shell-db        # Open psql in database
-make test            # Run tests
-make help            # Show all available commands
+make local-db          # Start only PostgreSQL in Docker
+make local-backend     # Run FastAPI natively (hot reload)
+make local-frontend    # Run Next.js natively (full HMR)
+make local-test        # Run tests locally
+```
+
+### All Commands
+
+```bash
+make help              # Show all available commands
+make up / down         # Start/stop Docker services
+make build             # Build images (cached)
+make build-clean       # Build from scratch
+make logs              # Tail all logs
+make migrate           # Run Alembic migrations
+make shell-backend     # Bash into backend container
+make shell-db          # psql into database
+make test              # Run pytest
 ```
 
 ## Project Structure
 
 ```
 friendly-neighbor-assistant/
-├── docker-compose.yml        # Orchestrates all services
-├── Makefile                  # Simple command runner
-├── .env.example              # Environment variable template
-├── .gitignore
+├── docker-compose.yml            # Full Docker stack (db + backend + frontend)
+├── docker-compose.local.yml      # DB only (for local dev)
+├── Makefile                      # Command runner
+├── .env.example                  # Environment template
 │
-├── backend/                  # FastAPI + Pydantic AI + LlamaIndex
+├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
+│   ├── alembic.ini
+│   ├── alembic/                  # Database migrations (0001-0004)
+│   ├── skills/                   # Built-in skill markdown files (9 skills)
 │   └── app/
-│       ├── main.py           # FastAPI entry point
-│       ├── agent/            # Pydantic AI agent (brain + query routing)
-│       ├── chat/             # Chat management and conversation routing
-│       ├── rag/              # RAG pipeline
-│       │   ├── chunking/     # Document chunking strategies
-│       │   ├── embeddings/   # Embedding generation
-│       │   ├── retrieval/    # Vector similarity search
-│       │   └── upload/       # File upload and processing
-│       ├── documents/        # Document management (list, view, delete)
-│       ├── research/         # Web search module (DuckDuckGo)
-│       ├── skills/           # Pluggable skill modules
-│       ├── hooks/            # Pre/post-action hook system
-│       ├── mcp/              # MCP server integrations
-│       └── db/               # SQLAlchemy models + Alembic migrations
+│       ├── main.py               # FastAPI entry point + routers
+│       ├── config.py             # Pydantic Settings
+│       ├── agent/
+│       │   ├── agent.py          # Skill-based agent (selects + executes skills)
+│       │   └── tools.py          # Web search, KB search, page fetcher
+│       ├── skills/
+│       │   ├── registry.py       # Loads built-in + DB skills, builds index
+│       │   └── executors.py      # Maps skill names to Python functions
+│       ├── rag/
+│       │   ├── chunking.py       # Paragraph sliding window chunker
+│       │   ├── embeddings.py     # OpenAI embedding generation
+│       │   ├── parsing.py        # PDF/DOCX/TXT/HTML/CSV text extraction
+│       │   ├── processing.py     # Background: parse → chunk → embed → store
+│       │   └── retrieval.py      # pgvector cosine similarity search
+│       ├── routers/
+│       │   ├── chats.py          # Chat CRUD + SSE streaming
+│       │   ├── documents.py      # Document upload/list/delete
+│       │   └── skills.py         # Skills CRUD + toggle
+│       ├── models/               # SQLAlchemy models (Chat, Message, Document, Skill)
+│       ├── schemas/              # Pydantic request/response schemas
+│       ├── db/                   # Async engine, session, base
+│       └── llm/
+│           └── provider.py       # Anthropic + OpenAI streaming provider
 │
-├── frontend/                 # Next.js + Tailwind + shadcn/ui
+├── frontend/
 │   ├── Dockerfile
 │   ├── package.json
 │   └── src/
-│       ├── app/              # Next.js app router pages
-│       ├── components/       # React components (chat, documents tab)
-│       └── lib/              # API client, utilities
+│       ├── app/
+│       │   ├── layout.tsx        # Root layout with sidebar
+│       │   ├── page.tsx          # Welcome page
+│       │   ├── chat/[id]/        # Chat conversation page
+│       │   ├── documents/        # Document management page
+│       │   └── skills/           # Skills management page
+│       ├── components/
+│       │   ├── sidebar.tsx       # Navigation (chats, docs, skills)
+│       │   ├── chat-input.tsx    # Message input with Enter/Shift+Enter
+│       │   ├── chat-messages.tsx # Message list with action indicators
+│       │   ├── message-bubble.tsx # Markdown rendering + source attribution
+│       │   ├── source-attribution.tsx # Collapsible sources
+│       │   ├── document-upload.tsx    # Drag-and-drop upload
+│       │   └── document-list.tsx      # Document table with status
+│       └── lib/
+│           └── api.ts            # API client + SSE stream parser
 │
-└── tests/
+└── docs/
+    └── superpowers/              # Design specs and implementation plans
 ```
 
-## Architecture Overview
+## Architecture
 
 ```
-User <-> Chat UI <-> Backend API
-              |              |
-        Document Tab    Agent Core
-        (upload,       /    |    \
-        manage)   Skills  Hooks   MCP
-              |        \    |    /
-              |     Query Router
-              |     /          \
-              v    v            v
-         Vector DB          Web Search
-        (RAG chunks,        (Internet)
-        embeddings)             |
-              |                 |
-              +--------+--------+
-                       |
-                    Database
-              (chats, messages, documents)
+User <-> Next.js UI <-> FastAPI Backend
+                             |
+                        Skill-Based Agent
+                        (LLM selects skills)
+                             |
+              ┌──────────────┼──────────────┐
+              │              │              │
+         Tool Skills    Knowledge     Workflow
+         (execute)      Skills        Skills
+              │         (system       (multi-step)
+              │          prompt)
+     ┌────────┼────────┐
+     │        │        │
+  Web Search  KB     DateTime
+  (DuckDuckGo) (pgvector) Calculate
+     │        │        Summarize
+     │        │        Web Reader
+     │        │
+     ▼        ▼
+  Internet  PostgreSQL
+            (chats, messages,
+             documents, chunks,
+             skills)
 ```
 
 ## Roadmap
 
-- [ ] Project scaffolding and tech stack setup
-- [ ] Database schema for chats, messages, sessions, and documents
-- [ ] AI provider integration with API key config
-- [ ] Basic chat loop (send message, get response, store in DB)
-- [ ] Multi-conversation support (create, switch, delete chats)
-- [ ] Document upload and processing pipeline
-- [ ] Chunking engine (fixed-size, semantic, recursive strategies)
-- [ ] Vector DB setup and embedding generation
-- [ ] RAG retrieval — semantic search over uploaded documents
-- [ ] Query router — classify intent (answer / search KB / search web / combo)
-- [ ] Research module — web search for real-time information
-- [ ] Document management tab in chat UI (upload, list, view, delete)
-- [ ] Skill system — load and invoke modular skills
-- [ ] Hook system — register pre/post-action hooks
-- [ ] MCP integration — connect external tools
-- [ ] Frontend chat UI
+- [x] Project scaffolding, Docker, Makefile
+- [x] Database schema (chats, messages, documents, chunks, skills)
+- [x] AI provider integration (Anthropic + OpenAI + any compatible API)
+- [x] Basic chat with SSE streaming and auto-titles
+- [x] Multi-conversation support
+- [x] Document upload with background processing
+- [x] Paragraph-based chunking with smart merge/split
+- [x] Vector embeddings + pgvector retrieval
+- [x] Web search with page content fetching
+- [x] Source attribution in UI
+- [x] Skill system with registry, built-in skills, and management UI
+- [ ] Hook system — pre/post-action callbacks
+- [ ] MCP integration — connect external tools via Model Context Protocol
+- [ ] User authentication
+- [ ] Conversation export/import
+- [ ] Mobile-responsive UI
 
 ## License
 

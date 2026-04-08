@@ -26,6 +26,7 @@ pydantic-settings>=2.0.0
 
 # Agent core (Phase 4)
 pydantic-ai[anthropic,openai,duckduckgo]>=1.0.0
+ddgs>=8.0.0
 
 # LLM SDKs
 anthropic>=0.40.0

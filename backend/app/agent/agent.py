@@ -94,30 +94,21 @@ async def run_agent(
     # Expand query for better search
     search_query = _expand_query(user_message)
 
-    # Separate skill types
-    tool_skills = [s for s in enabled_skills if s.skill_type == "tool"]
-    knowledge_skills = [s for s in enabled_skills if s.skill_type == "knowledge"]
-
-    # Knowledge skills: always include active ones as system prompt additions
-    knowledge_prompts = [s.content for s in knowledge_skills]
-
-    # Tool skills: ask LLM which ones to use
-    if not tool_skills:
-        return {"context_parts": [], "sources": [], "knowledge_prompts": knowledge_prompts}
-
-    # Build tool index for skill selection
-    tool_index = "\n".join(f"- {s.name}: {s.description}" for s in tool_skills)
+    # Build skill index for selection — include ALL types
+    skill_index = "\n".join(
+        f"- {s.name} ({s.skill_type}): {s.description}" for s in enabled_skills
+    )
 
     if on_action:
         await on_action("Selecting skills...")
 
-    # Ask LLM which skills to use (lightweight call)
+    # Ask LLM which skills to use
     selection_prompt = (
-        f"Given the user's message, which tools should be used? "
-        f"Reply with ONLY a comma-separated list of tool names, or 'none'.\n\n"
-        f"Available tools:\n{tool_index}\n\n"
+        f"Given the user's message, which skills should be used? "
+        f"Reply with ONLY a comma-separated list of skill names, or 'none'.\n\n"
+        f"Available skills:\n{skill_index}\n\n"
         f"User message: {user_message}\n\n"
-        f"Tools to use:"
+        f"Skills to use:"
     )
 
     try:
@@ -131,28 +122,36 @@ async def run_agent(
             if n.strip().lower() != "none" and n.strip()
         ]
     except Exception:
-        # Fallback: use all tool skills
-        selected_names = [s.name for s in tool_skills]
+        # Fallback: no skills
+        selected_names = []
 
     if not selected_names:
-        return {"context_parts": [], "sources": [], "knowledge_prompts": knowledge_prompts}
+        return {"context_parts": [], "sources": [], "knowledge_prompts": []}
 
     # Execute selected skills
     context_parts = []
     sources = []
+    knowledge_prompts = []
 
     for skill_name in selected_names:
         skill = registry.get_skill(skill_name)
-        executor = registry.get_executor(skill_name)
-
-        if not skill or not executor:
+        if not skill:
             continue
 
         if on_action:
             await on_action(f"Using {skill.name}...")
 
+        # Knowledge skills: inject their content as system prompt
+        if skill.skill_type == "knowledge":
+            knowledge_prompts.append(skill.content)
+            continue
+
+        # Tool/workflow skills: run executor
+        executor = registry.get_executor(skill_name)
+        if not executor:
+            continue
+
         try:
-            # Call executor with available context
             result = await executor(
                 query=search_query,
                 db=db,
@@ -163,7 +162,6 @@ async def run_agent(
             if result.get("sources"):
                 sources.extend(result["sources"])
         except TypeError:
-            # Some executors have different signatures
             try:
                 result = await executor(search_query)
                 if isinstance(result, dict):

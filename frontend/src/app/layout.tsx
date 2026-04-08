@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
+import { ThemeProvider } from "@/components/theme-provider";
+import { DottedSurface } from "@/components/ui/dotted-surface";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,14 +18,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <div className="flex h-screen">
-          <Sidebar />
-          <main className="flex flex-1 flex-col overflow-hidden">
-            {children}
-          </main>
-        </div>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <DottedSurface />
+          <div className="flex h-screen">
+            <Sidebar />
+            <main className="flex flex-1 flex-col overflow-hidden">
+              {children}
+            </main>
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 """create hooks table
 
 Revision ID: 0005
-Revises: 0004
+Revises: 1899c53c053b
 Create Date: 2026-04-08
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0005"
-down_revision: Union[str, None] = "0004"
+down_revision: Union[str, None] = "1899c53c053b"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

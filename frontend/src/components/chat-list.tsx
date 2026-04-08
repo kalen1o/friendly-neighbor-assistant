@@ -37,7 +37,7 @@ export function ChatList({ chats, activeChatId, onDelete }: ChatListProps) {
           key={chat.id}
           onClick={() => router.push(`/chat/${chat.id}`)}
           className={cn(
-            "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-accent",
+            "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent",
             chat.id === activeChatId && "bg-accent"
           )}
         >

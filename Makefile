@@ -14,7 +14,10 @@ up: ## Start all services (detached)
 down: ## Stop all services
 	docker compose down
 
-build: ## Build all images from scratch
+build: ## Build images (uses Docker layer cache)
+	docker compose build
+
+build-clean: ## Build images from scratch (no cache)
 	docker compose build --no-cache
 
 restart: ## Restart all services

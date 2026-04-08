@@ -26,7 +26,7 @@ class SkillOut(BaseModel):
     content: str
     enabled: bool
     builtin: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
