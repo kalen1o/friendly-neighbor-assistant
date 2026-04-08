@@ -11,7 +11,6 @@ SYSTEM_PROMPT = (
 )
 
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-OPENAI_MODEL = "gpt-4o"
 
 
 async def get_llm_response(messages: list[dict], settings: Settings) -> str:
@@ -45,11 +44,18 @@ async def _anthropic_response(messages: list[dict], settings: Settings) -> str:
     return response.content[0].text
 
 
+def _build_openai_client(settings: Settings) -> openai.AsyncOpenAI:
+    kwargs: dict = {"api_key": settings.openai_api_key}
+    if settings.openai_base_url:
+        kwargs["base_url"] = settings.openai_base_url
+    return openai.AsyncOpenAI(**kwargs)
+
+
 async def _openai_response(messages: list[dict], settings: Settings) -> str:
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+    client = _build_openai_client(settings)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     response = await client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=settings.openai_model,
         messages=full_messages,
     )
     return response.choices[0].message.content
@@ -68,10 +74,10 @@ async def _anthropic_stream(messages: list[dict], settings: Settings) -> AsyncIt
 
 
 async def _openai_stream(messages: list[dict], settings: Settings) -> AsyncIterator[str]:
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+    client = _build_openai_client(settings)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     stream = await client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=settings.openai_model,
         messages=full_messages,
         stream=True,
     )

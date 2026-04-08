@@ -66,6 +66,25 @@ lint: ## Run linting on backend
 test: ## Run tests
 	docker compose exec backend pytest -v
 
+# ── Local Development (native, with HMR) ──
+local-db: ## Start only PostgreSQL in Docker
+	docker compose -f docker-compose.local.yml up -d
+
+local-db-down: ## Stop local PostgreSQL
+	docker compose -f docker-compose.local.yml down
+
+local-backend: ## Run backend natively (requires local Python + deps)
+	cd backend && DATABASE_URL=postgresql+asyncpg://friendly:friendly_secret@localhost:5432/friendly_neighbor uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+local-frontend: ## Run frontend natively with HMR (requires local Node)
+	cd frontend && NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+
+local-migrate: ## Run Alembic migrations locally
+	cd backend && DATABASE_URL=postgresql+asyncpg://friendly:friendly_secret@localhost:5432/friendly_neighbor alembic upgrade head
+
+local-test: ## Run backend tests locally
+	cd backend && python3 -m pytest tests/ -v
+
 # ── Setup ──
 init: ## First-time setup: copy .env, build, start, migrate
 	@test -f .env || cp .env.example .env

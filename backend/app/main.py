@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.engine import dispose_engine, init_engine
+from app.routers.chats import router as chats_router
+from app.routers.documents import router as documents_router
+from app.routers.hooks import router as hooks_router
+from app.routers.skills import router as skills_router
 
 
 @asynccontextmanager
@@ -31,12 +35,7 @@ async def health_check():
     return {"status": "ok"}
 
 
-@app.get("/api/llm/test")
-async def test_llm(message: str = Query(description="Message to send to the LLM")):
-    """Temporary endpoint to test LLM provider. Remove in Phase 2."""
-    from app.llm.provider import get_llm_response
-
-    settings = get_settings()
-    messages = [{"role": "user", "content": message}]
-    response = await get_llm_response(messages, settings)
-    return {"provider": settings.ai_provider, "response": response}
+app.include_router(chats_router)
+app.include_router(documents_router)
+app.include_router(skills_router)
+app.include_router(hooks_router)

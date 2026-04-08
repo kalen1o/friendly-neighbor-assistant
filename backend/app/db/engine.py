@@ -2,17 +2,24 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import Settings
 
-engine = None
-async_session_factory = None
+_state = {"engine": None, "session_factory": None}
 
 
 def init_engine(settings: Settings):
-    global engine, async_session_factory
-    engine = create_async_engine(settings.database_url, echo=False)
-    async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    _state["engine"] = create_async_engine(settings.database_url, echo=False)
+    _state["session_factory"] = async_sessionmaker(
+        _state["engine"], class_=AsyncSession, expire_on_commit=False
+    )
+
+
+def get_engine():
+    return _state["engine"]
+
+
+def get_session_factory():
+    return _state["session_factory"]
 
 
 async def dispose_engine():
-    global engine
-    if engine:
-        await engine.dispose()
+    if _state["engine"]:
+        await _state["engine"].dispose()

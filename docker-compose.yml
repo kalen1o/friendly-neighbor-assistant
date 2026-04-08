@@ -50,9 +50,8 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     depends_on:
       - backend
     command: npm run dev
