@@ -2,6 +2,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+
+@pytest.fixture(params=["asyncio"])
+def anyio_backend(request):
+    """Restrict anyio tests to asyncio only (skip trio)."""
+    return request.param
+
 from app.auth.jwt import create_access_token
 from app.auth.password import hash_password
 from app.config import Settings, get_settings
