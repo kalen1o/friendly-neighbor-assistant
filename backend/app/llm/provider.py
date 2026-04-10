@@ -86,12 +86,45 @@ async def _openai_stream(messages: list[dict], settings: Settings) -> AsyncItera
             yield chunk.choices[0].delta.content
 
 
+async def _buffered_stream(
+    source: AsyncIterator[str],
+    flush_interval: float = 0.06,
+    min_chars: int = 8,
+) -> AsyncIterator[str]:
+    """Buffer token stream and yield multi-word chunks like ChatGPT.
+
+    Flushes on newlines (markdown block boundaries) or every flush_interval
+    seconds, whichever comes first. Keeps markdown tokens intact.
+    """
+    import time
+
+    buffer = ""
+    last_flush = time.monotonic()
+
+    async for token in source:
+        buffer += token
+        now = time.monotonic()
+
+        has_newline = "\n" in buffer
+        elapsed = now - last_flush >= flush_interval
+        long_enough = len(buffer) >= min_chars
+
+        if has_newline or (elapsed and long_enough):
+            yield buffer
+            buffer = ""
+            last_flush = now
+
+    if buffer:
+        yield buffer
+
+
 async def stream_with_tools(
     messages: list,
     settings: Settings,
     tools: list = None,
     tool_executor=None,
     on_tool_call=None,
+    max_tool_rounds: int = None,
 ) -> AsyncIterator[str]:
     """Stream LLM response with native tool calling support.
 
@@ -107,17 +140,18 @@ async def stream_with_tools(
         tool_executor: async fn(tool_name, arguments) -> str
         on_tool_call: async fn(tool_name) -> None (for SSE action events)
     """
+    rounds = max_tool_rounds or settings.max_tool_rounds
     if settings.ai_provider == "openai":
-        async for chunk in _openai_stream_with_tools(
-            messages, settings, tools, tool_executor, on_tool_call
-        ):
-            yield chunk
+        raw = _openai_stream_with_tools(
+            messages, settings, tools, tool_executor, on_tool_call, rounds
+        )
     elif settings.ai_provider == "anthropic":
-        # Anthropic has different tool calling format — fallback to simple stream for now
-        async for chunk in _anthropic_stream(messages, settings):
-            yield chunk
+        raw = _anthropic_stream(messages, settings)
     else:
         raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
+
+    async for chunk in _buffered_stream(raw):
+        yield chunk
 
 
 async def _openai_stream_with_tools(
@@ -126,6 +160,7 @@ async def _openai_stream_with_tools(
     tools: list = None,
     tool_executor=None,
     on_tool_call=None,
+    max_tool_rounds: int = 5,
 ) -> AsyncIterator[str]:
     """OpenAI-compatible streaming with tool calling loop."""
     import json as _json
@@ -141,8 +176,6 @@ async def _openai_stream_with_tools(
     }
     if tools:
         kwargs["tools"] = tools
-
-    max_tool_rounds = 5  # prevent infinite loops
 
     for _ in range(max_tool_rounds):
         stream = await client.chat.completions.create(**kwargs)
@@ -203,19 +236,19 @@ async def _openai_stream_with_tools(
         assistant_msg = {"role": "assistant", "content": collected_content or None, "tool_calls": assistant_tool_calls}
         kwargs["messages"].append(assistant_msg)
 
-        # Execute each tool and add results
-        for tc_data in tool_calls_in_progress.values():
-            tool_name = tc_data["name"]
+        # Execute all tool calls in parallel
+        import asyncio as _asyncio
 
+        async def _execute_single_tool(tc_data):
+            tool_name = tc_data["name"]
             if on_tool_call:
                 await on_tool_call(tool_name)
-
             try:
+                import json as _json
                 arguments = _json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
             except _json.JSONDecodeError:
                 arguments = {}
 
-            # Execute the tool
             if tool_executor:
                 try:
                     result = await tool_executor(tool_name, arguments)
@@ -224,14 +257,28 @@ async def _openai_stream_with_tools(
             else:
                 result = f"Tool {tool_name} not available"
 
-            # Add tool result to messages
+            return tc_data["id"], str(result) if not isinstance(result, str) else result
+
+        # Run all tools in parallel
+        tool_results = await _asyncio.gather(*[
+            _execute_single_tool(tc) for tc in tool_calls_in_progress.values()
+        ])
+
+        # Add results to messages in order
+        for tc_call_id, result_content in tool_results:
             kwargs["messages"].append({
                 "role": "tool",
-                "tool_call_id": tc_data["id"],
-                "content": str(result) if not isinstance(result, str) else result,
+                "tool_call_id": tc_call_id,
+                "content": result_content,
             })
 
         # Loop back to get LLM's response after tool results
         continue
 
-    # If we hit max rounds, just return what we have
+    # Hit max tool rounds — force a final text response without tools
+    kwargs.pop("tools", None)
+    stream = await client.chat.completions.create(**kwargs)
+    async for chunk in stream:
+        delta = chunk.choices[0].delta
+        if delta.content:
+            yield delta.content

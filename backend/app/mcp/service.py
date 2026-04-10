@@ -19,6 +19,8 @@ async def add_server(
     description: str = "",
     auth_type: str = "none",
     auth_token: str = None,
+    auth_header: str = None,
+    user_id: int = None,
 ) -> McpServer:
     """Add a new MCP server and discover its tools."""
     server = McpServer(
@@ -27,7 +29,9 @@ async def add_server(
         description=description,
         auth_type=auth_type,
         auth_token=auth_token,
+        auth_header=auth_header,
         enabled=True,
+        user_id=user_id,
     )
     db.add(server)
     await db.commit()
@@ -49,6 +53,7 @@ async def refresh_server_tools(db: AsyncSession, server: McpServer) -> List[McpT
         server_url=server.url,
         auth_type=server.auth_type,
         auth_token=server.auth_token,
+        auth_header=server.auth_header,
         server_id=server.id,
         use_cache=False,
     )
@@ -120,6 +125,7 @@ async def get_enabled_mcp_tools(db: AsyncSession) -> List[Dict[str, Any]]:
             "server_url": t.server.url,
             "server_auth_type": t.server.auth_type,
             "server_auth_token": t.server.auth_token,
+            "server_auth_header": t.server.auth_header,
         }
         for t in tools
         if t.server and t.server.enabled
@@ -148,6 +154,7 @@ async def execute_mcp_tool(
         arguments=arguments,
         auth_type=tool.server.auth_type,
         auth_token=tool.server.auth_token,
+        auth_header=tool.server.auth_header,
     )
 
     return {

@@ -27,9 +27,10 @@ async def test_list_chats(client):
     response = await client.get("/api/chats")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert data[0]["title"] == "Chat B"
-    assert data[1]["title"] == "Chat A"
+    chats = data.get("chats", data) if isinstance(data, dict) else data
+    assert len(chats) == 2
+    assert chats[0]["title"] == "Chat B"
+    assert chats[1]["title"] == "Chat A"
 
 
 @pytest.mark.anyio

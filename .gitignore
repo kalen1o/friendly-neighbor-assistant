@@ -44,6 +44,9 @@ uploads/
 .coverage
 htmlcov/
 .pytest_cache/
+frontend/tests/screenshots/
+frontend/test-results/
+frontend/playwright-report/
 
 # ── Misc ──
 *.log

@@ -6,10 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
 from app.db.engine import get_session_factory
 from app.db.session import get_db
 from app.models.document import Document
+from app.models.user import User
 from app.rag.processing import process_document
 from app.schemas.document import DocumentOut, DocumentStatus
 
@@ -25,6 +27,7 @@ async def upload_document(
     file: UploadFile,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    user: User = Depends(get_current_user),
 ):
     # Validate file extension
     filename = file.filename or "unknown"
@@ -55,6 +58,7 @@ async def upload_document(
         file_type=ext.lstrip("."),
         file_size=file_size,
         status="processing",
+        user_id=user.id,
     )
     db.add(doc)
     await db.commit()
@@ -72,14 +76,14 @@ async def upload_document(
 
 
 @router.get("", response_model=List[DocumentOut])
-async def list_documents(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Document).order_by(Document.created_at.desc()))
+async def list_documents(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Document).where(Document.user_id == user.id).order_by(Document.created_at.desc()))
     return result.scalars().all()
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
-async def get_document(document_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Document).where(Document.id == document_id))
+async def get_document(document_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Document).where(Document.public_id == document_id, Document.user_id == user.id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -87,8 +91,8 @@ async def get_document(document_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatus)
-async def get_document_status(document_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Document).where(Document.id == document_id))
+async def get_document_status(document_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Document).where(Document.public_id == document_id, Document.user_id == user.id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -96,8 +100,8 @@ async def get_document_status(document_id: int, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/{document_id}", status_code=204)
-async def delete_document(document_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Document).where(Document.id == document_id))
+async def delete_document(document_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Document).where(Document.public_id == document_id, Document.user_id == user.id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")

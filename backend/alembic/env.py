@@ -11,6 +11,7 @@ import app.models.document  # noqa: F401
 import app.models.skill  # noqa: F401
 import app.models.hook  # noqa: F401
 import app.models.mcp  # noqa: F401
+import app.models.user  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

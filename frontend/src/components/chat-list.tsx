@@ -1,15 +1,17 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface ChatListProps {
   chats: ChatSummary[];
-  activeChatId: number | null;
-  onDelete: (chatId: number) => void;
+  activeChatId: string | null;
+  onDelete: (chatId: string) => void;
+  onRename: (chatId: string, title: string) => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -27,40 +29,111 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
-export function ChatList({ chats, activeChatId, onDelete }: ChatListProps) {
+function ChatItem({
+  chat,
+  isActive,
+  onDelete,
+  onRename,
+}: {
+  chat: ChatSummary;
+  isActive: boolean;
+  onDelete: () => void;
+  onRename: (title: string) => void;
+}) {
   const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditValue(chat.title || "");
+    setEditing(true);
+  };
+
+  const save = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== chat.title) {
+      onRename(trimmed);
+    }
+    setEditing(false);
+  };
 
   return (
-    <div className="flex flex-col gap-1">
-      {chats.map((chat) => (
-        <div
-          key={chat.id}
-          onClick={() => router.push(`/chat/${chat.id}`)}
-          className={cn(
-            "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent",
-            chat.id === activeChatId && "bg-accent"
-          )}
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">
-              {chat.title || "New Chat"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatRelativeTime(chat.updated_at)}
-            </p>
-          </div>
+    <div
+      onClick={() => !editing && router.push(`/chat/${chat.id}`)}
+      className={cn(
+        "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent",
+        isActive && "bg-accent"
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            onBlur={save}
+            className="m-0 h-[1.25rem] w-full truncate border-0 bg-transparent p-0 text-sm font-medium outline-none ring-0 focus:ring-0"
+          />
+        ) : (
+          <p className="truncate font-medium">
+            {chat.title || "New Chat"}
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {formatRelativeTime(chat.updated_at)}
+        </p>
+      </div>
+      {!editing && (
+        <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
+            className="h-7 w-7"
+            onClick={startEditing}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
             onClick={(e) => {
               e.stopPropagation();
-              onDelete(chat.id);
+              onDelete();
             }}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatList({ chats, activeChatId, onDelete, onRename }: ChatListProps) {
+  return (
+    <div className="flex flex-col gap-1">
+      {chats.map((chat) => (
+        <ChatItem
+          key={chat.id}
+          chat={chat}
+          isActive={chat.id === activeChatId}
+          onDelete={() => onDelete(chat.id)}
+          onRename={(title) => onRename(chat.id, title)}
+        />
       ))}
       {chats.length === 0 && (
         <p className="px-3 py-4 text-center text-sm text-muted-foreground">

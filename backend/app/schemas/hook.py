@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HookCreate(BaseModel):
@@ -22,7 +22,7 @@ class HookUpdate(BaseModel):
 
 
 class HookOut(BaseModel):
-    id: int
+    id: str = Field(validation_alias="public_id")
     name: str
     description: str
     hook_type: str
@@ -34,4 +34,4 @@ class HookOut(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}

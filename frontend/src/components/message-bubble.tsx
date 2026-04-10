@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Copy, Check, Pencil, X, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SourceAttribution } from "@/components/source-attribution";
+import { CodeBlock, InlineCode } from "@/components/code-block";
+import { processChildren, enrichText } from "@/components/rich-text";
 import type { Source, MessageMetrics } from "@/lib/api";
 
 interface MessageBubbleProps {
@@ -18,6 +20,89 @@ interface MessageBubbleProps {
   metrics?: MessageMetrics | null;
   onEdit?: (newContent: string) => void;
 }
+
+const mdComponents: Components = {
+  // Code blocks with syntax highlighting + copy
+  code({ className, children, ...props }) {
+    const match = /language-(\w+)/.exec(className || "");
+    const text = String(children).replace(/\n$/, "");
+    // Fenced code block (has language class or is multi-line)
+    if (match || text.includes("\n")) {
+      return <CodeBlock language={match?.[1]}>{text}</CodeBlock>;
+    }
+    // Inline code
+    return <InlineCode>{children}</InlineCode>;
+  },
+  // Don't wrap code blocks in <pre> since CodeBlock handles it
+  pre({ children }) {
+    return <>{children}</>;
+  },
+  // Paragraphs with proper spacing + color swatches
+  p({ children }) {
+    return <p className="mb-3 last:mb-0">{processChildren(children)}</p>;
+  },
+  // Headers
+  h1({ children }) {
+    return <h1 className="mb-3 mt-5 text-lg font-bold first:mt-0">{children}</h1>;
+  },
+  h2({ children }) {
+    return <h2 className="mb-2 mt-4 text-base font-bold first:mt-0">{children}</h2>;
+  },
+  h3({ children }) {
+    return <h3 className="mb-2 mt-3 text-sm font-bold first:mt-0">{children}</h3>;
+  },
+  // Lists
+  ul({ children }) {
+    return <ul className="mb-3 ml-4 list-disc space-y-1 last:mb-0 [&_ul]:mb-0 [&_ul]:mt-1">{children}</ul>;
+  },
+  ol({ children }) {
+    return <ol className="mb-3 ml-4 list-decimal space-y-1 last:mb-0 [&_ol]:mb-0 [&_ol]:mt-1">{children}</ol>;
+  },
+  li({ children }) {
+    return <li className="pl-0.5">{processChildren(children)}</li>;
+  },
+  // Blockquotes
+  blockquote({ children }) {
+    return (
+      <blockquote className="my-3 border-l-2 border-primary/40 pl-3 italic text-muted-foreground">
+        {children}
+      </blockquote>
+    );
+  },
+  // Tables
+  table({ children }) {
+    return (
+      <div className="my-3 overflow-x-auto rounded-lg border border-border/40">
+        <table className="w-full text-sm">{children}</table>
+      </div>
+    );
+  },
+  thead({ children }) {
+    return <thead className="border-b border-border/40 bg-muted/50">{children}</thead>;
+  },
+  th({ children }) {
+    return <th className="px-3 py-2 text-left text-xs font-semibold">{children}</th>;
+  },
+  td({ children }) {
+    return <td className="border-t border-border/20 px-3 py-2">{processChildren(children)}</td>;
+  },
+  // Horizontal rule
+  hr() {
+    return <hr className="my-4 border-border/40" />;
+  },
+  // Links
+  a({ href, children }) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary/60">
+        {children}
+      </a>
+    );
+  },
+  // Strong / emphasis
+  strong({ children }) {
+    return <strong className="font-semibold">{children}</strong>;
+  },
+};
 
 export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit }: MessageBubbleProps) {
   const isUser = role === "user";
@@ -106,16 +191,23 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
             </div>
           ) : isUser ? (
             <p className="whitespace-pre-wrap">{content}</p>
+          ) : isStreaming ? (
+            <div className="max-w-none overflow-hidden text-sm leading-relaxed">
+              <p className="whitespace-pre-wrap">{enrichText(content)}<span className="streaming-cursor" /></p>
+            </div>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none overflow-hidden [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {isStreaming ? content + " \u258D" : content}
+            <div className="max-w-none overflow-hidden text-sm leading-relaxed">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                {content}
               </ReactMarkdown>
             </div>
           )}
         </div>
-        {isUser && !isEditing && (
-          <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        {!isEditing && (
+          <div className={cn(
+            "flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
+            isUser ? "justify-end" : "justify-start pl-1"
+          )}>
             <Button
               variant="ghost"
               size="icon"
@@ -124,7 +216,7 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
             >
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             </Button>
-            {onEdit && (
+            {isUser && onEdit && (
               <Button
                 variant="ghost"
                 size="icon"

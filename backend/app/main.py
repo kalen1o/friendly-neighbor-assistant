@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.cache.redis import close_redis, init_redis
 from app.config import get_settings
 from app.db.engine import dispose_engine, init_engine
+from app.routers.auth import router as auth_router
 from app.routers.chats import router as chats_router
 from app.routers.documents import router as documents_router
 from app.routers.hooks import router as hooks_router
@@ -39,6 +40,7 @@ async def health_check():
     return {"status": "ok"}
 
 
+app.include_router(auth_router)
 app.include_router(chats_router)
 app.include_router(documents_router)
 app.include_router(skills_router)

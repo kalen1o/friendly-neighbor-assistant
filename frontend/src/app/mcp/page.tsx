@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  Plus, Trash2, RefreshCw, Server, Plug, AlertCircle, ChevronDown, ChevronRight,
+  Plus, Trash2, RefreshCw, Server, Plug, AlertCircle, ChevronDown, ChevronRight, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import {
   createMcpServer, deleteMcpServer, listMcpServers, listMcpTools,
-  refreshMcpTools, updateMcpTool,
+  refreshMcpTools, updateMcpServer, updateMcpTool,
   type McpServerOut, type McpToolOut,
 } from "@/lib/api";
 
@@ -31,8 +31,9 @@ const serverSchema = z.object({
   name: z.string().min(1, "Name is required"),
   url: z.string().url("Must be a valid URL"),
   description: z.string().optional(),
-  auth_type: z.enum(["none", "bearer"]),
+  auth_type: z.enum(["none", "bearer", "custom"]),
   auth_token: z.string().optional(),
+  auth_header: z.string().optional(),
 });
 
 type ServerFormData = z.infer<typeof serverSchema>;
@@ -42,7 +43,7 @@ function AddServerDialog({ onCreated }: { onCreated: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const { register, handleSubmit, setValue, watch, reset, formState: { errors, isSubmitting } } = useForm<ServerFormData>({
     resolver: zodResolver(serverSchema),
-    defaultValues: { name: "", url: "", description: "", auth_type: "none", auth_token: "" },
+    defaultValues: { name: "", url: "", description: "", auth_type: "none", auth_token: "", auth_header: "" },
   });
   const authType = watch("auth_type");
 
@@ -54,7 +55,8 @@ function AddServerDialog({ onCreated }: { onCreated: () => void }) {
         url: data.url,
         description: data.description,
         auth_type: data.auth_type,
-        auth_token: data.auth_type === "bearer" ? data.auth_token : undefined,
+        auth_token: data.auth_type !== "none" ? data.auth_token : undefined,
+        auth_header: data.auth_type === "custom" ? data.auth_header : undefined,
       });
       reset();
       setOpen(false);
@@ -93,22 +95,127 @@ function AddServerDialog({ onCreated }: { onCreated: () => void }) {
           <div className="space-y-2">
             <Label>Authentication</Label>
             <Select defaultValue="none" onValueChange={(v) => setValue("auth_type", v as ServerFormData["auth_type"])}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
-                <SelectItem value="bearer">Bearer Token</SelectItem>
+                <SelectItem value="bearer">Bearer Token (Authorization header)</SelectItem>
+                <SelectItem value="custom">Custom Header (e.g. API key)</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          {authType === "bearer" && (
+          {authType === "custom" && (
             <div className="space-y-2">
-              <Label>Bearer Token</Label>
+              <Label>Header Name</Label>
+              <Input placeholder="API_KEY" {...register("auth_header")} />
+            </div>
+          )}
+          {authType !== "none" && (
+            <div className="space-y-2">
+              <Label>{authType === "bearer" ? "Bearer Token" : "API Key"}</Label>
               <Input type="password" placeholder="your-api-token" {...register("auth_token")} />
             </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Connecting..." : "Add Server"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditServerDialog({ server, onUpdated }: { server: McpServerOut; onUpdated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors, isSubmitting } } = useForm<ServerFormData>({
+    resolver: zodResolver(serverSchema),
+    defaultValues: {
+      name: server.name,
+      url: server.url,
+      description: server.description || "",
+      auth_type: (server.auth_type as ServerFormData["auth_type"]) || "none",
+      auth_token: "",
+      auth_header: "",
+    },
+  });
+  const authType = watch("auth_type");
+
+  const onSubmit = async (data: ServerFormData) => {
+    setError(null);
+    try {
+      const updates: Record<string, string | undefined> = {
+        name: data.name,
+        url: data.url,
+        description: data.description,
+        auth_type: data.auth_type,
+      };
+      if (data.auth_type !== "none" && data.auth_token) {
+        updates.auth_token = data.auth_token;
+      }
+      if (data.auth_type === "custom" && data.auth_header) {
+        updates.auth_header = data.auth_header;
+      }
+      await updateMcpServer(server.id, updates);
+      setOpen(false);
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update server");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null); }}>
+      <DialogTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" />}>
+        <Pencil className="h-3.5 w-3.5" />
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit MCP Server</DialogTitle>
+          <DialogDescription>Update connection settings for {server.name}.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input {...register("name")} />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label>URL</Label>
+            <Input {...register("url")} />
+            {errors.url && <p className="text-xs text-destructive">{errors.url.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label>Description (optional)</Label>
+            <Input {...register("description")} />
+          </div>
+          <div className="space-y-2">
+            <Label>Authentication</Label>
+            <Select value={authType} onValueChange={(v) => setValue("auth_type", v as ServerFormData["auth_type"])}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="bearer">Bearer Token (Authorization header)</SelectItem>
+                <SelectItem value="custom">Custom Header (e.g. API key)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {authType === "custom" && (
+            <div className="space-y-2">
+              <Label>Header Name</Label>
+              <Input placeholder="API_KEY" {...register("auth_header")} />
+            </div>
+          )}
+          {authType !== "none" && (
+            <div className="space-y-2">
+              <Label>{authType === "bearer" ? "Bearer Token" : "API Key"}</Label>
+              <Input type="password" placeholder="Leave empty to keep current" {...register("auth_token")} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Saving..." : "Save"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -183,6 +290,7 @@ function ServerCard({
             <Badge variant="secondary" className="text-[10px]">
               {server.enabled_tool_count}/{server.tool_count} tools
             </Badge>
+            <EditServerDialog server={server} onUpdated={onRefresh} />
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
@@ -232,12 +340,12 @@ export default function McpPage() {
 
   useEffect(() => { fetchServers(); }, [fetchServers]);
 
-  const handleDelete = async (serverId: number) => {
+  const handleDelete = async (serverId: string) => {
     try { await deleteMcpServer(serverId); await fetchServers(); } catch (e) { console.error(e); }
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto p-6">
+    <div className="flex flex-1 flex-col overflow-y-auto p-4 md:p-6">
       <div className="mx-auto w-full max-w-3xl space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">MCP Servers</h1>

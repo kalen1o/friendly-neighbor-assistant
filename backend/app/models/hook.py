@@ -1,16 +1,22 @@
 from datetime import datetime
+from functools import partial
 from typing import Optional
 
-from sqlalchemy import Text, func
+from sqlalchemy import ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.utils.ids import generate_public_id
 
 
 class Hook(Base):
     __tablename__ = "hooks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), default=None, nullable=True)
+    public_id: Mapped[str] = mapped_column(
+        String(22), unique=True, default=partial(generate_public_id, "hook")
+    )
     name: Mapped[str] = mapped_column(unique=True)
     description: Mapped[str] = mapped_column()
     hook_type: Mapped[str] = mapped_column()  # "observability", "control", "transformation"

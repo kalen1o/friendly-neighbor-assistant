@@ -14,6 +14,9 @@ from app.skills.registry import SkillDefinition, SkillRegistry
 
 logger = logging.getLogger(__name__)
 
+# Cached registry — rebuilt only when skills or MCP tools change
+_registry_cache: Optional[SkillRegistry] = None
+
 # Query abbreviation expansions (used by web search tool)
 _QUERY_EXPANSIONS = {
     "hcm": "Ho Chi Minh City Vietnam",
@@ -33,7 +36,18 @@ def _expand_query(query: str) -> str:
 
 
 async def _build_registry(db: AsyncSession) -> SkillRegistry:
-    """Build a skill registry with built-in + user + MCP skills."""
+    """Build a skill registry with built-in + user + MCP skills.
+
+    Uses a module-level cache. Call invalidate_agent_cache() when
+    skills or MCP tools are created/updated/deleted.
+    """
+    global _registry_cache
+
+    if _registry_cache is not None:
+        logger.debug("Using cached agent registry")
+        return _registry_cache
+
+    logger.info("Building agent registry (cache miss)")
     registry = SkillRegistry()
     registry.load_builtin_skills()
     register_all_executors(registry)
@@ -67,7 +81,15 @@ async def _build_registry(db: AsyncSession) -> SkillRegistry:
     except Exception as e:
         logger.warning(f"Failed to load MCP tools: {e}")
 
+    _registry_cache = registry
     return registry
+
+
+def invalidate_agent_cache():
+    """Clear the agent registry cache. Call when skills or MCP tools change."""
+    global _registry_cache
+    _registry_cache = None
+    logger.info("Agent registry cache invalidated")
 
 
 def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:

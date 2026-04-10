@@ -78,7 +78,7 @@ export default function DocumentsPage() {
     }
   };
 
-  const handleDelete = async (docId: number) => {
+  const handleDelete = async (docId: string) => {
     try {
       await deleteDocument(docId);
       await fetchDocuments();
@@ -88,7 +88,7 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto p-6">
+    <div className="flex flex-1 flex-col overflow-y-auto p-4 md:p-6">
       <div className="mx-auto w-full max-w-3xl space-y-6">
         <h1 className="text-2xl font-semibold">Knowledge Base</h1>
 

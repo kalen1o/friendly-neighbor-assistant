@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SkillCreate(BaseModel):
@@ -19,7 +19,7 @@ class SkillUpdate(BaseModel):
 
 
 class SkillOut(BaseModel):
-    id: int
+    id: str = Field(validation_alias="public_id")
     name: str
     description: str
     skill_type: str
@@ -29,4 +29,4 @@ class SkillOut(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}

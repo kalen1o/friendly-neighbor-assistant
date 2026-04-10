@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentOut(BaseModel):
-    id: int
+    id: str = Field(validation_alias="public_id")
     filename: str
     file_type: str
     file_size: int
@@ -14,7 +14,7 @@ class DocumentOut(BaseModel):
     chunk_count: int
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class DocumentStatus(BaseModel):

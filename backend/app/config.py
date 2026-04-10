@@ -1,4 +1,11 @@
+import logging
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_JWT_SECRET = "change-me-in-production-use-a-random-string"
 
 
 class Settings(BaseSettings):
@@ -14,7 +21,33 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_api_key: str = ""
     embedding_base_url: str = ""
+    max_tool_rounds: int = 5
+
+    # Auth — JWT
+    jwt_secret: str = _DEFAULT_JWT_SECRET
+    jwt_algorithm: str = "HS256"
+    jwt_access_expire_minutes: int = 15
+
+    # Auth — Refresh tokens
+    jwt_refresh_expire_days: int = 7
+
+    # Auth — Cookies
+    cookie_secure: bool = False  # Set True in production (requires HTTPS)
+    cookie_domain: str = ""  # Leave empty for localhost dev
+    environment: str = "development"  # "development" or "production"
 
 
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+
+    # Fail loudly if JWT secret is the default in production
+    if (
+        settings.environment == "production"
+        and settings.jwt_secret == _DEFAULT_JWT_SECRET
+    ):
+        raise RuntimeError(
+            "JWT_SECRET must be changed from the default value in production. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+
+    return settings

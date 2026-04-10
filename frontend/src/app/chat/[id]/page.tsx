@@ -1,18 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
-import { ChatMessages, type DisplayMessage } from "@/components/chat-messages";
-import { ChatInput } from "@/components/chat-input";
-import { getChat, sendMessage, type Source, type MessageMetrics } from "@/lib/api";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
-
-const CHAR_INTERVAL_MS = 12; // ms per character for typewriter effect
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ChatMessages, EmptyState, type DisplayMessage } from "@/components/chat-messages";
+import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
+import { getChat, sendMessage, type Source, type MessageMetrics, type ChatMode } from "@/lib/api";
+import { useAuth } from "@/components/auth-guard";
+import { toast } from "sonner";
 
 export default function ChatPage() {
   const params = useParams();
-  const chatId = Number(params.id);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { requireAuth } = useAuth();
+  const chatId = params.id as string;
+  const initialQuerySent = useRef(false);
 
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
@@ -20,22 +22,22 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [actionText, setActionText] = useState<string | null>(null);
   const [activeSkills, setActiveSkills] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const chatInputRef = useRef<ChatInputHandle>(null);
 
-  // Full text received so far from SSE
+  // Accumulated text from SSE chunks (full received text)
   const fullTextRef = useRef("");
-  // How many characters have been revealed to the UI
+  // How many characters have been revealed by the typewriter
   const revealedRef = useRef(0);
   // Whether the SSE stream has finished
   const doneRef = useRef(false);
+  // Typewriter interval ID
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Sources received from SSE for the current response
   const sourcesRef = useRef<Source[] | null>(null);
   // Metrics received from SSE for the current response
   const metricsRef = useRef<MessageMetrics | null>(null);
   // Skills used during the current response
   const skillsUsedRef = useRef<string[]>([]);
-  // Typewriter interval ID
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopTypewriter = useCallback(() => {
     if (intervalRef.current) {
@@ -44,6 +46,30 @@ export default function ChatPage() {
     }
   }, []);
 
+  const finalizeMessage = useCallback(() => {
+    stopTypewriter();
+    const finalContent = fullTextRef.current;
+    const allSources = sourcesRef.current || [];
+    const realSources = allSources.filter((s) => s.type !== "skill");
+    const finalSkills = [...skillsUsedRef.current];
+    const finalMetrics = metricsRef.current;
+    if (finalContent) {
+      setMessages((msgs) => [
+        ...msgs,
+        { role: "assistant", content: finalContent, sources: realSources.length > 0 ? realSources : null, skillsUsed: finalSkills.length > 0 ? finalSkills : null, metrics: finalMetrics },
+      ]);
+    }
+    setStreamingContent("");
+    setActiveSkills([]);
+    fullTextRef.current = "";
+    revealedRef.current = 0;
+    doneRef.current = false;
+    sourcesRef.current = null;
+    metricsRef.current = null;
+    skillsUsedRef.current = [];
+    setIsStreaming(false);
+  }, [stopTypewriter]);
+
   const startTypewriter = useCallback(() => {
     if (intervalRef.current) return;
     intervalRef.current = setInterval(() => {
@@ -51,38 +77,23 @@ export default function ChatPage() {
       const revealed = revealedRef.current;
 
       if (revealed < full.length) {
-        // Reveal next character(s) — speed up if we're falling behind
+        // Advance to next word boundary
         const behind = full.length - revealed;
-        const step = behind > 80 ? Math.ceil(behind / 10) : 1;
-        const next = Math.min(revealed + step, full.length);
+        const wordsPerTick = behind > 200 ? Math.ceil(behind / 15) : behind > 50 ? 2 : 1;
+        let next = revealed;
+        for (let w = 0; w < wordsPerTick && next < full.length; w++) {
+          // Skip whitespace
+          while (next < full.length && /\s/.test(full[next])) next++;
+          // Skip to end of word
+          while (next < full.length && !/\s/.test(full[next])) next++;
+        }
         revealedRef.current = next;
         setStreamingContent(full.slice(0, next));
       } else if (doneRef.current) {
-        // All characters revealed and stream is done — finalize
-        stopTypewriter();
-        const finalContent = fullTextRef.current;
-        const allSources = sourcesRef.current || [];
-        const realSources = allSources.filter((s) => s.type !== "skill");
-        const finalSkills = [...skillsUsedRef.current];
-        const finalMetrics = metricsRef.current;
-        if (finalContent) {
-          setMessages((msgs) => [
-            ...msgs,
-            { role: "assistant", content: finalContent, sources: realSources.length > 0 ? realSources : null, skillsUsed: finalSkills.length > 0 ? finalSkills : null, metrics: finalMetrics },
-          ]);
-        }
-        setStreamingContent("");
-        setActiveSkills([]);
-        fullTextRef.current = "";
-        revealedRef.current = 0;
-        sourcesRef.current = null;
-        metricsRef.current = null;
-        skillsUsedRef.current = [];
-        doneRef.current = false;
-        setIsStreaming(false);
+        finalizeMessage();
       }
-    }, CHAR_INTERVAL_MS);
-  }, [stopTypewriter]);
+    }, 30);
+  }, [finalizeMessage]);
 
   // Clean up interval on unmount
   useEffect(() => stopTypewriter, [stopTypewriter]);
@@ -106,18 +117,30 @@ export default function ChatPage() {
           };
         })
       );
-      setError(null);
     } catch (e) {
-      setError("Failed to load chat");
-      console.error(e);
+      toast.error("Chat not found");
+      router.replace("/");
     }
   }, [chatId]);
 
   useEffect(() => {
-    loadChat();
+    loadChat().then(() => {
+      // Auto-send message from URL query param (from home page)
+      const q = searchParams.get("q");
+      const mode = (searchParams.get("mode") || "balanced") as ChatMode;
+      if (q && !initialQuerySent.current) {
+        initialQuerySent.current = true;
+        // Clean the URL
+        router.replace(`/chat/${chatId}`);
+        handleSend(q, mode);
+      }
+    });
   }, [loadChat]);
 
-  const handleSend = (content: string) => {
+  const handleSend = async (content: string, mode: ChatMode = "balanced") => {
+    const authed = await requireAuth();
+    if (!authed) return;
+
     setMessages((prev) => [...prev, { role: "user", content }]);
     setStreamingContent("");
     fullTextRef.current = "";
@@ -130,12 +153,11 @@ export default function ChatPage() {
     setIsStreaming(true);
     setIsLoading(true);
     setActionText(null);
-    setError(null);
 
     sendMessage(chatId, content, {
       onAction: (action) => {
         setActionText(action);
-        // Track skill usage from "Using skillname..." actions
+        setIsLoading(true);
         const match = action.match(/^Using (\w+)/);
         if (match) {
           const skillName = match[1];
@@ -153,22 +175,24 @@ export default function ChatPage() {
       },
       onMessage: (chunk) => {
         setIsLoading(false);
-        setActionText(null);
         fullTextRef.current += chunk;
         startTypewriter();
       },
-      onTitle: () => {},
+      onTitle: () => {
+        window.dispatchEvent(new Event("chat-title-updated"));
+      },
       onDone: () => {
         doneRef.current = true;
         setIsLoading(false);
         setActionText(null);
+        // If typewriter already caught up, finalize now
         if (!intervalRef.current) {
-          setIsStreaming(false);
+          finalizeMessage();
         }
       },
       onError: (err) => {
         stopTypewriter();
-        setError(err);
+        toast.error(err);
         setStreamingContent("");
         fullTextRef.current = "";
         revealedRef.current = 0;
@@ -177,30 +201,60 @@ export default function ChatPage() {
         setActionText(null);
         setIsStreaming(false);
       },
-    });
+    }, mode);
   };
+
+  const isEmpty = messages.length === 0 && !streamingContent && !isLoading && !actionText;
+  const [showSuggestions, setShowSuggestions] = useState(true);
+
+  // Keep suggestions visible briefly during the slide-down transition
+  useEffect(() => {
+    if (!isEmpty) {
+      const timer = setTimeout(() => setShowSuggestions(false), 500);
+      return () => clearTimeout(timer);
+    }
+    setShowSuggestions(true);
+  }, [isEmpty]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {error && (
-        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+
+      {!isEmpty && (
+        <ChatMessages
+          messages={messages}
+          streamingContent={streamingContent}
+          isLoading={isLoading}
+          actionText={actionText}
+          activeSkills={activeSkills}
+          onEditMessage={(index, newContent) => {
+            setMessages((prev) => prev.slice(0, index));
+            handleSend(newContent);
+          }}
+        />
       )}
-      <ChatMessages
-        messages={messages}
-        streamingContent={streamingContent}
-        isLoading={isLoading}
-        actionText={actionText}
-        activeSkills={activeSkills}
-        onEditMessage={(index, newContent) => {
-          // Trim messages after the edited one, then re-send
-          setMessages((prev) => prev.slice(0, index));
-          handleSend(newContent);
-        }}
+
+      {/* Top spacer: pushes content to center when empty, collapses when not */}
+      <div
+        className="transition-[flex-grow] duration-500 ease-out"
+        style={{ flexGrow: isEmpty ? 1 : 0 }}
       />
-      <ChatInput onSend={handleSend} disabled={isStreaming} />
+
+      {/* Suggestions: fade out when not empty */}
+      {showSuggestions && (
+        <div className={`flex justify-center overflow-hidden transition-[opacity,max-height] duration-300 ${isEmpty ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"}`}>
+          <EmptyState onSuggestionClick={(text, cur) => chatInputRef.current?.setInput(text, cur)} />
+        </div>
+      )}
+
+      <div className={`transition-[padding] duration-500 ${isEmpty ? "pt-6" : "pt-0"}`}>
+        <ChatInput ref={chatInputRef} onSend={handleSend} disabled={isStreaming} transparent={isEmpty} />
+      </div>
+
+      {/* Bottom spacer: mirrors top spacer to keep content centered */}
+      <div
+        className="transition-[flex-grow] duration-500 ease-out"
+        style={{ flexGrow: isEmpty ? 1 : 0 }}
+      />
     </div>
   );
 }

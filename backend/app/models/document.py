@@ -1,11 +1,14 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Text, func
+from functools import partial
+
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.utils.ids import generate_public_id
 
 try:
     from pgvector.sqlalchemy import Vector
@@ -17,6 +20,10 @@ class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), default=None, nullable=True)
+    public_id: Mapped[str] = mapped_column(
+        String(20), unique=True, default=partial(generate_public_id, "doc")
+    )
     filename: Mapped[str] = mapped_column()
     file_type: Mapped[str] = mapped_column()
     file_size: Mapped[int] = mapped_column()
@@ -37,6 +44,9 @@ class DocumentChunk(Base):
     __tablename__ = "document_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(
+        String(22), unique=True, default=partial(generate_public_id, "chunk")
+    )
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
     chunk_text: Mapped[str] = mapped_column(Text)
     chunk_index: Mapped[int] = mapped_column()

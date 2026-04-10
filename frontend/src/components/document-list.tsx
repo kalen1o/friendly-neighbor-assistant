@@ -8,7 +8,7 @@ import type { DocumentOut } from "@/lib/api";
 
 interface DocumentListProps {
   documents: DocumentOut[];
-  onDelete: (docId: number) => void;
+  onDelete: (docId: string) => void;
 }
 
 function formatFileSize(bytes: number): string {

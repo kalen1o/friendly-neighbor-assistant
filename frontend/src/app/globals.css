@@ -152,3 +152,16 @@
 .animate-fade-in {
   animation: fade-in 0.4s ease-out both;
 }
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: "\258D";
+  animation: blink-cursor 0.8s step-end infinite;
+  margin-left: 1px;
+  font-weight: normal;
+  color: var(--color-primary);
+}

@@ -1,13 +1,15 @@
 import json
 import logging
+from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func, and_, or_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
+from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.hooks.executors import register_all_hook_executors
@@ -15,9 +17,11 @@ from app.hooks.registry import HookContext, HookRegistry
 from app.llm.provider import get_llm_response, stream_llm_response
 from app.models.chat import Chat, Message
 from app.models.hook import Hook
+from app.models.user import User
 from app.schemas.chat import (
     ChatCreate,
     ChatDetail,
+    ChatListResponse,
     ChatSummary,
     ChatUpdate,
     MessageCreate,
@@ -29,7 +33,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
 
+_hook_registry_cache: Optional[HookRegistry] = None
+
+
 async def _build_hook_registry(db) -> HookRegistry:
+    global _hook_registry_cache
+    if _hook_registry_cache is not None:
+        return _hook_registry_cache
+
     registry = HookRegistry()
     registry.load_builtin_hooks()
     register_all_hook_executors(registry)
@@ -39,28 +50,67 @@ async def _build_hook_registry(db) -> HookRegistry:
         registry.load_user_hooks(user_hooks)
     except Exception:
         pass
+    _hook_registry_cache = registry
+    return registry
+
+
+def invalidate_hook_cache():
+    """Clear the hook registry cache. Call when hooks are created/updated/deleted."""
+    global _hook_registry_cache
+    _hook_registry_cache = None
     return registry
 
 
 @router.post("", status_code=201, response_model=ChatDetail)
-async def create_chat(body: ChatCreate, db: AsyncSession = Depends(get_db)):
-    chat = Chat(title=body.title)
+async def create_chat(body: ChatCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    chat = Chat(title=body.title, user_id=user.id)
     db.add(chat)
     await db.commit()
     await db.refresh(chat, ["messages"])
     return ChatDetail.from_chat(chat)
 
 
-@router.get("", response_model=List[ChatSummary])
-async def list_chats(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Chat).order_by(Chat.updated_at.desc(), Chat.id.desc()))
-    return result.scalars().all()
+@router.get("", response_model=ChatListResponse)
+async def list_chats(
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = select(Chat).where(Chat.user_id == user.id).order_by(Chat.updated_at.desc(), Chat.public_id.desc())
+
+    if cursor:
+        try:
+            ts_str, pid_str = cursor.split(",", 1)
+            cursor_ts = datetime.fromisoformat(ts_str)
+            query = query.where(
+                or_(
+                    Chat.updated_at < cursor_ts,
+                    and_(Chat.updated_at == cursor_ts, Chat.public_id < pid_str),
+                )
+            )
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid cursor")
+
+    result = await db.execute(query.limit(limit + 1))
+    chats = list(result.scalars().all())
+
+    has_more = len(chats) > limit
+    if has_more:
+        chats = chats[:limit]
+
+    next_cursor = None
+    if has_more and chats:
+        last = chats[-1]
+        next_cursor = f"{last.updated_at.isoformat()},{last.public_id}"
+
+    return ChatListResponse(chats=chats, next_cursor=next_cursor, has_more=has_more)
 
 
 @router.get("/{chat_id}", response_model=ChatDetail)
-async def get_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
+async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     result = await db.execute(
-        select(Chat).where(Chat.id == chat_id).options(selectinload(Chat.messages))
+        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id).options(selectinload(Chat.messages))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -70,10 +120,10 @@ async def get_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/{chat_id}", response_model=ChatDetail)
 async def update_chat(
-    chat_id: int, body: ChatUpdate, db: AsyncSession = Depends(get_db)
+    chat_id: str, body: ChatUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ):
     result = await db.execute(
-        select(Chat).where(Chat.id == chat_id).options(selectinload(Chat.messages))
+        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id).options(selectinload(Chat.messages))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -81,15 +131,15 @@ async def update_chat(
     chat.title = body.title
     await db.commit()
     result = await db.execute(
-        select(Chat).where(Chat.id == chat_id).options(selectinload(Chat.messages))
+        select(Chat).where(Chat.public_id == chat_id).options(selectinload(Chat.messages))
     )
     chat = result.scalar_one()
     return ChatDetail.from_chat(chat)
 
 
 @router.delete("/{chat_id}", status_code=204)
-async def delete_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Chat).where(Chat.id == chat_id))
+async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id))
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -97,23 +147,33 @@ async def delete_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 
+@router.delete("", status_code=204)
+async def delete_all_chats(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Chat).where(Chat.user_id == user.id))
+    chats = result.scalars().all()
+    for chat in chats:
+        await db.delete(chat)
+    await db.commit()
+
+
 @router.post("/{chat_id}/messages")
 async def send_message(
-    chat_id: int,
+    chat_id: str,
     body: MessageCreate,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    user: User = Depends(get_current_user),
 ):
-    # 1. Validate chat exists
+    # 1. Validate chat exists and belongs to user
     result = await db.execute(
-        select(Chat).where(Chat.id == chat_id).options(selectinload(Chat.messages))
+        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id).options(selectinload(Chat.messages))
     )
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
     # 2. Save user message
-    user_msg = Message(chat_id=chat_id, role="user", content=body.content)
+    user_msg = Message(chat_id=chat.id, role="user", content=body.content)
     db.add(user_msg)
     await db.commit()
 
@@ -169,12 +229,17 @@ async def send_message(
 
         # Track tool calls for sources and badges
         skills_used = []
-        tool_actions = []
+        import asyncio as _asyncio
+        tool_action_queue = _asyncio.Queue()
 
         async def on_tool_call_track(tool_name):
             if tool_name not in skills_used:
                 skills_used.append(tool_name)
-            tool_actions.append(f"Using {tool_name}...")
+            await tool_action_queue.put(f"Using {tool_name}...")
+
+        # Mode-specific tool rounds
+        mode_tool_rounds = {"fast": 3, "balanced": settings.max_tool_rounds, "thinking": settings.max_tool_rounds * 2}
+        tool_rounds = mode_tool_rounds.get(body.mode, settings.max_tool_rounds)
 
         # Stream with native tool calling
         from app.llm.provider import stream_with_tools
@@ -185,16 +250,19 @@ async def send_message(
                 tools=tool_defs if tool_defs else None,
                 tool_executor=tool_executor,
                 on_tool_call=on_tool_call_track,
+                max_tool_rounds=tool_rounds,
             ):
-                # Yield any pending tool actions
-                while tool_actions:
-                    yield {"event": "action", "data": tool_actions.pop(0)}
+                # Drain action queue — yield immediately
+                while not tool_action_queue.empty():
+                    action = await tool_action_queue.get()
+                    yield {"event": "action", "data": action}
                 full_response += chunk
                 yield {"event": "message", "data": chunk}
 
-            # Yield any remaining tool actions
-            while tool_actions:
-                yield {"event": "action", "data": tool_actions.pop(0)}
+            # Drain any remaining actions
+            while not tool_action_queue.empty():
+                action = await tool_action_queue.get()
+                yield {"event": "action", "data": action}
 
             # 5. post_llm hooks
             hook_ctx.response = full_response
@@ -230,7 +298,7 @@ async def send_message(
             # Save assistant message
             sources_json = json.dumps(sources_data) if skills_used else None
             assistant_msg = Message(
-                chat_id=chat_id,
+                chat_id=chat.id,
                 role="assistant",
                 content=full_response,
                 sources_json=sources_json,

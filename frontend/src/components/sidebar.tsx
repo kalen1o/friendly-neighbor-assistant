@@ -1,166 +1,151 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Plus, FileText, Zap, Anchor, Plug } from "lucide-react";
+import { Plus, FileText, Zap, Anchor, Plug, PanelLeft, PanelLeftClose } from "lucide-react";
+import { useAuth } from "@/components/auth-guard";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChatList } from "@/components/chat-list";
-import { Skeleton } from "boneyard-js/react";
-import {
-  createChat,
-  deleteChat,
-  listChats,
-  type ChatSummary,
-} from "@/lib/api";
+import { SidebarContent, ThemeToggle, UserMenu } from "@/components/sidebar-content";
+import { createChat } from "@/lib/api";
 
-export function Sidebar() {
+const NAV_ITEMS = [
+  { href: "/documents", icon: FileText, label: "Documents", iconBg: "bg-primary/10", iconBgActive: "bg-primary/25", iconColor: "text-primary" },
+  { href: "/skills", icon: Zap, label: "Skills", iconBg: "bg-amber-500/10", iconBgActive: "bg-amber-500/25", iconColor: "text-amber-500" },
+  { href: "/hooks", icon: Anchor, label: "Hooks", iconBg: "bg-blue-500/10", iconBgActive: "bg-blue-500/25", iconColor: "text-blue-500" },
+  { href: "/mcp", icon: Plug, label: "MCP", iconBg: "bg-purple-500/10", iconBgActive: "bg-purple-500/25", iconColor: "text-purple-500" },
+];
+
+export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [chats, setChats] = useState<ChatSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const activeChatId = pathname.startsWith("/chat/")
-    ? parseInt(pathname.split("/")[2], 10)
-    : null;
-
-  const fetchChats = useCallback(async () => {
-    try {
-      const data = await listChats();
-      setChats(data);
-    } catch (e) {
-      console.error("Failed to fetch chats:", e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchChats();
-  }, [fetchChats, pathname]);
+  const { requireAuth } = useAuth();
 
   const handleNewChat = async () => {
+    const authed = await requireAuth();
+    if (!authed) return;
     try {
       const chat = await createChat();
-      await fetchChats();
       router.push(`/chat/${chat.id}`);
     } catch (e) {
       console.error("Failed to create chat:", e);
     }
   };
 
-  const handleDelete = async (chatId: number) => {
-    try {
-      await deleteChat(chatId);
-      await fetchChats();
-      if (activeChatId === chatId) {
-        router.push("/");
-      }
-    } catch (e) {
-      console.error("Failed to delete chat:", e);
-    }
-  };
+  // No toggle = always expanded (used in drawer)
+  if (!onToggle) {
+    return (
+      <aside className="flex h-full w-64 flex-col border-r bg-muted/30">
+        <SidebarContent />
+      </aside>
+    );
+  }
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r bg-muted/30">
-      <div className="p-3">
-        <h1 className="px-2 text-lg font-bold tracking-tight">
-          Friendly Neighbor
-        </h1>
-        <p className="mb-3 px-2 text-xs text-muted-foreground">
-          Your AI assistant
-        </p>
+    <aside
+      className={cn(
+        "group/sidebar flex h-full flex-col border-r bg-muted/30 transition-[width] duration-200 ease-out",
+        collapsed ? "w-14 items-center" : "w-64"
+      )}
+    >
+      {/* Header: logo / toggle */}
+      <div className={cn("flex items-center py-3", collapsed ? "justify-center px-0" : "justify-between px-5")}>
+        {collapsed ? (
+          <button onClick={onToggle} title="Expand sidebar" className="flex h-8 w-8 items-center justify-center rounded-lg">
+            <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg transition-opacity group-hover/sidebar:opacity-0" />
+            <PanelLeft className="absolute h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover/sidebar:opacity-100" />
+          </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg" />
+              <div className="overflow-hidden">
+                <h1 className="truncate text-lg font-bold leading-tight tracking-tight">Friendly Neighbor</h1>
+                <p className="truncate text-xs text-muted-foreground">Your AI assistant</p>
+              </div>
+            </div>
+            <button onClick={onToggle} title="Collapse sidebar" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity hover:bg-accent group-hover/sidebar:opacity-100">
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </>
+        )}
+      </div>
 
-        <div className="flex flex-col gap-1.5">
+      {/* Nav items */}
+      <div className={cn("flex flex-col gap-1.5", collapsed ? "items-center px-0" : "px-3")}>
+        {NAV_ITEMS.map(({ href, icon: Icon, label, iconBg, iconBgActive, iconColor }) => {
+          const isActive = pathname.startsWith(href);
+          return (
+            <button
+              key={href}
+              onClick={() => router.push(href)}
+              title={collapsed ? label : undefined}
+              className={cn(
+                "group flex items-center rounded-xl transition-all",
+                collapsed
+                  ? cn("h-9 w-9 justify-center", isActive ? iconBgActive : iconBg)
+                  : cn(
+                      "gap-3 border px-3 py-2.5 hover:shadow-md",
+                      isActive
+                        ? "border-primary/30 bg-primary/5 shadow-md"
+                        : "border-border/60 bg-card shadow-sm hover:border-primary/30 hover:bg-accent"
+                    )
+              )}
+            >
+              <div className={cn(
+                "flex shrink-0 items-center justify-center rounded-lg transition-colors",
+                collapsed ? "" : "h-8 w-8",
+                !collapsed && (isActive ? iconBgActive : iconBg)
+              )}>
+                <Icon className={cn("h-4 w-4", iconColor)} />
+              </div>
+              {!collapsed && (
+                <span className={cn(
+                  "truncate text-sm font-medium transition-colors",
+                  isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                )}>
+                  {label}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <Separator className={cn("my-2", collapsed && "mx-auto w-8")} />
+
+      {/* New Chat */}
+      {collapsed ? (
+        <div className="flex justify-center">
           <button
-            onClick={() => router.push("/documents")}
-            className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm transition-all hover:border-primary/30 hover:bg-accent hover:shadow-md"
+            onClick={handleNewChat}
+            title="New Chat"
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-colors group-hover:bg-primary/20">
-              <FileText className="h-4 w-4 text-primary" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-              Documents
-            </span>
-          </button>
-          <button
-            onClick={() => router.push("/skills")}
-            className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm transition-all hover:border-primary/30 hover:bg-accent hover:shadow-md"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 transition-colors group-hover:bg-amber-500/20">
-              <Zap className="h-4 w-4 text-amber-500" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-              Skills
-            </span>
-          </button>
-          <button
-            onClick={() => router.push("/hooks")}
-            className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm transition-all hover:border-primary/30 hover:bg-accent hover:shadow-md"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 transition-colors group-hover:bg-blue-500/20">
-              <Anchor className="h-4 w-4 text-blue-500" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-              Hooks
-            </span>
-          </button>
-          <button
-            onClick={() => router.push("/mcp")}
-            className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm transition-all hover:border-primary/30 hover:bg-accent hover:shadow-md"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 transition-colors group-hover:bg-purple-500/20">
-              <Plug className="h-4 w-4 text-purple-500" />
-            </div>
-            <span className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-              MCP
-            </span>
+            <Plus className="h-4 w-4" />
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="px-3">
+          <Button className="w-full justify-start gap-2" onClick={handleNewChat}>
+            <Plus className="h-4 w-4" />
+            New Chat
+          </Button>
+        </div>
+      )}
 
-      <Separator />
+      {/* Chat list — only when expanded */}
+      {!collapsed && (
+        <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden animate-fade-in">
+          <SidebarContent chatListOnly />
+        </div>
+      )}
 
-      <div className="p-3">
-        <Button
-          className="w-full justify-start gap-2"
-          onClick={handleNewChat}
-        >
-          <Plus className="h-4 w-4" />
-          New Chat
-        </Button>
-      </div>
+      {collapsed && <div className="flex-1" />}
 
-      <div className="px-5 pb-1">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-          Recent
-        </p>
-      </div>
-
-      <ScrollArea className="flex-1 px-3 pb-3">
-        <Skeleton
-          name="chat-list"
-          loading={isLoading}
-          animate="pulse"
-          fixture={
-            <div className="flex flex-col gap-1">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="rounded-lg px-3 py-2">
-                  <div className="h-4 w-3/4 rounded bg-muted" />
-                  <div className="mt-1.5 h-3 w-1/3 rounded bg-muted" />
-                </div>
-              ))}
-            </div>
-          }
-        >
-          <ChatList
-            chats={chats}
-            activeChatId={activeChatId}
-            onDelete={handleDelete}
-          />
-        </Skeleton>
-      </ScrollArea>
+      {/* Footer */}
+      <ThemeToggle vertical={collapsed} />
+      <UserMenu collapsed={collapsed} />
     </aside>
   );
 }

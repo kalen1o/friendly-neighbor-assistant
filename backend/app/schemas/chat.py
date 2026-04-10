@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatCreate(BaseModel):
@@ -14,6 +14,7 @@ class ChatUpdate(BaseModel):
 
 class MessageCreate(BaseModel):
     content: str
+    mode: str = "balanced"  # "fast", "balanced", "thinking"
 
 
 class MessageMetrics(BaseModel):
@@ -24,8 +25,8 @@ class MessageMetrics(BaseModel):
 
 
 class MessageOut(BaseModel):
-    id: int
-    chat_id: int
+    id: str
+    chat_id: str
     role: str
     content: str
     created_at: datetime
@@ -52,8 +53,8 @@ class MessageOut(BaseModel):
                 tokens_total=msg.tokens_total,
             )
         return cls(
-            id=msg.id,
-            chat_id=msg.chat_id,
+            id=msg.public_id,
+            chat_id=msg.chat.public_id if hasattr(msg, 'chat') and msg.chat else str(msg.chat_id),
             role=msg.role,
             content=msg.content,
             created_at=msg.created_at,
@@ -63,15 +64,21 @@ class MessageOut(BaseModel):
 
 
 class ChatSummary(BaseModel):
-    id: int
+    id: str = Field(validation_alias="public_id")
     title: Optional[str]
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class ChatListResponse(BaseModel):
+    chats: List[ChatSummary]
+    next_cursor: Optional[str] = None
+    has_more: bool = False
 
 
 class ChatDetail(BaseModel):
-    id: int
+    id: str
     title: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -82,7 +89,7 @@ class ChatDetail(BaseModel):
     @classmethod
     def from_chat(cls, chat) -> "ChatDetail":
         return cls(
-            id=chat.id,
+            id=chat.public_id,
             title=chat.title,
             created_at=chat.created_at,
             updated_at=chat.updated_at,
