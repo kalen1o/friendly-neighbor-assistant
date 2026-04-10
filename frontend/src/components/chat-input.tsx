@@ -82,7 +82,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             <SendHorizonal className="h-4 w-4" />
           </Button>
         </div>
-        <div className="mt-2 flex items-center gap-1">
+        <div className="mt-2 flex flex-wrap items-center gap-1">
           {MODES.map((m) => {
             const Icon = m.icon;
             const isActive = mode === m.value;
@@ -91,7 +91,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 key={m.value}
                 onClick={() => setMode(m.value)}
                 title={m.description}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] md:text-[11px] font-medium transition-all ${
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground/60 hover:text-muted-foreground"

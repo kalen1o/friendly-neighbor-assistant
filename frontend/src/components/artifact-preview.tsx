@@ -5,6 +5,7 @@ import { useMemo } from "react";
 interface ArtifactPreviewProps {
   code: string;
   type: "react" | "html";
+  onLoad?: () => void;
 }
 
 /**
@@ -77,7 +78,7 @@ const REACT_TEMPLATE = (rawCode: string) => {
 </html>`;
 };
 
-export function ArtifactPreview({ code, type }: ArtifactPreviewProps) {
+export function ArtifactPreview({ code, type, onLoad }: ArtifactPreviewProps) {
   const srcdoc = useMemo(() => {
     if (type === "html") return code;
     return REACT_TEMPLATE(code);
@@ -89,6 +90,7 @@ export function ArtifactPreview({ code, type }: ArtifactPreviewProps) {
       sandbox="allow-scripts"
       className="h-full w-full border-0 bg-white"
       title="Artifact preview"
+      onLoad={onLoad}
     />
   );
 }

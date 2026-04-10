@@ -716,3 +716,50 @@ export async function updateArtifact(
   if (!res.ok) throw new Error("Failed to update artifact");
   return res.json();
 }
+
+// ── Search ──
+
+export interface SearchResult {
+  chat_id: string;
+  chat_title: string | null;
+  message_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+}
+
+export async function searchChats(query: string): Promise<SearchResponse> {
+  const res = await authFetch(`${API_BASE}/api/chats/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error("Search failed");
+  return res.json();
+}
+
+// ── Export ──
+
+export async function exportChat(chatId: string, format: "markdown" | "pdf"): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/chats/${chatId}/export?format=${format}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Export failed");
+
+  // Get filename from Content-Disposition header or generate one
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+  const filename = filenameMatch?.[1] || `conversation.${format === "pdf" ? "pdf" : "md"}`;
+
+  // Download the file
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

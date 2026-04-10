@@ -98,3 +98,17 @@ class ChatDetail(BaseModel):
             updated_at=chat.updated_at,
             messages=[MessageOut.from_message(m) for m in chat.messages],
         )
+
+
+class SearchResult(BaseModel):
+    chat_id: str
+    chat_title: Optional[str]
+    message_id: str
+    role: str
+    content: str
+    created_at: datetime
+
+
+class SearchResponse(BaseModel):
+    results: List[SearchResult]
+    total: int

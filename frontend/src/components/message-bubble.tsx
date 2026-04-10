@@ -151,10 +151,10 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
         isUser ? "justify-end" : "justify-start"
       )}
     >
-      <div className="group flex min-w-0 max-w-[80%] flex-col gap-1">
+      <div className="group flex min-w-0 max-w-[90%] md:max-w-[80%] flex-col gap-1">
         <div
           className={cn(
-            "rounded-[20px] px-4 py-3 text-sm",
+            "rounded-[20px] px-3 py-2 md:px-4 md:py-3 text-sm",
             isUser
               ? "rounded-br-md bg-primary text-primary-foreground shadow-sm shadow-primary/20"
               : "rounded-bl-md border border-border/60 bg-card shadow-sm"

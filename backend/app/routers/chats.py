@@ -27,6 +27,8 @@ from app.schemas.chat import (
     ChatListResponse,
     ChatUpdate,
     MessageCreate,
+    SearchResponse,
+    SearchResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,6 +123,69 @@ async def list_chats(
         next_cursor = f"{last.updated_at.isoformat()},{last.public_id}"
 
     return ChatListResponse(chats=chats, next_cursor=next_cursor, has_more=has_more)
+
+
+@router.get("/search", response_model=SearchResponse)
+async def search_chats(
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Full-text search across user's chat messages."""
+    # Detect database dialect for Postgres vs SQLite compatibility
+    dialect = db.bind.dialect.name if db.bind else "unknown"
+
+    if dialect == "postgresql":
+        # Postgres: use tsvector full-text search with ranking
+        from sqlalchemy import text
+
+        query = text("""
+            SELECT m.public_id as message_id, m.role, m.content, m.created_at,
+                   c.public_id as chat_id, c.title as chat_title,
+                   ts_rank(m.search_vector, plainto_tsquery('english', :query)) as rank
+            FROM messages m
+            JOIN chats c ON c.id = m.chat_id
+            WHERE c.user_id = :user_id
+              AND m.search_vector @@ plainto_tsquery('english', :query)
+            ORDER BY rank DESC
+            LIMIT :limit
+        """)
+        result = await db.execute(
+            query, {"query": q, "user_id": user.id, "limit": limit}
+        )
+    else:
+        # SQLite fallback: LIKE-based search
+        from sqlalchemy import text
+
+        query = text("""
+            SELECT m.public_id as message_id, m.role, m.content, m.created_at,
+                   c.public_id as chat_id, c.title as chat_title
+            FROM messages m
+            JOIN chats c ON c.id = m.chat_id
+            WHERE c.user_id = :user_id
+              AND m.content LIKE :pattern
+            ORDER BY m.created_at DESC
+            LIMIT :limit
+        """)
+        result = await db.execute(
+            query, {"pattern": f"%{q}%", "user_id": user.id, "limit": limit}
+        )
+
+    rows = result.mappings().all()
+    results = [
+        SearchResult(
+            chat_id=row["chat_id"],
+            chat_title=row["chat_title"],
+            message_id=row["message_id"],
+            role=row["role"],
+            content=row["content"][:300],  # Truncate for preview
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+    return SearchResponse(results=results, total=len(results))
 
 
 @router.get("/{chat_id}", response_model=ChatDetail)

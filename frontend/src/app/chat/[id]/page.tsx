@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Share2 } from "lucide-react";
+import { Share2, Search, Download } from "lucide-react";
+import { CommandPalette } from "@/components/command-palette";
 import { ChatMessages, EmptyState, type DisplayMessage } from "@/components/chat-messages";
 import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
 import { Button } from "@/components/ui/button";
 import { ShareDialog } from "@/components/share-dialog";
+import { ExportDialog } from "@/components/export-dialog";
 import { getChat, sendMessage, listArtifacts, type Source, type MessageMetrics, type ChatMode, type ArtifactData } from "@/lib/api";
 import { ArtifactPanel } from "@/components/artifact-panel";
 import { ArtifactCard } from "@/components/artifact-card";
@@ -29,8 +31,22 @@ export default function ChatPage() {
   const [activeSkills, setActiveSkills] = useState<string[]>([]);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
   const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
+
+  // Cmd+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Accumulated text from SSE chunks (full received text)
   const fullTextRef = useRef("");
@@ -251,18 +267,36 @@ export default function ChatPage() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <div className={`flex flex-col min-h-0 overflow-hidden ${activeArtifact ? "w-1/2" : "w-full"}`}>
+      <div className={`relative flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-out ${activeArtifact ? "hidden md:flex md:w-1/2" : "flex w-full"}`}>
 
         {!isEmpty && (
-          <div className="flex items-center justify-end px-4 py-2">
+          <div className="absolute right-4 top-3 z-10 flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-9 w-9 md:h-8 md:w-8"
+              onClick={() => setCmdOpen(true)}
+              title="Search (⌘K)"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 md:h-8 md:w-8"
               onClick={() => setShareOpen(true)}
               title="Share conversation"
             >
               <Share2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 md:h-8 md:w-8"
+              onClick={() => setExportOpen(true)}
+              title="Export conversation"
+            >
+              <Download className="h-4 w-4" />
             </Button>
           </div>
         )}
@@ -321,10 +355,20 @@ export default function ChatPage() {
           open={shareOpen}
           onOpenChange={setShareOpen}
         />
+        <ExportDialog
+          chatId={chatId}
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+        />
+        <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       </div>
 
-      {activeArtifact && (
-        <div className="w-1/2 h-full">
+      <div
+        className={`h-full overflow-hidden transition-[width,opacity] duration-300 ease-out ${
+          activeArtifact ? "w-full md:w-1/2 opacity-100" : "w-0 opacity-0"
+        }`}
+      >
+        {activeArtifact && (
           <ArtifactPanel
             artifact={activeArtifact}
             onClose={() => setActiveArtifact(null)}
@@ -337,8 +381,8 @@ export default function ChatPage() {
               );
             }}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

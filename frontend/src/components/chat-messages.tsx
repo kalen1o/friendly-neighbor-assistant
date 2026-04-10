@@ -25,7 +25,7 @@ export function EmptyState({ onSuggestionClick }: { onSuggestionClick: (content:
       <p className="mb-8 text-sm text-muted-foreground">
         Ask me anything, or try one of these
       </p>
-      <div className="grid w-full max-w-lg grid-cols-2 gap-2">
+      <div className="grid w-full max-w-lg grid-cols-1 sm:grid-cols-2 gap-2">
         {SUGGESTIONS.map((s) => (
           <button
             key={s.label}

@@ -70,7 +70,7 @@ function ChatItem({
     <div
       onClick={() => !editing && router.push(`/chat/${chat.id}`)}
       className={cn(
-        "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent",
+        "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 min-h-[44px] text-sm transition-colors duration-150 hover:bg-accent active:bg-muted",
         isActive && "bg-accent"
       )}
     >

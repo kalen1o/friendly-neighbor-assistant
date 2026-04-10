@@ -165,3 +165,18 @@
   font-weight: normal;
   color: var(--color-primary);
 }
+
+/* Touch-friendly active states */
+@media (hover: none) {
+  .hover\:bg-muted\/50:active {
+    background-color: hsl(var(--muted) / 0.5);
+  }
+  .hover\:bg-accent:active {
+    background-color: hsl(var(--accent));
+  }
+}
+
+/* Prevent text selection on buttons during touch */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
