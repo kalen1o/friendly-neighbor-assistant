@@ -20,6 +20,7 @@ class Chat(Base):
         ForeignKey("users.id"), default=None, nullable=True
     )
     title: Mapped[Optional[str]] = mapped_column(default=None)
+    context_summary: Mapped[Optional[str]] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

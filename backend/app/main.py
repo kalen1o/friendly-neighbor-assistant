@@ -15,6 +15,7 @@ from app.routers.documents import router as documents_router
 from app.routers.hooks import router as hooks_router
 from app.routers.mcp import router as mcp_router
 from app.routers.sharing import router as sharing_router
+from app.routers.artifacts import router as artifacts_router
 from app.routers.skills import router as skills_router
 
 
@@ -54,3 +55,4 @@ app.include_router(skills_router)
 app.include_router(hooks_router)
 app.include_router(mcp_router)
 app.include_router(sharing_router)
+app.include_router(artifacts_router)

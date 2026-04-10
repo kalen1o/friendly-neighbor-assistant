@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     cookie_domain: str = ""  # Leave empty for localhost dev
     environment: str = "development"  # "development" or "production"
 
+    # Context window
+    context_max_tokens: int = 8000  # max tokens for chat history sent to LLM
+    context_recent_messages: int = 10  # always keep this many recent messages verbatim
+
     # Logging
     log_level: str = "INFO"
 

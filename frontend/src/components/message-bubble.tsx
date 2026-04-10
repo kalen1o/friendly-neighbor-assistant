@@ -203,7 +203,23 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
             </div>
           )}
         </div>
-        {!isEditing && (
+        {!isUser && (sources?.length || metrics) ? (
+          <div className="flex items-center justify-between gap-1">
+            <SourceAttribution sources={sources || []} metrics={metrics} />
+            {!isEditing && (
+              <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  onClick={handleCopy}
+                >
+                  {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : !isEditing && (
           <div className={cn(
             "flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
             isUser ? "justify-end" : "justify-start pl-1"
@@ -227,9 +243,6 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
               </Button>
             )}
           </div>
-        )}
-        {!isUser && (sources?.length || metrics) && (
-          <SourceAttribution sources={sources || []} metrics={metrics} />
         )}
       </div>
     </div>

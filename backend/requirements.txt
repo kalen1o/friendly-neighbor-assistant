@@ -27,8 +27,8 @@ python-dotenv>=1.0.0
 # Config
 pydantic-settings>=2.0.0
 
-# Agent core (Phase 4)
-pydantic-ai>=1.0.0
+# Agent core — slim with only the providers we use
+pydantic-ai-slim[openai,anthropic]>=1.78.0,<2.0.0
 ddgs>=8.0.0
 
 # LLM SDKs

@@ -213,6 +213,7 @@ export interface SSECallbacks {
   onTitle: (title: string) => void;
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
+  onArtifact?: (artifact: ArtifactData) => void;
   onDone: () => void;
   onError: (error: string) => void;
 }
@@ -293,6 +294,11 @@ export function sendMessage(
             case "metrics":
               try {
                 callbacks.onMetrics?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact":
+              try {
+                callbacks.onArtifact?.(JSON.parse(data));
               } catch {}
               break;
             case "done":
@@ -672,4 +678,41 @@ export async function revokeShare(shareId: string): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to revoke share");
+}
+
+// ── Artifact Types ──
+
+export interface ArtifactData {
+  id: string;
+  type: "react" | "html";
+  title: string;
+  code: string;
+}
+
+export interface ArtifactOut extends ArtifactData {
+  message_id: string;
+  chat_id: string;
+  artifact_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Artifact API ──
+
+export async function listArtifacts(chatId: string): Promise<ArtifactOut[]> {
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/artifacts`);
+  if (!res.ok) throw new Error("Failed to list artifacts");
+  return res.json();
+}
+
+export async function updateArtifact(
+  artifactId: string,
+  updates: { code?: string; title?: string }
+): Promise<ArtifactOut> {
+  const res = await authFetch(`${API_BASE}/api/artifacts/${artifactId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("Failed to update artifact");
+  return res.json();
 }

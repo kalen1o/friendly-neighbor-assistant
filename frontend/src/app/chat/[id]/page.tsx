@@ -7,7 +7,9 @@ import { ChatMessages, EmptyState, type DisplayMessage } from "@/components/chat
 import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
 import { Button } from "@/components/ui/button";
 import { ShareDialog } from "@/components/share-dialog";
-import { getChat, sendMessage, type Source, type MessageMetrics, type ChatMode } from "@/lib/api";
+import { getChat, sendMessage, listArtifacts, type Source, type MessageMetrics, type ChatMode, type ArtifactData } from "@/lib/api";
+import { ArtifactPanel } from "@/components/artifact-panel";
+import { ArtifactCard } from "@/components/artifact-card";
 import { useAuth } from "@/components/auth-guard";
 import { toast } from "sonner";
 
@@ -27,6 +29,8 @@ export default function ChatPage() {
   const [activeSkills, setActiveSkills] = useState<string[]>([]);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
+  const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
 
   // Accumulated text from SSE chunks (full received text)
   const fullTextRef = useRef("");
@@ -126,6 +130,14 @@ export default function ChatPage() {
           };
         })
       );
+      listArtifacts(chatId).then(arts => {
+        setArtifacts(arts.map(a => ({
+          id: a.id,
+          type: (a.artifact_type || a.type) as "react" | "html",
+          title: a.title,
+          code: a.code,
+        })));
+      }).catch(() => {});
     } catch (e) {
       toast.error("Chat not found");
       router.replace("/");
@@ -179,6 +191,10 @@ export default function ChatPage() {
       },
       onSources: (sources) => {
         sourcesRef.current = sources;
+      },
+      onArtifact: (artifact) => {
+        setArtifacts(prev => [...prev, artifact]);
+        setActiveArtifact(artifact);
       },
       onMessage: (chunk) => {
         setIsLoading(false);
@@ -234,64 +250,95 @@ export default function ChatPage() {
   }, [isEmpty]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1">
+      <div className={`flex flex-col min-h-0 overflow-hidden ${activeArtifact ? "w-1/2" : "w-full"}`}>
 
-      {!isEmpty && (
-        <div className="flex items-center justify-end px-4 py-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setShareOpen(true)}
-            title="Share conversation"
-          >
-            <Share2 className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+        {!isEmpty && (
+          <div className="flex items-center justify-end px-4 py-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setShareOpen(true)}
+              title="Share conversation"
+            >
+              <Share2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
-      {!isEmpty && (
-        <ChatMessages
-          messages={messages}
-          streamingContent={streamingContent}
-          isLoading={isLoading}
-          actionText={actionText}
-          activeSkills={activeSkills}
-          onEditMessage={(index, newContent) => {
-            setMessages((prev) => prev.slice(0, index));
-            handleSend(newContent);
-          }}
+        {!isEmpty && (
+          <ChatMessages
+            messages={messages}
+            streamingContent={streamingContent}
+            isLoading={isLoading}
+            actionText={actionText}
+            activeSkills={activeSkills}
+            onEditMessage={(index, newContent) => {
+              setMessages((prev) => prev.slice(0, index));
+              handleSend(newContent);
+            }}
+          />
+        )}
+
+        {!isEmpty && artifacts.length > 0 && (
+          <div className="mx-auto w-full max-w-3xl px-4 pb-2">
+            {artifacts.map(a => (
+              <ArtifactCard
+                key={a.id}
+                artifact={a}
+                onClick={() => setActiveArtifact(a)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Top spacer: pushes content to center when empty, collapses when not */}
+        <div
+          className="transition-[flex-grow] duration-500 ease-out"
+          style={{ flexGrow: isEmpty ? 1 : 0 }}
         />
-      )}
 
-      {/* Top spacer: pushes content to center when empty, collapses when not */}
-      <div
-        className="transition-[flex-grow] duration-500 ease-out"
-        style={{ flexGrow: isEmpty ? 1 : 0 }}
-      />
+        {/* Suggestions: fade out when not empty */}
+        {showSuggestions && (
+          <div className={`flex justify-center overflow-hidden transition-[opacity,max-height] duration-300 ${isEmpty ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"}`}>
+            <EmptyState onSuggestionClick={(text, cur) => chatInputRef.current?.setInput(text, cur)} />
+          </div>
+        )}
 
-      {/* Suggestions: fade out when not empty */}
-      {showSuggestions && (
-        <div className={`flex justify-center overflow-hidden transition-[opacity,max-height] duration-300 ${isEmpty ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"}`}>
-          <EmptyState onSuggestionClick={(text, cur) => chatInputRef.current?.setInput(text, cur)} />
+        <div className={`transition-[padding] duration-500 ${isEmpty ? "pt-6" : "pt-0"}`}>
+          <ChatInput ref={chatInputRef} onSend={handleSend} disabled={isStreaming} transparent={isEmpty} />
         </div>
-      )}
 
-      <div className={`transition-[padding] duration-500 ${isEmpty ? "pt-6" : "pt-0"}`}>
-        <ChatInput ref={chatInputRef} onSend={handleSend} disabled={isStreaming} transparent={isEmpty} />
+        {/* Bottom spacer: mirrors top spacer to keep content centered */}
+        <div
+          className="transition-[flex-grow] duration-500 ease-out"
+          style={{ flexGrow: isEmpty ? 1 : 0 }}
+        />
+
+        <ShareDialog
+          chatId={chatId}
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+        />
       </div>
 
-      {/* Bottom spacer: mirrors top spacer to keep content centered */}
-      <div
-        className="transition-[flex-grow] duration-500 ease-out"
-        style={{ flexGrow: isEmpty ? 1 : 0 }}
-      />
-
-      <ShareDialog
-        chatId={chatId}
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-      />
+      {activeArtifact && (
+        <div className="w-1/2 h-full">
+          <ArtifactPanel
+            artifact={activeArtifact}
+            onClose={() => setActiveArtifact(null)}
+            onCodeChange={(id, code) => {
+              setArtifacts(prev =>
+                prev.map(a => (a.id === id ? { ...a, code } : a))
+              );
+              setActiveArtifact(prev =>
+                prev && prev.id === id ? { ...prev, code } : prev
+              );
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ from app.main import app
 from app.models.user import User  # noqa: F401
 from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.shared_chat import SharedChat  # noqa: F401
+from app.models.artifact import Artifact  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

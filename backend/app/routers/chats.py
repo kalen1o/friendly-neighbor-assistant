@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
+from app.agent.artifact_parser import parse_artifacts
 from app.auth.dependencies import get_current_user
 from app.cache.per_user import PerUserCache
 from app.config import Settings, get_settings
@@ -16,6 +17,7 @@ from app.db.session import get_db
 from app.hooks.executors import register_all_hook_executors
 from app.hooks.registry import HookContext, HookRegistry
 from app.llm.provider import get_llm_response
+from app.models.artifact import Artifact
 from app.models.chat import Chat, Message
 from app.models.hook import Hook
 from app.models.user import User
@@ -242,9 +244,13 @@ async def send_message(
         hook_ctx.knowledge_prompts = knowledge_prompts
         hook_ctx = await hook_registry.run_hooks("post_skills", hook_ctx)
 
-        # Build message history
+        # Build message history with sliding window
+        from app.agent.context import build_context_messages
+
         await db.refresh(chat, ["messages"])
-        llm_messages = [{"role": m.role, "content": m.content} for m in chat.messages]
+        llm_messages = await build_context_messages(chat, settings)
+        # Persist any new summary that was generated
+        await db.commit()
 
         # Inject knowledge prompts into the last user message
         if hook_ctx.knowledge_prompts:
@@ -339,17 +345,46 @@ async def send_message(
             if sources_data:
                 yield {"event": "sources", "data": json.dumps(sources_data)}
 
-            # Save assistant message
+            # Parse artifacts from response
+            cleaned_response, found_artifacts = parse_artifacts(full_response)
+
+            # Save assistant message (with artifact tags stripped)
             sources_json = json.dumps(sources_data) if skills_used else None
             assistant_msg = Message(
                 chat_id=chat.id,
                 role="assistant",
-                content=full_response,
+                content=cleaned_response,
                 sources_json=sources_json,
             )
             db.add(assistant_msg)
             chat.updated_at = func.now()
             await db.commit()
+            await db.refresh(assistant_msg)
+
+            # Save and emit artifacts
+            for art_data in found_artifacts:
+                artifact = Artifact(
+                    message_id=assistant_msg.id,
+                    chat_id=chat.id,
+                    user_id=user.id,
+                    title=art_data["title"],
+                    artifact_type=art_data["type"],
+                    code=art_data["code"],
+                )
+                db.add(artifact)
+                await db.commit()
+                await db.refresh(artifact)
+                yield {
+                    "event": "artifact",
+                    "data": json.dumps(
+                        {
+                            "id": artifact.public_id,
+                            "type": artifact.artifact_type,
+                            "title": artifact.title,
+                            "code": artifact.code,
+                        }
+                    ),
+                }
 
             # Auto-title
             if chat.title is None:
