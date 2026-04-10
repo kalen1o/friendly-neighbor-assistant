@@ -160,6 +160,25 @@ def _convert_to_anthropic_format(messages: list) -> list:
     return converted
 
 
+def _convert_tools_to_anthropic(tools: list) -> list:
+    """Convert OpenAI function-calling tool defs to Anthropic format."""
+    anthropic_tools = []
+    for tool in tools:
+        if tool.get("type") != "function":
+            continue
+        fn = tool["function"]
+        anthropic_tools.append(
+            {
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "input_schema": fn.get(
+                    "parameters", {"type": "object", "properties": {}}
+                ),
+            }
+        )
+    return anthropic_tools
+
+
 async def _anthropic_stream(
     messages: list[dict], settings: Settings
 ) -> AsyncIterator[str]:
@@ -173,6 +192,89 @@ async def _anthropic_stream(
     ) as stream:
         async for text in stream.text_stream:
             yield text
+
+
+async def _anthropic_stream_with_tools(
+    messages: list,
+    settings: Settings,
+    tools: list = None,
+    tool_executor=None,
+    on_tool_call=None,
+    max_tool_rounds: int = 5,
+) -> AsyncIterator[str]:
+    """Anthropic streaming with multi-turn tool calling loop."""
+    import asyncio as _asyncio
+
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    converted = _convert_to_anthropic_format(messages)
+    anthropic_tools = _convert_tools_to_anthropic(tools) if tools else []
+
+    kwargs = {
+        "model": ANTHROPIC_MODEL,
+        "max_tokens": 4096,
+        "system": SYSTEM_PROMPT,
+        "messages": converted,
+    }
+    if anthropic_tools:
+        kwargs["tools"] = anthropic_tools
+
+    for _ in range(max_tool_rounds):
+        response = await client.messages.create(**kwargs)
+
+        # Process content blocks
+        text_content = ""
+        tool_uses = []
+
+        for block in response.content:
+            if block.type == "text":
+                text_content += block.text
+                yield block.text
+            elif block.type == "tool_use":
+                tool_uses.append(
+                    {"id": block.id, "name": block.name, "input": block.input}
+                )
+
+        # If no tool calls, we're done
+        if not tool_uses:
+            return
+
+        # Add assistant response to messages
+        kwargs["messages"].append({"role": "assistant", "content": response.content})
+
+        # Execute tools in parallel
+        async def _execute_tool(tu):
+            if on_tool_call:
+                await on_tool_call(tu["name"])
+            if tool_executor:
+                try:
+                    result = await tool_executor(tu["name"], tu["input"])
+                except Exception as e:
+                    result = f"Tool error: {str(e)}"
+            else:
+                result = f"Tool {tu['name']} not available"
+            return tu["id"], str(result) if not isinstance(result, str) else result
+
+        results = await _asyncio.gather(*[_execute_tool(tu) for tu in tool_uses])
+
+        # Add tool results
+        tool_result_content = [
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_id,
+                "content": result_text,
+            }
+            for tool_id, result_text in results
+        ]
+        kwargs["messages"].append({"role": "user", "content": tool_result_content})
+
+        # Loop back for next response
+
+    # Hit max rounds — final response without tools
+    kwargs.pop("tools", None)
+    response = await client.messages.create(**kwargs)
+    for block in response.content:
+        if block.type == "text":
+            yield block.text
 
 
 async def _openai_stream(
@@ -257,7 +359,12 @@ async def stream_with_tools(
             vision=vision,
         )
     elif settings.ai_provider == "anthropic":
-        raw = _anthropic_stream(messages, settings)
+        if tools and not vision:
+            raw = _anthropic_stream_with_tools(
+                messages, settings, tools, tool_executor, on_tool_call, rounds
+            )
+        else:
+            raw = _anthropic_stream(messages, settings)
     else:
         raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
 

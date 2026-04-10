@@ -59,7 +59,9 @@ async def generate_embeddings_batch(
     if uncached:
         cache_hits = len(texts) - len(uncached)
         if cache_hits > 0:
-            logger.info("Embedding cache: %d hits, %d misses", cache_hits, len(uncached))
+            logger.info(
+                "Embedding cache: %d hits, %d misses", cache_hits, len(uncached)
+            )
 
         client = _embedding_client(settings)
         batch_size = 100

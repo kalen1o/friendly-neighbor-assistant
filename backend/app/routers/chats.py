@@ -567,7 +567,8 @@ async def send_message(
                     partial_msg = Message(
                         chat_id=chat.id,
                         role="assistant",
-                        content=full_response + "\n\n[Response interrupted due to an error]",
+                        content=full_response
+                        + "\n\n[Response interrupted due to an error]",
                     )
                     db.add(partial_msg)
                     await db.commit()
