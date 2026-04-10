@@ -1,2 +1,8 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff.lint]
+ignore = [
+    "E711",  # comparison to None — required for SQLAlchemy column expressions
+    "E712",  # comparison to True/False — required for SQLAlchemy column expressions
+]

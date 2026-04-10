@@ -76,14 +76,28 @@ async def upload_document(
 
 
 @router.get("", response_model=List[DocumentOut])
-async def list_documents(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Document).where(Document.user_id == user.id).order_by(Document.created_at.desc()))
+async def list_documents(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(Document)
+        .where(Document.user_id == user.id)
+        .order_by(Document.created_at.desc())
+    )
     return result.scalars().all()
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
-async def get_document(document_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Document).where(Document.public_id == document_id, Document.user_id == user.id))
+async def get_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Document).where(
+            Document.public_id == document_id, Document.user_id == user.id
+        )
+    )
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -91,8 +105,16 @@ async def get_document(document_id: str, db: AsyncSession = Depends(get_db), use
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatus)
-async def get_document_status(document_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Document).where(Document.public_id == document_id, Document.user_id == user.id))
+async def get_document_status(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Document).where(
+            Document.public_id == document_id, Document.user_id == user.id
+        )
+    )
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -100,8 +122,16 @@ async def get_document_status(document_id: str, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/{document_id}", status_code=204)
-async def delete_document(document_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Document).where(Document.public_id == document_id, Document.user_id == user.id))
+async def delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Document).where(
+            Document.public_id == document_id, Document.user_id == user.id
+        )
+    )
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")

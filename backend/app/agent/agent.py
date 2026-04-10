@@ -33,7 +33,9 @@ _QUERY_EXPANSIONS = {
 
 def _expand_query(query: str) -> str:
     for abbr, expansion in _QUERY_EXPANSIONS.items():
-        query = re.sub(r'\b' + re.escape(abbr) + r'\b', expansion, query, flags=re.IGNORECASE)
+        query = re.sub(
+            r"\b" + re.escape(abbr) + r"\b", expansion, query, flags=re.IGNORECASE
+        )
     return query
 
 
@@ -80,8 +82,12 @@ async def _build_registry(db: AsyncSession, user_id: int) -> SkillRegistry:
             registry._skills[skill.name] = skill
 
             tool_name = mcp_tool["tool_name"]
-            async def mcp_executor(query, db=db, settings=None, _tn=tool_name, **kwargs):
+
+            async def mcp_executor(
+                query, db=db, settings=None, _tn=tool_name, **kwargs
+            ):
                 return await execute_mcp_tool(_tn, {"query": query}, db)
+
             registry.register_executor(f"mcp_{tool_name}", mcp_executor)
     except Exception as e:
         logger.warning(f"Failed to load MCP tools: {e}")
@@ -103,23 +109,25 @@ def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:
         if skill.skill_type != "tool":
             continue  # Only tool-type skills become function tools
 
-        tools.append({
-            "type": "function",
-            "function": {
-                "name": skill.name,
-                "description": skill.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query or input for this tool",
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": skill.name,
+                    "description": skill.description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The search query or input for this tool",
+                            },
                         },
+                        "required": ["query"],
                     },
-                    "required": ["query"],
                 },
-            },
-        })
+            }
+        )
 
     return tools
 

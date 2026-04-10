@@ -18,7 +18,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     for table in ["chats", "documents", "skills", "hooks", "mcp_servers"]:
-        op.add_column(table, sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True))
+        op.add_column(
+            table,
+            sa.Column(
+                "user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True
+            ),
+        )
         op.create_index(f"ix_{table}_user_id", table, ["user_id"])
 
 

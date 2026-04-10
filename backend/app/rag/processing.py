@@ -71,7 +71,9 @@ async def process_document(
     except Exception as e:
         logger.exception(f"Failed to process document {document_id}")
         try:
-            result = await db.execute(select(Document).where(Document.id == document_id))
+            result = await db.execute(
+                select(Document).where(Document.id == document_id)
+            )
             doc = result.scalar_one_or_none()
             if doc:
                 doc.status = "failed"

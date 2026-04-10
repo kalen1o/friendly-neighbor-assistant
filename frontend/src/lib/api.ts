@@ -609,3 +609,67 @@ export async function updateMcpTool(
   if (!res.ok) throw new Error("Failed to update tool");
   return res.json();
 }
+
+// ── Sharing Types ──
+
+export interface ShareOut {
+  id: string;
+  chat_id: string;
+  visibility: "public" | "authenticated";
+  active: boolean;
+  title: string | null;
+  created_at: string;
+}
+
+export interface SharedMessage {
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface SharedChatView {
+  id: string;
+  title: string | null;
+  visibility: "public" | "authenticated";
+  created_at: string;
+  messages: SharedMessage[];
+}
+
+// ── Sharing API ──
+
+export async function createShare(
+  chatId: string,
+  visibility: "public" | "authenticated" = "public"
+): Promise<ShareOut> {
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ visibility }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: { message: "Failed to share" } }));
+    throw new Error(err.error?.message || err.detail || "Failed to share");
+  }
+  return res.json();
+}
+
+export async function listShares(chatId: string): Promise<ShareOut[]> {
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/shares`);
+  if (!res.ok) throw new Error("Failed to list shares");
+  return res.json();
+}
+
+export async function viewSharedChat(shareId: string): Promise<SharedChatView> {
+  const res = await fetch(`${API_BASE}/api/shared/${shareId}`, {
+    credentials: "include",
+  });
+  if (res.status === 401) throw new Error("LOGIN_REQUIRED");
+  if (!res.ok) throw new Error("NOT_FOUND");
+  return res.json();
+}
+
+export async function revokeShare(shareId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/shared/${shareId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to revoke share");
+}

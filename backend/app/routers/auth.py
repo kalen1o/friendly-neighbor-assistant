@@ -63,11 +63,17 @@ async def register(
     # Validate password
     pwd = body.password
     if len(pwd) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 8 characters"
+        )
     if not re.search(r"[a-z]", pwd):
-        raise HTTPException(status_code=400, detail="Password must contain a lowercase letter")
+        raise HTTPException(
+            status_code=400, detail="Password must contain a lowercase letter"
+        )
     if not re.search(r"[A-Z]", pwd):
-        raise HTTPException(status_code=400, detail="Password must contain an uppercase letter")
+        raise HTTPException(
+            status_code=400, detail="Password must contain an uppercase letter"
+        )
     if not re.search(r"[0-9]", pwd):
         raise HTTPException(status_code=400, detail="Password must contain a number")
 
@@ -125,7 +131,7 @@ async def refresh(
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.token_hash == token_hash,
-            RefreshToken.revoked == False,
+            RefreshToken.revoked == False,  # noqa: E712
         )
     )
     record = result.scalar_one_or_none()
@@ -147,7 +153,7 @@ async def refresh(
 
     # Load user
     user_result = await db.execute(
-        select(User).where(User.id == record.user_id, User.is_active == True)
+        select(User).where(User.id == record.user_id, User.is_active == True)  # noqa: E712
     )
     user = user_result.scalar_one_or_none()
     if not user:

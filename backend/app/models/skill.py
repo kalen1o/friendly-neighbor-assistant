@@ -11,12 +11,12 @@ from app.utils.ids import generate_public_id
 
 class Skill(Base):
     __tablename__ = "skills"
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_skills_user_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_skills_user_name"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), default=None, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), default=None, nullable=True
+    )
     public_id: Mapped[str] = mapped_column(
         String(22), unique=True, default=partial(generate_public_id, "skill")
     )
@@ -27,4 +27,6 @@ class Skill(Base):
     enabled: Mapped[bool] = mapped_column(default=True)
     builtin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )

@@ -26,7 +26,9 @@ def create_access_token(public_id: str, settings: Settings) -> str:
 def decode_access_token(token: str, settings: Settings) -> Optional[str]:
     """Decode JWT and return public_id, or None if invalid/expired."""
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+        )
         if payload.get("type") != "access":
             return None
         return payload.get("sub")

@@ -12,7 +12,7 @@ def _estimate_tokens(text: str) -> int:
 
 def _split_sentences(text: str) -> List[str]:
     """Split text into sentences."""
-    parts = re.split(r'(?<=[.!?])\s+', text)
+    parts = re.split(r"(?<=[.!?])\s+", text)
     return [s.strip() for s in parts if s.strip()]
 
 
@@ -34,11 +34,16 @@ def _normalize_paragraphs(raw_paragraphs: List[str]) -> List[str]:
             sentences = _split_sentences(para)
             current = ""
             for sentence in sentences:
-                if _estimate_tokens(current + " " + sentence) > MAX_PARAGRAPH_TOKENS and current:
+                if (
+                    _estimate_tokens(current + " " + sentence) > MAX_PARAGRAPH_TOKENS
+                    and current
+                ):
                     normalized.append(current.strip())
                     current = sentence
                 else:
-                    current = (current + " " + sentence).strip() if current else sentence
+                    current = (
+                        (current + " " + sentence).strip() if current else sentence
+                    )
             if current:
                 normalized.append(current.strip())
 

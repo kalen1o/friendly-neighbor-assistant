@@ -11,22 +11,28 @@ from app.utils.ids import generate_public_id
 
 class Hook(Base):
     __tablename__ = "hooks"
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_hooks_user_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_hooks_user_name"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), default=None, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), default=None, nullable=True
+    )
     public_id: Mapped[str] = mapped_column(
         String(22), unique=True, default=partial(generate_public_id, "hook")
     )
     name: Mapped[str] = mapped_column()
     description: Mapped[str] = mapped_column()
-    hook_type: Mapped[str] = mapped_column()  # "observability", "control", "transformation"
-    hook_point: Mapped[str] = mapped_column()  # "pre_message", "pre_skills", "post_skills", "pre_llm", "post_llm", "post_message"
+    hook_type: Mapped[str] = (
+        mapped_column()
+    )  # "observability", "control", "transformation"
+    hook_point: Mapped[str] = (
+        mapped_column()
+    )  # "pre_message", "pre_skills", "post_skills", "pre_llm", "post_llm", "post_message"
     priority: Mapped[int] = mapped_column(default=100)  # lower runs first
     content: Mapped[str] = mapped_column(Text)  # full markdown
     enabled: Mapped[bool] = mapped_column(default=True)
     builtin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )

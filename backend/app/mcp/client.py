@@ -88,7 +88,9 @@ async def _mcp_request(
             return {}
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"MCP request failed: {e.response.status_code} {e.response.text[:200]}")
+            logger.error(
+                f"MCP request failed: {e.response.status_code} {e.response.text[:200]}"
+            )
             raise
         except Exception as e:
             logger.error(f"MCP request error for {method} on {server_url}: {e}")
@@ -174,7 +176,9 @@ async def call_tool(
         # MCP tool results have "content" array
         content_parts = result.get("content", []) if isinstance(result, dict) else []
         text_parts = [
-            c.get("text", "") for c in content_parts if isinstance(c, dict) and c.get("type") == "text"
+            c.get("text", "")
+            for c in content_parts
+            if isinstance(c, dict) and c.get("type") == "text"
         ]
         return {
             "content": "\n".join(text_parts) if text_parts else json.dumps(result),

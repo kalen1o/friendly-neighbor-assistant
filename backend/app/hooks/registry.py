@@ -1,6 +1,4 @@
 import logging
-import re
-import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -8,7 +6,14 @@ logger = logging.getLogger(__name__)
 
 BUILTIN_HOOKS_DIR = Path(__file__).parent.parent.parent / "hooks"
 
-VALID_HOOK_POINTS = ["pre_message", "pre_skills", "post_skills", "pre_llm", "post_llm", "post_message"]
+VALID_HOOK_POINTS = [
+    "pre_message",
+    "pre_skills",
+    "post_skills",
+    "pre_llm",
+    "post_llm",
+    "post_message",
+]
 
 
 def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
@@ -77,7 +82,9 @@ class HookContext:
         self.knowledge_prompts: list = []
         self.blocked: bool = False
         self.blocked_reason: str = ""
-        self.metadata: Dict[str, Any] = {}  # shared state between hooks (e.g. start_time)
+        self.metadata: Dict[
+            str, Any
+        ] = {}  # shared state between hooks (e.g. start_time)
         self.modifications: Dict[str, Any] = {}  # hooks can modify these values
 
 
@@ -106,7 +113,9 @@ class HookRegistry:
                 name = meta.get("name", path.stem)
                 hook_point = meta.get("hook_point", "post_message")
                 if hook_point not in VALID_HOOK_POINTS:
-                    logger.warning(f"Invalid hook_point '{hook_point}' in {path}, skipping")
+                    logger.warning(
+                        f"Invalid hook_point '{hook_point}' in {path}, skipping"
+                    )
                     continue
 
                 hook = HookDefinition(
@@ -143,8 +152,7 @@ class HookRegistry:
     def get_hooks_for_point(self, hook_point: str) -> List[HookDefinition]:
         """Get all enabled hooks for a specific hook point, sorted by priority."""
         hooks = [
-            h for h in self._hooks.values()
-            if h.hook_point == hook_point and h.enabled
+            h for h in self._hooks.values() if h.hook_point == hook_point and h.enabled
         ]
         return sorted(hooks, key=lambda h: h.priority)
 

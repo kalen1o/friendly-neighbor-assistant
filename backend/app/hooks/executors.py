@@ -19,7 +19,7 @@ async def execute_log_messages(context: HookContext, hook: HookDefinition):
         context.metadata["latency_seconds"] = duration
     logger.info(
         f"[MESSAGE] chat={context.chat_id} "
-        f"user=\"{context.user_message[:80]}\" "
+        f'user="{context.user_message[:80]}" '
         f"response_len={len(context.response)} "
         f"skills={context.skills_used} "
         f"sources={len(context.sources)} "
@@ -88,9 +88,7 @@ async def execute_rate_limiter(context: HookContext, hook: HookDefinition):
         _rate_limit_store[chat_id] = []
 
     # Clean old timestamps
-    _rate_limit_store[chat_id] = [
-        t for t in _rate_limit_store[chat_id] if now - t < 60
-    ]
+    _rate_limit_store[chat_id] = [t for t in _rate_limit_store[chat_id] if now - t < 60]
 
     if len(_rate_limit_store[chat_id]) >= max_per_minute:
         context.blocked = True
@@ -112,9 +110,9 @@ async def execute_response_formatter(context: HookContext, hook: HookDefinition)
     if not response:
         return
     # Remove excessive newlines
-    response = re.sub(r'\n{3,}', '\n\n', response)
+    response = re.sub(r"\n{3,}", "\n\n", response)
     # Trim trailing whitespace per line
-    response = '\n'.join(line.rstrip() for line in response.split('\n'))
+    response = "\n".join(line.rstrip() for line in response.split("\n"))
     context.modifications["response_replace"] = response
 
 

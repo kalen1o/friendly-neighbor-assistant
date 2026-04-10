@@ -1,5 +1,4 @@
 import logging
-import os
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -36,6 +35,9 @@ class Settings(BaseSettings):
     cookie_domain: str = ""  # Leave empty for localhost dev
     environment: str = "development"  # "development" or "production"
 
+    # Logging
+    log_level: str = "INFO"
+
 
 def get_settings() -> Settings:
     settings = Settings()
@@ -47,7 +49,7 @@ def get_settings() -> Settings:
     ):
         raise RuntimeError(
             "JWT_SECRET must be changed from the default value in production. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
     return settings

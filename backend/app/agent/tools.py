@@ -37,14 +37,16 @@ async def tool_search_knowledge_base(
 def _extract_text_from_html(html: str, max_chars: int = 3000) -> str:
     """Extract readable text from HTML, strip tags and excess whitespace."""
     # Remove script and style blocks
-    text = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(
+        r"<(script|style)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE
+    )
     # Remove HTML tags
-    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r"<[^>]+>", " ", text)
     # Decode common HTML entities
-    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-    text = text.replace('&nbsp;', ' ').replace('&#39;', "'").replace('&quot;', '"')
+    text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    text = text.replace("&nbsp;", " ").replace("&#39;", "'").replace("&quot;", '"')
     # Collapse whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
     return text[:max_chars]
 
 
@@ -52,9 +54,12 @@ async def _fetch_page_content(url: str, timeout: float = 5.0) -> str:
     """Fetch a URL and extract text content. Returns empty string on failure."""
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
-            resp = await client.get(url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; FriendlyNeighborBot/1.0)"
-            })
+            resp = await client.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; FriendlyNeighborBot/1.0)"
+                },
+            )
             if resp.status_code == 200:
                 return _extract_text_from_html(resp.text)
     except Exception as e:
@@ -62,7 +67,9 @@ async def _fetch_page_content(url: str, timeout: float = 5.0) -> str:
     return ""
 
 
-async def tool_search_web(query: str, max_results: int = 3, fetch_top: int = 1) -> List[Dict[str, Any]]:
+async def tool_search_web(
+    query: str, max_results: int = 3, fetch_top: int = 1
+) -> List[Dict[str, Any]]:
     """Search the web and fetch content from top results for fresh data."""
     try:
         results = DDGS().text(query, max_results=max_results)

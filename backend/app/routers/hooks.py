@@ -37,10 +37,14 @@ def _get_builtin_hooks() -> List[dict]:
 
 
 @router.get("", response_model=List[HookOut])
-async def list_hooks(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def list_hooks(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
     builtin = _get_builtin_hooks()
     result = await db.execute(
-        select(Hook).where(or_(Hook.user_id == None, Hook.user_id == user.id)).order_by(Hook.hook_point, Hook.priority)  # noqa: E711
+        select(Hook)
+        .where(or_(Hook.user_id == None, Hook.user_id == user.id))
+        .order_by(Hook.hook_point, Hook.priority)  # noqa: E711
     )
     user_hooks = result.scalars().all()
     db_names = {h.name for h in user_hooks}
@@ -49,7 +53,11 @@ async def list_hooks(db: AsyncSession = Depends(get_db), user: User = Depends(ge
 
 
 @router.post("", status_code=201, response_model=HookOut)
-async def create_hook(body: HookCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def create_hook(
+    body: HookCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     existing = await db.execute(
         select(Hook).where(
             Hook.name == body.name,
@@ -57,7 +65,9 @@ async def create_hook(body: HookCreate, db: AsyncSession = Depends(get_db), user
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"Hook '{body.name}' already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Hook '{body.name}' already exists"
+        )
     hook = Hook(
         name=body.name,
         description=body.description,
@@ -77,8 +87,17 @@ async def create_hook(body: HookCreate, db: AsyncSession = Depends(get_db), user
 
 
 @router.get("/{hook_id}", response_model=HookOut)
-async def get_hook(hook_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Hook).where(Hook.public_id == hook_id, or_(Hook.user_id == None, Hook.user_id == user.id)))  # noqa: E711
+async def get_hook(
+    hook_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Hook).where(
+            Hook.public_id == hook_id,
+            or_(Hook.user_id == None, Hook.user_id == user.id),
+        )
+    )  # noqa: E711
     hook = result.scalar_one_or_none()
     if not hook:
         raise HTTPException(status_code=404, detail="Hook not found")
@@ -86,8 +105,15 @@ async def get_hook(hook_id: str, db: AsyncSession = Depends(get_db), user: User 
 
 
 @router.patch("/{hook_id}", response_model=HookOut)
-async def update_hook(hook_id: str, body: HookUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Hook).where(Hook.public_id == hook_id, Hook.user_id == user.id))
+async def update_hook(
+    hook_id: str,
+    body: HookUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Hook).where(Hook.public_id == hook_id, Hook.user_id == user.id)
+    )
     hook = result.scalar_one_or_none()
     if not hook:
         raise HTTPException(status_code=404, detail="Hook not found")
@@ -108,8 +134,14 @@ async def update_hook(hook_id: str, body: HookUpdate, db: AsyncSession = Depends
 
 
 @router.delete("/{hook_id}", status_code=204)
-async def delete_hook(hook_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Hook).where(Hook.public_id == hook_id, Hook.user_id == user.id))
+async def delete_hook(
+    hook_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Hook).where(Hook.public_id == hook_id, Hook.user_id == user.id)
+    )
     hook = result.scalar_one_or_none()
     if not hook:
         raise HTTPException(status_code=404, detail="Hook not found")
@@ -118,4 +150,3 @@ async def delete_hook(hook_id: str, db: AsyncSession = Depends(get_db), user: Us
     await db.delete(hook)
     await db.commit()
     invalidate_hook_cache(user.id)
-

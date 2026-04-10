@@ -1,6 +1,5 @@
 from datetime import datetime
 from functools import partial
-from typing import Optional
 
 from sqlalchemy import String, func
 from sqlalchemy.orm import Mapped, mapped_column

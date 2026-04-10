@@ -66,7 +66,7 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
                 if (theme === 'dark') {
                     colors.push(1, 1, 1);
                 } else {
-                    colors.push(0.85, 0.85, 0.85);
+                    colors.push(0, 0, 0);
                 }
             }
         }
@@ -82,7 +82,7 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
             size: 8,
             vertexColors: true,
             transparent: true,
-            opacity: 0.8,
+            opacity: theme === 'dark' ? 0.8 : 0.15,
             sizeAttenuation: true,
         });
 

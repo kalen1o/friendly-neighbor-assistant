@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 
@@ -12,11 +11,13 @@ def extract_text(file_path: str) -> str:
 
     elif ext == ".pdf":
         from pypdf import PdfReader
+
         reader = PdfReader(file_path)
         return "\n".join(page.extract_text() or "" for page in reader.pages)
 
     elif ext == ".docx":
         from docx import Document
+
         doc = Document(file_path)
         return "\n".join(p.text for p in doc.paragraphs)
 
@@ -25,6 +26,7 @@ def extract_text(file_path: str) -> str:
             content = f.read()
         # Simple HTML tag stripping
         import re
+
         text = re.sub(r"<[^>]+>", " ", content)
         return re.sub(r"\s+", " ", text).strip()
 

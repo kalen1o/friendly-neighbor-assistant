@@ -59,9 +59,7 @@ async def refresh_server_tools(db: AsyncSession, server: McpServer) -> List[McpT
     )
 
     # Get existing tools for this server
-    result = await db.execute(
-        select(McpTool).where(McpTool.server_id == server.id)
-    )
+    result = await db.execute(select(McpTool).where(McpTool.server_id == server.id))
     existing_tools = {t.tool_name: t for t in result.scalars().all()}
 
     # Sync: add new, update existing, remove deleted
@@ -102,15 +100,14 @@ async def refresh_server_tools(db: AsyncSession, server: McpServer) -> List[McpT
     await db.commit()
 
     # Return all current tools
-    result = await db.execute(
-        select(McpTool).where(McpTool.server_id == server.id)
-    )
+    result = await db.execute(select(McpTool).where(McpTool.server_id == server.id))
     return result.scalars().all()
 
 
-async def get_enabled_mcp_tools(db: AsyncSession, user_id: int = None) -> List[Dict[str, Any]]:
+async def get_enabled_mcp_tools(
+    db: AsyncSession, user_id: int = None
+) -> List[Dict[str, Any]]:
     """Get enabled MCP tools for builtin + current user's servers."""
-    from sqlalchemy import or_
 
     query = (
         select(McpTool)
@@ -132,7 +129,8 @@ async def get_enabled_mcp_tools(db: AsyncSession, user_id: int = None) -> List[D
             "server_auth_header": t.server.auth_header,
         }
         for t in tools
-        if t.server and t.server.enabled
+        if t.server
+        and t.server.enabled
         and (t.server.user_id is None or t.server.user_id == user_id)
     ]
 
@@ -151,7 +149,10 @@ async def execute_mcp_tool(
     tool = result.scalar_one_or_none()
 
     if not tool or not tool.server:
-        return {"content": f"MCP tool '{tool_name}' not found or disabled", "sources": []}
+        return {
+            "content": f"MCP tool '{tool_name}' not found or disabled",
+            "sources": [],
+        }
 
     call_result = await call_tool(
         server_url=tool.server.url,
@@ -164,9 +165,11 @@ async def execute_mcp_tool(
 
     return {
         "content": call_result["content"],
-        "sources": [{
-            "type": "mcp",
-            "tool": tool_name,
-            "server": tool.server.name,
-        }],
+        "sources": [
+            {
+                "type": "mcp",
+                "tool": tool_name,
+                "server": tool.server.name,
+            }
+        ],
     }

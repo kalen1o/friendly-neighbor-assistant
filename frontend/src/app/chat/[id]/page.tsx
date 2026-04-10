@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Share2 } from "lucide-react";
 import { ChatMessages, EmptyState, type DisplayMessage } from "@/components/chat-messages";
 import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
+import { Button } from "@/components/ui/button";
+import { ShareDialog } from "@/components/share-dialog";
 import { getChat, sendMessage, type Source, type MessageMetrics, type ChatMode } from "@/lib/api";
 import { useAuth } from "@/components/auth-guard";
 import { toast } from "sonner";
@@ -23,6 +26,7 @@ export default function ChatPage() {
   const [actionText, setActionText] = useState<string | null>(null);
   const [activeSkills, setActiveSkills] = useState<string[]>([]);
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Accumulated text from SSE chunks (full received text)
   const fullTextRef = useRef("");
@@ -68,6 +72,7 @@ export default function ChatPage() {
     metricsRef.current = null;
     skillsUsedRef.current = [];
     setIsStreaming(false);
+    sendingRef.current = false;
   }, [stopTypewriter]);
 
   const startTypewriter = useCallback(() => {
@@ -98,7 +103,11 @@ export default function ChatPage() {
   // Clean up interval on unmount
   useEffect(() => stopTypewriter, [stopTypewriter]);
 
+  const sendingRef = useRef(false);
+
   const loadChat = useCallback(async () => {
+    // Don't overwrite messages while a send is in progress
+    if (sendingRef.current) return;
     try {
       const chat = await getChat(chatId);
       setMessages(
@@ -124,23 +133,21 @@ export default function ChatPage() {
   }, [chatId]);
 
   useEffect(() => {
-    loadChat().then(() => {
-      // Auto-send message from URL query param (from home page)
-      const q = searchParams.get("q");
-      const mode = (searchParams.get("mode") || "balanced") as ChatMode;
-      if (q && !initialQuerySent.current) {
-        initialQuerySent.current = true;
-        // Clean the URL
-        router.replace(`/chat/${chatId}`);
-        handleSend(q, mode);
-      }
-    });
+    const q = searchParams.get("q");
+    const mode = (searchParams.get("mode") || "balanced") as ChatMode;
+
+    if (q && !initialQuerySent.current) {
+      // Auto-send from URL — skip loadChat since the chat is empty
+      initialQuerySent.current = true;
+      router.replace(`/chat/${chatId}`);
+      doSend(q, mode);
+    } else if (!initialQuerySent.current || !sendingRef.current) {
+      loadChat();
+    }
   }, [loadChat]);
 
-  const handleSend = async (content: string, mode: ChatMode = "balanced") => {
-    const authed = await requireAuth();
-    if (!authed) return;
-
+  const doSend = (content: string, mode: ChatMode = "balanced") => {
+    sendingRef.current = true;
     setMessages((prev) => [...prev, { role: "user", content }]);
     setStreamingContent("");
     fullTextRef.current = "";
@@ -192,6 +199,7 @@ export default function ChatPage() {
       },
       onError: (err) => {
         stopTypewriter();
+        sendingRef.current = false;
         toast.error(err);
         setStreamingContent("");
         fullTextRef.current = "";
@@ -202,6 +210,15 @@ export default function ChatPage() {
         setIsStreaming(false);
       },
     }, mode);
+  };
+
+  const handleSend = async (content: string, mode: ChatMode = "balanced") => {
+    const authed = await requireAuth();
+    if (!authed) {
+      chatInputRef.current?.setInput(content);
+      return;
+    }
+    doSend(content, mode);
   };
 
   const isEmpty = messages.length === 0 && !streamingContent && !isLoading && !actionText;
@@ -218,6 +235,20 @@ export default function ChatPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+
+      {!isEmpty && (
+        <div className="flex items-center justify-end px-4 py-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setShareOpen(true)}
+            title="Share conversation"
+          >
+            <Share2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {!isEmpty && (
         <ChatMessages
@@ -254,6 +285,12 @@ export default function ChatPage() {
       <div
         className="transition-[flex-grow] duration-500 ease-out"
         style={{ flexGrow: isEmpty ? 1 : 0 }}
+      />
+
+      <ShareDialog
+        chatId={chatId}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
       />
     </div>
   );

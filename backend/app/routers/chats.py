@@ -1,10 +1,10 @@
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, and_, or_, tuple_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -15,7 +15,7 @@ from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.hooks.executors import register_all_hook_executors
 from app.hooks.registry import HookContext, HookRegistry
-from app.llm.provider import get_llm_response, stream_llm_response
+from app.llm.provider import get_llm_response
 from app.models.chat import Chat, Message
 from app.models.hook import Hook
 from app.models.user import User
@@ -23,10 +23,8 @@ from app.schemas.chat import (
     ChatCreate,
     ChatDetail,
     ChatListResponse,
-    ChatSummary,
     ChatUpdate,
     MessageCreate,
-    MessageOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +68,11 @@ def invalidate_hook_cache(user_id: Optional[int] = None) -> None:
 
 
 @router.post("", status_code=201, response_model=ChatDetail)
-async def create_chat(body: ChatCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def create_chat(
+    body: ChatCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     chat = Chat(title=body.title, user_id=user.id)
     db.add(chat)
     await db.commit()
@@ -85,7 +87,11 @@ async def list_chats(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    query = select(Chat).where(Chat.user_id == user.id).order_by(Chat.updated_at.desc(), Chat.public_id.desc())
+    query = (
+        select(Chat)
+        .where(Chat.user_id == user.id)
+        .order_by(Chat.updated_at.desc(), Chat.public_id.desc())
+    )
 
     if cursor:
         try:
@@ -116,9 +122,15 @@ async def list_chats(
 
 
 @router.get("/{chat_id}", response_model=ChatDetail)
-async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def get_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     result = await db.execute(
-        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id).options(selectinload(Chat.messages))
+        select(Chat)
+        .where(Chat.public_id == chat_id, Chat.user_id == user.id)
+        .options(selectinload(Chat.messages))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -128,23 +140,35 @@ async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db), user: User 
 
 @router.patch("/{chat_id}", response_model=ChatDetail)
 async def update_chat(
-    chat_id: str, body: ChatUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+    chat_id: str,
+    body: ChatUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id).options(selectinload(Chat.messages))
+        select(Chat)
+        .where(Chat.public_id == chat_id, Chat.user_id == user.id)
+        .options(selectinload(Chat.messages))
     )
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     chat.title = body.title
     await db.commit()
+    await db.refresh(chat)
     await db.refresh(chat, ["messages"])
     return ChatDetail.from_chat(chat)
 
 
 @router.delete("/{chat_id}", status_code=204)
-async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id))
+async def delete_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id)
+    )
     chat = result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -153,7 +177,9 @@ async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db), user: Us
 
 
 @router.delete("", status_code=204)
-async def delete_all_chats(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def delete_all_chats(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
     result = await db.execute(select(Chat).where(Chat.user_id == user.id))
     chats = result.scalars().all()
     for chat in chats:
@@ -171,7 +197,9 @@ async def send_message(
 ):
     # 1. Validate chat exists and belongs to user
     result = await db.execute(
-        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id).options(selectinload(Chat.messages))
+        select(Chat)
+        .where(Chat.public_id == chat_id, Chat.user_id == user.id)
+        .options(selectinload(Chat.messages))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -204,7 +232,10 @@ async def send_message(
 
         # Build agent context (tools + knowledge prompts)
         from app.agent.agent import build_agent_context, create_tool_executor
-        tool_defs, knowledge_prompts, registry = await build_agent_context(db, settings, user_id=user.id)
+
+        tool_defs, knowledge_prompts, registry = await build_agent_context(
+            db, settings, user_id=user.id
+        )
         tool_executor = await create_tool_executor(registry, db, settings)
 
         # 3. post_skills hooks (tools are registered, not yet called)
@@ -213,9 +244,7 @@ async def send_message(
 
         # Build message history
         await db.refresh(chat, ["messages"])
-        llm_messages = [
-            {"role": m.role, "content": m.content} for m in chat.messages
-        ]
+        llm_messages = [{"role": m.role, "content": m.content} for m in chat.messages]
 
         # Inject knowledge prompts into the last user message
         if hook_ctx.knowledge_prompts:
@@ -235,6 +264,7 @@ async def send_message(
         # Track tool calls for sources and badges
         skills_used = []
         import asyncio as _asyncio
+
         tool_action_queue = _asyncio.Queue()
 
         async def on_tool_call_track(tool_name):
@@ -243,15 +273,21 @@ async def send_message(
             await tool_action_queue.put(f"Using {tool_name}...")
 
         # Mode-specific tool rounds
-        mode_tool_rounds = {"fast": 3, "balanced": settings.max_tool_rounds, "thinking": settings.max_tool_rounds * 2}
+        mode_tool_rounds = {
+            "fast": 3,
+            "balanced": settings.max_tool_rounds,
+            "thinking": settings.max_tool_rounds * 2,
+        }
         tool_rounds = mode_tool_rounds.get(body.mode, settings.max_tool_rounds)
 
         # Stream with native tool calling
         from app.llm.provider import stream_with_tools
+
         full_response = ""
         try:
             async for chunk in stream_with_tools(
-                llm_messages, settings,
+                llm_messages,
+                settings,
                 tools=tool_defs if tool_defs else None,
                 tool_executor=tool_executor,
                 on_tool_call=on_tool_call_track,
@@ -279,7 +315,10 @@ async def send_message(
                 full_response = hook_ctx.modifications["response_replace"]
             if "response_append" in hook_ctx.modifications:
                 full_response += hook_ctx.modifications["response_append"]
-                yield {"event": "message", "data": hook_ctx.modifications["response_append"]}
+                yield {
+                    "event": "message",
+                    "data": hook_ctx.modifications["response_append"],
+                }
 
             # Build sources: actual sources from tool results + skill labels
             sources_data = []

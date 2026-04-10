@@ -48,9 +48,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["chat_id"], ["chats.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["chat_id"], ["chats.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
 

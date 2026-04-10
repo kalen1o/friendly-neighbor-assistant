@@ -26,8 +26,12 @@ def upgrade() -> None:
         sa.Column("auth_type", sa.String(), nullable=False, server_default="none"),
         sa.Column("auth_token", sa.Text(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -39,8 +43,12 @@ def upgrade() -> None:
         sa.Column("description", sa.String(), nullable=True),
         sa.Column("input_schema", sa.Text(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
+        ),
         sa.ForeignKeyConstraint(["server_id"], ["mcp_servers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

@@ -22,7 +22,9 @@ async def get_llm_response(messages: list[dict], settings: Settings) -> str:
         raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
 
 
-async def stream_llm_response(messages: list[dict], settings: Settings) -> AsyncIterator[str]:
+async def stream_llm_response(
+    messages: list[dict], settings: Settings
+) -> AsyncIterator[str]:
     if settings.ai_provider == "anthropic":
         async for chunk in _anthropic_stream(messages, settings):
             yield chunk
@@ -61,7 +63,9 @@ async def _openai_response(messages: list[dict], settings: Settings) -> str:
     return response.choices[0].message.content
 
 
-async def _anthropic_stream(messages: list[dict], settings: Settings) -> AsyncIterator[str]:
+async def _anthropic_stream(
+    messages: list[dict], settings: Settings
+) -> AsyncIterator[str]:
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     async with client.messages.stream(
         model=ANTHROPIC_MODEL,
@@ -73,7 +77,9 @@ async def _anthropic_stream(messages: list[dict], settings: Settings) -> AsyncIt
             yield text
 
 
-async def _openai_stream(messages: list[dict], settings: Settings) -> AsyncIterator[str]:
+async def _openai_stream(
+    messages: list[dict], settings: Settings
+) -> AsyncIterator[str]:
     client = _build_openai_client(settings)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     stream = await client.chat.completions.create(
@@ -163,7 +169,6 @@ async def _openai_stream_with_tools(
     max_tool_rounds: int = 5,
 ) -> AsyncIterator[str]:
     """OpenAI-compatible streaming with tool calling loop."""
-    import json as _json
 
     client = _build_openai_client(settings)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
@@ -205,9 +210,13 @@ async def _openai_stream_with_tools(
                     if tc.function:
                         if tc.function.name:
                             tool_calls_in_progress[tc_id]["name"] = tc.function.name
-                            tool_calls_in_progress[tc_id]["id"] = tc.id or tool_calls_in_progress[tc_id]["id"]
+                            tool_calls_in_progress[tc_id]["id"] = (
+                                tc.id or tool_calls_in_progress[tc_id]["id"]
+                            )
                         if tc.function.arguments:
-                            tool_calls_in_progress[tc_id]["arguments"] += tc.function.arguments
+                            tool_calls_in_progress[tc_id]["arguments"] += (
+                                tc.function.arguments
+                            )
 
             # Check finish reason
             if chunk.choices[0].finish_reason == "stop":
@@ -223,17 +232,23 @@ async def _openai_stream_with_tools(
         # Build assistant message with tool calls for the conversation
         assistant_tool_calls = []
         for tc_data in tool_calls_in_progress.values():
-            assistant_tool_calls.append({
-                "id": tc_data["id"],
-                "type": "function",
-                "function": {
-                    "name": tc_data["name"],
-                    "arguments": tc_data["arguments"],
-                },
-            })
+            assistant_tool_calls.append(
+                {
+                    "id": tc_data["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc_data["name"],
+                        "arguments": tc_data["arguments"],
+                    },
+                }
+            )
 
         # Add the assistant's response (with tool calls) to messages
-        assistant_msg = {"role": "assistant", "content": collected_content or None, "tool_calls": assistant_tool_calls}
+        assistant_msg = {
+            "role": "assistant",
+            "content": collected_content or None,
+            "tool_calls": assistant_tool_calls,
+        }
         kwargs["messages"].append(assistant_msg)
 
         # Execute all tool calls in parallel
@@ -245,7 +260,10 @@ async def _openai_stream_with_tools(
                 await on_tool_call(tool_name)
             try:
                 import json as _json
-                arguments = _json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+
+                arguments = (
+                    _json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+                )
             except _json.JSONDecodeError:
                 arguments = {}
 
@@ -260,17 +278,19 @@ async def _openai_stream_with_tools(
             return tc_data["id"], str(result) if not isinstance(result, str) else result
 
         # Run all tools in parallel
-        tool_results = await _asyncio.gather(*[
-            _execute_single_tool(tc) for tc in tool_calls_in_progress.values()
-        ])
+        tool_results = await _asyncio.gather(
+            *[_execute_single_tool(tc) for tc in tool_calls_in_progress.values()]
+        )
 
         # Add results to messages in order
         for tc_call_id, result_content in tool_results:
-            kwargs["messages"].append({
-                "role": "tool",
-                "tool_call_id": tc_call_id,
-                "content": result_content,
-            })
+            kwargs["messages"].append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc_call_id,
+                    "content": result_content,
+                }
+            )
 
         # Loop back to get LLM's response after tool results
         continue

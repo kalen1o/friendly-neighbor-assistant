@@ -38,6 +38,7 @@ class MessageOut(BaseModel):
     @classmethod
     def from_message(cls, msg) -> "MessageOut":
         import json
+
         sources = None
         if msg.sources_json:
             try:
@@ -54,7 +55,9 @@ class MessageOut(BaseModel):
             )
         return cls(
             id=msg.public_id,
-            chat_id=msg.chat.public_id if hasattr(msg, 'chat') and msg.chat else str(msg.chat_id),
+            chat_id=msg.chat.public_id
+            if hasattr(msg, "chat") and msg.chat
+            else str(msg.chat_id),
             role=msg.role,
             content=msg.content,
             created_at=msg.created_at,

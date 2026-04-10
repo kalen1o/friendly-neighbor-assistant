@@ -15,7 +15,11 @@ export default function Home() {
 
   const handleSend = async (content: string, mode: ChatMode = "balanced") => {
     const authed = await requireAuth();
-    if (!authed) return;
+    if (!authed) {
+      // Auth dismissed — restore the message to the input
+      chatInputRef.current?.setInput(content);
+      return;
+    }
     try {
       const chat = await createChat();
       router.push(`/chat/${chat.id}?q=${encodeURIComponent(content)}&mode=${mode}`);

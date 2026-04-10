@@ -1,13 +1,10 @@
-import os
-
-import pytest
-
-
 def test_settings_loads_from_env(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "openai")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/testdb")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/testdb"
+    )
     monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
 
     from app.config import Settings
@@ -21,7 +18,9 @@ def test_settings_loads_from_env(monkeypatch):
 
 
 def test_settings_defaults(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/testdb")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/testdb"
+    )
     monkeypatch.delenv("AI_PROVIDER", raising=False)
 
     from app.config import Settings

@@ -41,7 +41,7 @@ async def get_current_user(
         )
 
     result = await db.execute(
-        select(User).where(User.public_id == public_id, User.is_active == True)
+        select(User).where(User.public_id == public_id, User.is_active == True)  # noqa: E712
     )
     user = result.scalar_one_or_none()
     if user is None:

@@ -23,13 +23,19 @@ def upgrade() -> None:
 
     # Backfill existing rows with generated IDs
     import uuid
+
     conn = op.get_bind()
 
     for table, prefix in [("chats", "chat"), ("messages", "msg"), ("users", "user")]:
-        rows = conn.execute(sa.text(f"SELECT id FROM {table} WHERE public_id IS NULL")).fetchall()
+        rows = conn.execute(
+            sa.text(f"SELECT id FROM {table} WHERE public_id IS NULL")
+        ).fetchall()
         for row in rows:
             pid = f"{prefix}-{uuid.uuid4().hex[:8]}"
-            conn.execute(sa.text(f"UPDATE {table} SET public_id = :pid WHERE id = :id"), {"pid": pid, "id": row[0]})
+            conn.execute(
+                sa.text(f"UPDATE {table} SET public_id = :pid WHERE id = :id"),
+                {"pid": pid, "id": row[0]},
+            )
 
 
 def downgrade() -> None:

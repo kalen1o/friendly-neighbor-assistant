@@ -24,7 +24,9 @@ async def generate_embedding(text: str, settings: Settings) -> List[float]:
     return response.data[0].embedding
 
 
-async def generate_embeddings_batch(texts: List[str], settings: Settings) -> List[List[float]]:
+async def generate_embeddings_batch(
+    texts: List[str], settings: Settings
+) -> List[List[float]]:
     """Generate embeddings for a batch of texts."""
     if not texts:
         return []

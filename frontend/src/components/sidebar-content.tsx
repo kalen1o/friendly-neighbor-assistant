@@ -81,17 +81,19 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
   const { user, loading, isAuthenticated, requireAuth, logout: handleLogout } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const wrapperClass = cn("border-t", menuCollapsed ? "flex justify-center py-2" : "min-h-[63px]");
+
   if (loading) {
     return (
-      <div className={cn("border-t", menuCollapsed ? "flex justify-center py-2" : "")}>
+      <div className={wrapperClass}>
         {menuCollapsed ? (
           <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
         ) : (
           <div className="flex items-center gap-2.5 p-3">
             <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted" />
-            <div className="flex-1">
-              <div className="h-[20px] flex items-center"><div className="h-3 w-20 animate-pulse rounded bg-muted" /></div>
-              <div className="h-[16px] flex items-center"><div className="h-2.5 w-28 animate-pulse rounded bg-muted" /></div>
+            <div className="flex-1 space-y-1">
+              <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+              <div className="h-2.5 w-28 animate-pulse rounded bg-muted" />
             </div>
           </div>
         )}
@@ -101,7 +103,7 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
 
   if (!isAuthenticated) {
     return (
-      <div className={cn("border-t", menuCollapsed ? "flex justify-center py-2" : "")}>
+      <div className={wrapperClass}>
         {menuCollapsed ? (
           <button
             onClick={() => requireAuth()}
@@ -132,7 +134,7 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
   const initial = (user?.name?.[0] || user?.email?.[0] || "?").toUpperCase();
 
   return (
-    <div className={cn("border-t", menuCollapsed && "flex justify-center py-2")}>
+    <div className={wrapperClass}>
       <DropdownMenu>
         <DropdownMenuTrigger className={cn(
           "flex cursor-pointer items-center border-0 bg-transparent transition-colors hover:bg-accent",
@@ -153,7 +155,7 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
             </>
           )}
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className="w-56">
+        <DropdownMenuContent side="top" align="start" className={menuCollapsed ? "w-48" : "w-[var(--anchor-width)]"}>
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
             <Settings className="mr-2 h-4 w-4" />
             Settings

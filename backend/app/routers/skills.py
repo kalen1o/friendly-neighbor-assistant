@@ -11,7 +11,6 @@ from app.models.skill import Skill
 from app.models.user import User
 from app.schemas.skill import SkillCreate, SkillOut, SkillUpdate
 from app.skills.registry import SkillRegistry, invalidate_skill_cache
-from app.skills.executors import register_all_executors
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -37,14 +36,18 @@ def _get_builtin_skills() -> List[dict]:
 
 
 @router.get("", response_model=List[SkillOut])
-async def list_skills(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def list_skills(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
     """List all skills — built-in + user-created (shared + own)."""
     # Built-in skills from files
     builtin = _get_builtin_skills()
 
     # User skills from DB: shared (user_id=None) + user's own
     result = await db.execute(
-        select(Skill).where(or_(Skill.user_id == None, Skill.user_id == user.id)).order_by(Skill.created_at.desc())  # noqa: E711
+        select(Skill)
+        .where(or_(Skill.user_id == None, Skill.user_id == user.id))
+        .order_by(Skill.created_at.desc())  # noqa: E711
     )
     user_skills = result.scalars().all()
 
@@ -56,7 +59,11 @@ async def list_skills(db: AsyncSession = Depends(get_db), user: User = Depends(g
 
 
 @router.post("", status_code=201, response_model=SkillOut)
-async def create_skill(body: SkillCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def create_skill(
+    body: SkillCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Create a user skill."""
     # Check if name already exists for this user (or as a shared/builtin skill)
     existing = await db.execute(
@@ -66,7 +73,9 @@ async def create_skill(body: SkillCreate, db: AsyncSession = Depends(get_db), us
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"Skill '{body.name}' already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Skill '{body.name}' already exists"
+        )
 
     skill = Skill(
         name=body.name,
@@ -86,8 +95,17 @@ async def create_skill(body: SkillCreate, db: AsyncSession = Depends(get_db), us
 
 
 @router.get("/{skill_id}", response_model=SkillOut)
-async def get_skill(skill_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Skill).where(Skill.public_id == skill_id, or_(Skill.user_id == None, Skill.user_id == user.id)))  # noqa: E711
+async def get_skill(
+    skill_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Skill).where(
+            Skill.public_id == skill_id,
+            or_(Skill.user_id == None, Skill.user_id == user.id),
+        )
+    )  # noqa: E711
     skill = result.scalar_one_or_none()
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
@@ -95,8 +113,15 @@ async def get_skill(skill_id: str, db: AsyncSession = Depends(get_db), user: Use
 
 
 @router.patch("/{skill_id}", response_model=SkillOut)
-async def update_skill(skill_id: str, body: SkillUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Skill).where(Skill.public_id == skill_id, Skill.user_id == user.id))
+async def update_skill(
+    skill_id: str,
+    body: SkillUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Skill).where(Skill.public_id == skill_id, Skill.user_id == user.id)
+    )
     skill = result.scalar_one_or_none()
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
@@ -118,8 +143,14 @@ async def update_skill(skill_id: str, body: SkillUpdate, db: AsyncSession = Depe
 
 
 @router.delete("/{skill_id}", status_code=204)
-async def delete_skill(skill_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Skill).where(Skill.public_id == skill_id, Skill.user_id == user.id))
+async def delete_skill(
+    skill_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Skill).where(Skill.public_id == skill_id, Skill.user_id == user.id)
+    )
     skill = result.scalar_one_or_none()
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
@@ -129,4 +160,3 @@ async def delete_skill(skill_id: str, db: AsyncSession = Depends(get_db), user: 
     await db.commit()
     invalidate_skill_cache()
     invalidate_agent_cache(user.id)
-

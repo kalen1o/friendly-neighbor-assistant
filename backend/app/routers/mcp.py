@@ -1,7 +1,7 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select, func
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,15 +12,26 @@ from app.models.user import User
 from app.mcp.service import add_server, refresh_server_tools
 from app.mcp.client import invalidate_cache
 from app.models.mcp import McpServer, McpTool
-from app.schemas.mcp import McpServerCreate, McpServerOut, McpServerUpdate, McpToolOut, McpToolUpdate
+from app.schemas.mcp import (
+    McpServerCreate,
+    McpServerOut,
+    McpServerUpdate,
+    McpToolOut,
+    McpToolUpdate,
+)
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
 
 @router.get("/servers", response_model=List[McpServerOut])
-async def list_servers(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def list_servers(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
     result = await db.execute(
-        select(McpServer).where(or_(McpServer.user_id == None, McpServer.user_id == user.id)).order_by(McpServer.created_at.desc()).options(selectinload(McpServer.tools))  # noqa: E711
+        select(McpServer)
+        .where(or_(McpServer.user_id == None, McpServer.user_id == user.id))
+        .order_by(McpServer.created_at.desc())
+        .options(selectinload(McpServer.tools))  # noqa: E711
     )
     servers = result.scalars().all()
     return [
@@ -40,7 +51,11 @@ async def list_servers(db: AsyncSession = Depends(get_db), user: User = Depends(
 
 
 @router.post("/servers", status_code=201, response_model=McpServerOut)
-async def create_server(body: McpServerCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def create_server(
+    body: McpServerCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     server = await add_server(
         db=db,
         name=body.name,
@@ -54,7 +69,9 @@ async def create_server(body: McpServerCreate, db: AsyncSession = Depends(get_db
     invalidate_agent_cache(user.id)
     # Reload with tools
     result = await db.execute(
-        select(McpServer).where(McpServer.id == server.id).options(selectinload(McpServer.tools))
+        select(McpServer)
+        .where(McpServer.id == server.id)
+        .options(selectinload(McpServer.tools))
     )
     server = result.scalar_one()
     return McpServerOut(
@@ -71,9 +88,16 @@ async def create_server(body: McpServerCreate, db: AsyncSession = Depends(get_db
 
 
 @router.patch("/servers/{server_id}", response_model=McpServerOut)
-async def update_server(server_id: str, body: McpServerUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def update_server(
+    server_id: str,
+    body: McpServerUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     result = await db.execute(
-        select(McpServer).where(McpServer.public_id == server_id, McpServer.user_id == user.id).options(selectinload(McpServer.tools))
+        select(McpServer)
+        .where(McpServer.public_id == server_id, McpServer.user_id == user.id)
+        .options(selectinload(McpServer.tools))
     )
     server = result.scalar_one_or_none()
     if not server:
@@ -109,8 +133,16 @@ async def update_server(server_id: str, body: McpServerUpdate, db: AsyncSession 
 
 
 @router.delete("/servers/{server_id}", status_code=204)
-async def delete_server(server_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(McpServer).where(McpServer.public_id == server_id, McpServer.user_id == user.id))
+async def delete_server(
+    server_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(McpServer).where(
+            McpServer.public_id == server_id, McpServer.user_id == user.id
+        )
+    )
     server = result.scalar_one_or_none()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -121,37 +153,63 @@ async def delete_server(server_id: str, db: AsyncSession = Depends(get_db), user
 
 
 @router.post("/servers/{server_id}/refresh", response_model=List[McpToolOut])
-async def refresh_tools(server_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(McpServer).where(McpServer.public_id == server_id, or_(McpServer.user_id == None, McpServer.user_id == user.id)))  # noqa: E711
+async def refresh_tools(
+    server_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(McpServer).where(
+            McpServer.public_id == server_id,
+            or_(McpServer.user_id == None, McpServer.user_id == user.id),
+        )
+    )  # noqa: E711
     server = result.scalar_one_or_none()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    tools = await refresh_server_tools(db, server)
+    await refresh_server_tools(db, server)
     invalidate_agent_cache(user.id)
     # Reload tools with server relationship for public_id mapping
     result = await db.execute(
-        select(McpTool).where(McpTool.server_id == server.id).options(selectinload(McpTool.server))
+        select(McpTool)
+        .where(McpTool.server_id == server.id)
+        .options(selectinload(McpTool.server))
     )
     tools_with_server = result.scalars().all()
     return [McpToolOut.from_tool(t) for t in tools_with_server]
 
 
 @router.get("/servers/{server_id}/tools", response_model=List[McpToolOut])
-async def list_tools(server_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def list_tools(
+    server_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     result = await db.execute(
-        select(McpServer).where(McpServer.public_id == server_id, or_(McpServer.user_id == None, McpServer.user_id == user.id))  # noqa: E711
+        select(McpServer).where(
+            McpServer.public_id == server_id,
+            or_(McpServer.user_id == None, McpServer.user_id == user.id),
+        )  # noqa: E711
     )
     server = result.scalar_one_or_none()
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     result = await db.execute(
-        select(McpTool).where(McpTool.server_id == server.id).order_by(McpTool.tool_name).options(selectinload(McpTool.server))
+        select(McpTool)
+        .where(McpTool.server_id == server.id)
+        .order_by(McpTool.tool_name)
+        .options(selectinload(McpTool.server))
     )
     return [McpToolOut.from_tool(t) for t in result.scalars().all()]
 
 
 @router.patch("/tools/{tool_id}", response_model=McpToolOut)
-async def update_tool(tool_id: str, body: McpToolUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def update_tool(
+    tool_id: str,
+    body: McpToolUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     result = await db.execute(
         select(McpTool)
         .where(McpTool.public_id == tool_id)

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from functools import partial
 from typing import List, Optional
 
@@ -16,7 +16,9 @@ class Chat(Base):
     public_id: Mapped[str] = mapped_column(
         String(22), unique=True, default=partial(generate_public_id, "chat")
     )
-    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), default=None, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), default=None, nullable=True
+    )
     title: Mapped[Optional[str]] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
