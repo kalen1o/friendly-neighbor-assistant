@@ -338,7 +338,8 @@ export default function McpPage() {
     try { setServers(await listMcpServers()); } catch (e) { console.error(e); }
   }, []);
 
-  useEffect(() => { fetchServers(); }, [fetchServers]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void fetchServers(); }, [fetchServers]);
 
   const handleDelete = async (serverId: string) => {
     try { await deleteMcpServer(serverId); await fetchServers(); } catch (e) { console.error(e); }

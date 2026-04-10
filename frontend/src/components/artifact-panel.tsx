@@ -24,8 +24,8 @@ export function ArtifactPanel({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setLocalCode(artifact.code);
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLocalCode(artifact.code);
   }, [artifact.id, artifact.code]);
 
   const handleCodeChange = useCallback(
