@@ -25,6 +25,7 @@ export function ArtifactPanel({
 
   useEffect(() => {
     setLocalCode(artifact.code);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [artifact.id, artifact.code]);
 
   const handleCodeChange = useCallback(

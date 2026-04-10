@@ -232,7 +232,8 @@ export default function SkillsPage() {
   }, []);
 
   useEffect(() => {
-    fetchSkills();
+    void fetchSkills();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [fetchSkills]);
 
   const handleToggle = async (skill: SkillOut) => {

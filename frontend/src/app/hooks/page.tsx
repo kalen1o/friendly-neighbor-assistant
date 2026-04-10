@@ -261,7 +261,8 @@ export default function HooksPage() {
   }, []);
 
   useEffect(() => {
-    fetchHooks();
+    void fetchHooks();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [fetchHooks]);
 
   const handleToggle = async (hook: HookOut) => {
