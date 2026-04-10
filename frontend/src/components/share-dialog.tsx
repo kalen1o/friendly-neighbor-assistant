@@ -43,7 +43,9 @@ export function ShareDialog({ chatId, open, onOpenChange }: ShareDialogProps) {
     setLoading(false);
   }, [chatId]);
 
+  // Fetch shares when dialog opens — setState in fetchShares is intentional (data fetching pattern)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) fetchShares();
   }, [open, fetchShares]);
 

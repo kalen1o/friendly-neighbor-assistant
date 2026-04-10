@@ -144,22 +144,8 @@ export default function ChatPage() {
     }
   }, [chatId]);
 
-  useEffect(() => {
-    const q = searchParams.get("q");
-    const mode = (searchParams.get("mode") || "balanced") as ChatMode;
-
-    if (q && !initialQuerySent.current) {
-      // Auto-send from URL — skip loadChat since the chat is empty
-      initialQuerySent.current = true;
-      router.replace(`/chat/${chatId}`);
-      doSend(q, mode);
-    } else if (!initialQuerySent.current || !sendingRef.current) {
-      loadChat();
-    }
-  }, [loadChat]);
-
   const doSend = (content: string, mode: ChatMode = "balanced") => {
-    sendingRef.current = true;
+    sendingRef.current = true; // eslint-disable-line react-hooks/immutability -- ref is intentionally mutable
     setMessages((prev) => [...prev, { role: "user", content }]);
     setStreamingContent("");
     fullTextRef.current = "";
@@ -227,6 +213,20 @@ export default function ChatPage() {
       },
     }, mode);
   };
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    const mode = (searchParams.get("mode") || "balanced") as ChatMode;
+
+    if (q && !initialQuerySent.current) {
+      // Auto-send from URL — skip loadChat since the chat is empty
+      initialQuerySent.current = true;
+      router.replace(`/chat/${chatId}`);
+      doSend(q, mode);
+    } else if (!initialQuerySent.current || !sendingRef.current) {
+      loadChat();
+    }
+  }, [loadChat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = async (content: string, mode: ChatMode = "balanced") => {
     const authed = await requireAuth();

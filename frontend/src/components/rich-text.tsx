@@ -109,22 +109,24 @@ function FilePath({ path }: { path: string }) {
   );
 }
 
-function MathInline({ tex }: { tex: string }) {
+function renderKatex(tex: string, displayMode: boolean): string | null {
   try {
-    const html = katex.renderToString(tex, { throwOnError: false, displayMode: false });
-    return <span className="inline" dangerouslySetInnerHTML={{ __html: html }} />;
+    return katex.renderToString(tex, { throwOnError: false, displayMode });
   } catch {
-    return <code>${tex}$</code>;
+    return null;
   }
 }
 
+function MathInline({ tex }: { tex: string }) {
+  const html = renderKatex(tex, false);
+  if (html === null) return <code>${tex}$</code>;
+  return <span className="inline" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 function MathBlock({ tex }: { tex: string }) {
-  try {
-    const html = katex.renderToString(tex, { throwOnError: false, displayMode: true });
-    return <div className="my-3 overflow-x-auto" dangerouslySetInnerHTML={{ __html: html }} />;
-  } catch {
-    return <pre className="my-3">${tex}$$</pre>;
-  }
+  const html = renderKatex(tex, true);
+  if (html === null) return <pre className="my-3">${tex}$$</pre>;
+  return <div className="my-3 overflow-x-auto" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function AutoLink({ url }: { url: string }) {

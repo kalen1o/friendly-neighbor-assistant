@@ -24,7 +24,7 @@ test("debug: inspect raw message content", async ({ page }) => {
   // Fetch the chat from API and inspect raw content
   const apiRes = await page.request.get(`http://localhost:8000/api/chats/${chatId}`);
   const chatData = await apiRes.json();
-  const assistantMsg = chatData.messages.find((m: any) => m.role === "assistant");
+  const assistantMsg = chatData.messages.find((m: { role: string; content: string }) => m.role === "assistant");
 
   if (assistantMsg) {
     console.log("[RAW CONTENT]:");

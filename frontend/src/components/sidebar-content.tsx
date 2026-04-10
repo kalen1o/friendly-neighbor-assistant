@@ -40,6 +40,7 @@ const NAV_ITEMS = [
 export function ThemeToggle({ vertical = false }: { vertical?: boolean }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration guard
   useEffect(() => setMounted(true), []);
   const themes = [
     { value: "light", icon: Sun, title: "Light" },

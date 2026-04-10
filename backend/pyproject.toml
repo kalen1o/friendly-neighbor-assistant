@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "-p no:anyio"
 
 [tool.ruff.lint]
 ignore = [

@@ -118,7 +118,7 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
 
             // Update point sizes based on wave
             const customMaterial = material as THREE.PointsMaterial & {
-                uniforms?: any;
+                uniforms?: Record<string, unknown>;
             };
             if (!customMaterial.uniforms) {
                 // For dynamic size changes, we'd need a custom shader
