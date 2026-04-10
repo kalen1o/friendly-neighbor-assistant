@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 from datetime import datetime
@@ -19,6 +20,7 @@ from app.hooks.registry import HookContext, HookRegistry
 from app.llm.provider import get_llm_response
 from app.models.artifact import Artifact
 from app.models.chat import Chat, Message
+from app.models.chat_file import ChatFile
 from app.models.hook import Hook
 from app.models.user import User
 from app.schemas.chat import (
@@ -317,14 +319,88 @@ async def send_message(
         # Persist any new summary that was generated
         await db.commit()
 
+        # Process file attachments
+        has_vision = False
+        if body.file_ids:
+            file_result = await db.execute(
+                select(ChatFile).where(
+                    ChatFile.public_id.in_(body.file_ids),
+                    ChatFile.user_id == user.id,
+                )
+            )
+            files = file_result.scalars().all()
+
+            # Link files to message
+            for f in files:
+                f.message_id = user_msg.id
+                f.chat_id = chat.id
+            await db.commit()
+
+            # Build content array for the last user message
+            image_blocks = []
+            extra_text = []
+
+            for f in files:
+                if f.file_type.startswith("image/"):
+                    has_vision = True
+                    with open(f.storage_path, "rb") as fh:
+                        b64 = base64.b64encode(fh.read()).decode()
+                    image_blocks.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{f.file_type};base64,{b64}"},
+                        }
+                    )
+                elif f.file_type == "application/pdf":
+                    from pypdf import PdfReader
+
+                    reader = PdfReader(f.storage_path)
+                    pdf_text = "\n".join(
+                        page.extract_text() or "" for page in reader.pages
+                    )
+                    extra_text.append(f"[Content of {f.filename}]:\n{pdf_text}")
+                else:
+                    with open(f.storage_path, "r", errors="replace") as fh:
+                        file_text = fh.read()
+                    extra_text.append(f"[Content of {f.filename}]:\n{file_text}")
+
+            # Modify the last message to include file content
+            if image_blocks or extra_text:
+                last_msg = llm_messages[-1]
+                text_content = last_msg.get("content", "")
+                if extra_text:
+                    text_content += "\n\n" + "\n\n".join(extra_text)
+
+                if image_blocks:
+                    llm_messages[-1] = {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": text_content},
+                            *image_blocks,
+                        ],
+                    }
+                else:
+                    llm_messages[-1]["content"] = text_content
+
         # Inject knowledge prompts into the last user message
         if hook_ctx.knowledge_prompts:
-            augmented = (
-                f"{user_msg_content}\n\n---\n"
-                f"Follow these additional instructions:\n"
+            extra_instructions = (
+                "\n\n---\n"
+                "Follow these additional instructions:\n"
                 + "\n\n".join(hook_ctx.knowledge_prompts)
             )
-            llm_messages[-1] = {"role": "user", "content": augmented}
+            last_msg = llm_messages[-1]
+            if isinstance(last_msg.get("content"), list):
+                # Content array (vision mode) — append to the text block
+                for block in last_msg["content"]:
+                    if block.get("type") == "text":
+                        block["text"] += extra_instructions
+                        break
+            else:
+                llm_messages[-1] = {
+                    "role": "user",
+                    "content": user_msg_content + extra_instructions,
+                }
 
         # 4. pre_llm hooks
         hook_ctx.llm_messages = llm_messages
@@ -359,10 +435,11 @@ async def send_message(
             async for chunk in stream_with_tools(
                 llm_messages,
                 settings,
-                tools=tool_defs if tool_defs else None,
-                tool_executor=tool_executor,
+                tools=tool_defs if tool_defs and not has_vision else None,
+                tool_executor=tool_executor if not has_vision else None,
                 on_tool_call=on_tool_call_track,
                 max_tool_rounds=tool_rounds,
+                vision=has_vision,
             ):
                 # Drain action queue — yield immediately
                 while not tool_action_queue.empty():

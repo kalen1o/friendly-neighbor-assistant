@@ -51,10 +51,10 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
       {/* Header: logo / toggle */}
       <div className={cn("flex items-center py-3", collapsed ? "justify-center px-0" : "justify-between px-5")}>
         {collapsed ? (
-          <button onClick={onToggle} title="Expand sidebar" className="flex h-8 w-8 items-center justify-center rounded-lg">
+          <Button variant="ghost" size="icon" onClick={onToggle} title="Expand sidebar">
             <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg transition-opacity group-hover/sidebar:opacity-0" />
             <PanelLeft className="absolute h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover/sidebar:opacity-100" />
-          </button>
+          </Button>
         ) : (
           <>
             <div className="flex items-center gap-2">
@@ -64,9 +64,9 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
                 <p className="truncate text-xs text-muted-foreground">Your AI assistant</p>
               </div>
             </div>
-            <button onClick={onToggle} title="Collapse sidebar" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity hover:bg-accent group-hover/sidebar:opacity-100">
+            <Button variant="ghost" size="icon-sm" onClick={onToggle} title="Collapse sidebar" className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/sidebar:opacity-100">
               <PanelLeftClose className="h-4 w-4" />
-            </button>
+            </Button>
           </>
         )}
       </div>

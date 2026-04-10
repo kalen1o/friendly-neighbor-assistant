@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     context_max_tokens: int = 8000  # max tokens for chat history sent to LLM
     context_recent_messages: int = 10  # always keep this many recent messages verbatim
 
+    # Vision
+    vision_model: str = ""
+    vision_api_key: str = ""
+    vision_base_url: str = ""
+
+    # File uploads
+    upload_dir: str = "uploads"
+    max_upload_size_mb: int = 10
+
     # Logging
     log_level: str = "INFO"
 

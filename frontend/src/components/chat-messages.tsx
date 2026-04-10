@@ -41,12 +41,23 @@ export function EmptyState({ onSuggestionClick }: { onSuggestionClick: (content:
   );
 }
 
+let _msgId = 0;
+export function nextMsgId() { return `msg-${++_msgId}`; }
+
+export interface AttachedFile {
+  url: string;
+  name: string;
+  type: string; // MIME type
+}
+
 export interface DisplayMessage {
+  id: string;
   role: "user" | "assistant";
   content: string;
   sources?: Source[] | null;
   skillsUsed?: string[] | null;
   metrics?: MessageMetrics | null;
+  files?: AttachedFile[];
 }
 
 interface ChatMessagesProps {
@@ -88,7 +99,7 @@ export function ChatMessages({ messages, streamingContent, isLoading, actionText
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-2 py-4 md:p-4">
       <div className="mx-auto max-w-3xl space-y-3">
         {messages.map((msg, i) => (
-          <div key={i}>
+          <div key={msg.id}>
             {msg.role === "assistant" && msg.skillsUsed && msg.skillsUsed.length > 0 && (
               <SkillBadges skills={msg.skillsUsed} />
             )}
@@ -98,6 +109,7 @@ export function ChatMessages({ messages, streamingContent, isLoading, actionText
               sources={msg.sources}
               metrics={msg.role === "assistant" ? msg.metrics : undefined}
               onEdit={msg.role === "user" && onEditMessage ? (newContent) => onEditMessage(i, newContent) : undefined}
+              files={msg.files}
             />
           </div>
         ))}

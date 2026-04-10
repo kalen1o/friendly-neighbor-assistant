@@ -12,6 +12,12 @@ import { CodeBlock, InlineCode } from "@/components/code-block";
 import { processChildren, enrichText } from "@/components/rich-text";
 import type { Source, MessageMetrics } from "@/lib/api";
 
+interface AttachedFile {
+  url: string;
+  name: string;
+  type: string;
+}
+
 interface MessageBubbleProps {
   role: "user" | "assistant";
   content: string;
@@ -19,6 +25,7 @@ interface MessageBubbleProps {
   sources?: Source[] | null;
   metrics?: MessageMetrics | null;
   onEdit?: (newContent: string) => void;
+  files?: AttachedFile[];
 }
 
 const mdComponents: Components = {
@@ -104,7 +111,7 @@ const mdComponents: Components = {
   },
 };
 
-export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit }: MessageBubbleProps) {
+export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit, files }: MessageBubbleProps) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -190,7 +197,36 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
               </div>
             </div>
           ) : isUser ? (
-            <p className="whitespace-pre-wrap">{content}</p>
+            <>
+              {files && files.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {files.map((f, i) =>
+                    f.type.startsWith("image/") ? (
+                      <img
+                        key={i}
+                        src={f.url}
+                        alt={f.name}
+                        className="max-h-48 max-w-full rounded-lg object-contain"
+                      />
+                    ) : (
+                      <a
+                        key={i}
+                        href={f.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 rounded-lg bg-primary-foreground/10 px-3 py-1.5 text-xs text-primary-foreground/80 hover:text-primary-foreground"
+                      >
+                        <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        {f.name}
+                      </a>
+                    )
+                  )}
+                </div>
+              )}
+              <p className="whitespace-pre-wrap">{content}</p>
+            </>
           ) : isStreaming ? (
             <div className="max-w-none overflow-hidden text-sm leading-relaxed">
               <p className="whitespace-pre-wrap">{enrichText(content)}<span className="streaming-cursor" /></p>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Share2, Search, Download } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
-import { ChatMessages, EmptyState, type DisplayMessage } from "@/components/chat-messages";
+import { ChatMessages, EmptyState, nextMsgId, type DisplayMessage } from "@/components/chat-messages";
 import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
 import { Button } from "@/components/ui/button";
 import { ShareDialog } from "@/components/share-dialog";
@@ -80,7 +80,7 @@ export default function ChatPage() {
     if (finalContent) {
       setMessages((msgs) => [
         ...msgs,
-        { role: "assistant", content: finalContent, sources: realSources.length > 0 ? realSources : null, skillsUsed: finalSkills.length > 0 ? finalSkills : null, metrics: finalMetrics },
+        { id: nextMsgId(), role: "assistant", content: finalContent, sources: realSources.length > 0 ? realSources : null, skillsUsed: finalSkills.length > 0 ? finalSkills : null, metrics: finalMetrics },
       ]);
     }
     setStreamingContent("");
@@ -137,12 +137,20 @@ export default function ChatPage() {
           const skills = allSources
             .filter((s) => s.type === "skill" && s.tool)
             .map((s) => s.tool!);
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          const attachedFiles = m.files?.map((f) => ({
+            url: `${apiBase}/api/uploads/${f.id}`,
+            name: f.name,
+            type: f.type,
+          }));
           return {
+            id: m.id || nextMsgId(),
             role: m.role as "user" | "assistant",
             content: m.content,
             sources: realSources.length > 0 ? realSources : null,
             skillsUsed: skills.length > 0 ? skills : null,
             metrics: m.metrics || null,
+            files: attachedFiles && attachedFiles.length > 0 ? attachedFiles : undefined,
           };
         })
       );
@@ -160,9 +168,16 @@ export default function ChatPage() {
     }
   }, [chatId]);
 
-  const doSend = (content: string, mode: ChatMode = "balanced") => {
+  const doSend = (content: string, mode: ChatMode = "balanced", files: import("@/components/chat-input").PendingFile[] = []) => {
     sendingRef.current = true; // eslint-disable-line react-hooks/immutability -- ref is intentionally mutable
-    setMessages((prev) => [...prev, { role: "user", content }]);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const attachedFiles = files.map((f) => ({
+      url: f.previewUrl || `${apiBase}/api/uploads/${f.id}`,
+      name: f.filename,
+      type: f.file_type,
+    }));
+    setMessages((prev) => [...prev, { id: nextMsgId(), role: "user", content, files: attachedFiles.length > 0 ? attachedFiles : undefined }]);
+    const fileIds = files.map((f) => f.id);
     setStreamingContent("");
     fullTextRef.current = "";
     revealedRef.current = 0;
@@ -227,7 +242,7 @@ export default function ChatPage() {
         setActionText(null);
         setIsStreaming(false);
       },
-    }, mode);
+    }, mode, fileIds);
   };
 
   useEffect(() => {
@@ -244,13 +259,13 @@ export default function ChatPage() {
     }
   }, [loadChat]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSend = async (content: string, mode: ChatMode = "balanced") => {
+  const handleSend = async (content: string, mode: ChatMode = "balanced", files: import("@/components/chat-input").PendingFile[] = []) => {
     const authed = await requireAuth();
     if (!authed) {
       chatInputRef.current?.setInput(content);
       return;
     }
-    doSend(content, mode);
+    doSend(content, mode, files);
   };
 
   const isEmpty = messages.length === 0 && !streamingContent && !isLoading && !actionText;

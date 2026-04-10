@@ -201,6 +201,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isLoadingMoreRef = useRef(false);
   const cursorRef = useRef<string | null>(null);
   const hasMoreRef = useRef(true);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -228,7 +229,8 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
   }, [isAuthenticated]);
 
   const loadMore = useCallback(async () => {
-    if (!hasMoreRef.current || isLoadingMore) return;
+    if (!hasMoreRef.current || isLoadingMoreRef.current) return;
+    isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
       const data = await listChats(cursorRef.current);
@@ -238,9 +240,10 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
     } catch (e) {
       console.error("Failed to load more chats:", e);
     } finally {
+      isLoadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore]);
+  }, []);
 
   useEffect(() => {
     fetchChats();
@@ -367,9 +370,9 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
             </div>
           </div>
           {showCollapseToggle && onToggle && (
-            <button onClick={onToggle} title="Collapse sidebar" className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent">
+            <Button variant="ghost" size="icon-sm" onClick={onToggle} title="Collapse sidebar" className="text-muted-foreground">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
-            </button>
+            </Button>
           )}
         </div>
 

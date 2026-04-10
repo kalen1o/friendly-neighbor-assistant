@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { login } from "@/lib/api";
+import Link from "next/link";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email"),
@@ -69,7 +70,7 @@ export default function LoginPage() {
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <a href="/register" className="text-primary hover:underline">Sign up</a>
+            <Link href="/register" className="text-primary hover:underline">Sign up</Link>
           </p>
         </CardContent>
       </Card>

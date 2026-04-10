@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ArtifactPreview } from "@/components/artifact-preview";
 import { updateArtifact, type ArtifactData } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 const CodeEditor = dynamic(
   () => import("@/components/code-editor").then((m) => m.CodeEditor),
@@ -43,7 +44,7 @@ export function ArtifactPanel({
 
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        updateArtifact(artifact.id, { code: newCode }).catch(() => {});
+        updateArtifact(artifact.id, { code: newCode }).catch(() => toast.error("Failed to save artifact"));
       }, 1000);
     },
     [artifact.id, onCodeChange]

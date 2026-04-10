@@ -18,12 +18,16 @@ from app.routers.sharing import router as sharing_router
 from app.routers.artifacts import router as artifacts_router
 from app.routers.export import router as export_router
 from app.routers.skills import router as skills_router
+from app.routers.uploads import router as uploads_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(level=settings.log_level, environment=settings.environment)
+    import os
+
+    os.makedirs(settings.upload_dir, exist_ok=True)
     init_engine(settings)
     await init_redis(settings)
     yield
@@ -58,3 +62,4 @@ app.include_router(mcp_router)
 app.include_router(sharing_router)
 app.include_router(artifacts_router)
 app.include_router(export_router)
+app.include_router(uploads_router)

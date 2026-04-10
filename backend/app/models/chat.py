@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from datetime import datetime
 from functools import partial
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.utils.ids import generate_public_id
+
+if TYPE_CHECKING:
+    from app.models.chat_file import ChatFile
 
 
 class Chat(Base):
@@ -55,3 +60,6 @@ class Message(Base):
     tokens_total: Mapped[Optional[int]] = mapped_column(Integer, default=None)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")
+    files: Mapped[List["ChatFile"]] = relationship(
+        "ChatFile", foreign_keys="ChatFile.message_id", lazy="selectin"
+    )

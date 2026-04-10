@@ -15,6 +15,7 @@ class ChatUpdate(BaseModel):
 class MessageCreate(BaseModel):
     content: str
     mode: str = "balanced"  # "fast", "balanced", "thinking"
+    file_ids: List[str] = []
 
 
 class MessageMetrics(BaseModel):
@@ -32,6 +33,7 @@ class MessageOut(BaseModel):
     created_at: datetime
     sources: Optional[List[Dict[str, Any]]] = None
     metrics: Optional[MessageMetrics] = None
+    files: Optional[List[Dict[str, str]]] = None
 
     model_config = {"from_attributes": True}
 
@@ -53,6 +55,12 @@ class MessageOut(BaseModel):
                 tokens_output=msg.tokens_output,
                 tokens_total=msg.tokens_total,
             )
+        files = None
+        if hasattr(msg, "files") and msg.files:
+            files = [
+                {"id": f.public_id, "name": f.filename, "type": f.file_type}
+                for f in msg.files
+            ]
         return cls(
             id=msg.public_id,
             chat_id=msg.chat.public_id
@@ -63,6 +71,7 @@ class MessageOut(BaseModel):
             created_at=msg.created_at,
             sources=sources,
             metrics=metrics,
+            files=files,
         )
 
 

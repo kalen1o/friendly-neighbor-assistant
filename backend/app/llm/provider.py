@@ -70,6 +70,16 @@ def _build_openai_client(settings: Settings) -> openai.AsyncOpenAI:
     return openai.AsyncOpenAI(**kwargs)
 
 
+def _build_vision_client(settings: Settings) -> openai.AsyncOpenAI:
+    """Build an OpenAI client for vision requests, using vision-specific keys if set."""
+    api_key = settings.vision_api_key or settings.openai_api_key
+    base_url = settings.vision_base_url or settings.openai_base_url
+    kwargs: dict = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return openai.AsyncOpenAI(**kwargs)
+
+
 async def _openai_response(messages: list[dict], settings: Settings) -> str:
     client = _build_openai_client(settings)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
@@ -80,15 +90,49 @@ async def _openai_response(messages: list[dict], settings: Settings) -> str:
     return response.choices[0].message.content
 
 
+def _convert_to_anthropic_format(messages: list) -> list:
+    """Convert OpenAI-style image_url content blocks to Anthropic format."""
+    converted = []
+    for msg in messages:
+        if isinstance(msg.get("content"), list):
+            new_content = []
+            for block in msg["content"]:
+                if block.get("type") == "image_url":
+                    url = block["image_url"]["url"]
+                    if url.startswith("data:"):
+                        parts = url.split(";base64,", 1)
+                        media_type = parts[0].replace("data:", "")
+                        data = parts[1]
+                        new_content.append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": data,
+                                },
+                            }
+                        )
+                    else:
+                        new_content.append(block)
+                else:
+                    new_content.append(block)
+            converted.append({**msg, "content": new_content})
+        else:
+            converted.append(msg)
+    return converted
+
+
 async def _anthropic_stream(
     messages: list[dict], settings: Settings
 ) -> AsyncIterator[str]:
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    converted = _convert_to_anthropic_format(messages)
     async with client.messages.stream(
         model=ANTHROPIC_MODEL,
         max_tokens=4096,
         system=SYSTEM_PROMPT,
-        messages=messages,
+        messages=converted,
     ) as stream:
         async for text in stream.text_stream:
             yield text
@@ -148,6 +192,7 @@ async def stream_with_tools(
     tool_executor=None,
     on_tool_call=None,
     max_tool_rounds: int = None,
+    vision: bool = False,
 ) -> AsyncIterator[str]:
     """Stream LLM response with native tool calling support.
 
@@ -166,7 +211,13 @@ async def stream_with_tools(
     rounds = max_tool_rounds or settings.max_tool_rounds
     if settings.ai_provider == "openai":
         raw = _openai_stream_with_tools(
-            messages, settings, tools, tool_executor, on_tool_call, rounds
+            messages,
+            settings,
+            tools,
+            tool_executor,
+            on_tool_call,
+            rounds,
+            vision=vision,
         )
     elif settings.ai_provider == "anthropic":
         raw = _anthropic_stream(messages, settings)
@@ -184,19 +235,27 @@ async def _openai_stream_with_tools(
     tool_executor=None,
     on_tool_call=None,
     max_tool_rounds: int = 5,
+    vision: bool = False,
 ) -> AsyncIterator[str]:
     """OpenAI-compatible streaming with tool calling loop."""
 
-    client = _build_openai_client(settings)
+    client = (
+        _build_vision_client(settings) if vision else _build_openai_client(settings)
+    )
+    model = (
+        (settings.vision_model or settings.openai_model)
+        if vision
+        else settings.openai_model
+    )
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
 
     # Build API kwargs
     kwargs = {
-        "model": settings.openai_model,
+        "model": model,
         "messages": full_messages,
         "stream": True,
     }
-    if tools:
+    if tools and not vision:
         kwargs["tools"] = tools
 
     for _ in range(max_tool_rounds):

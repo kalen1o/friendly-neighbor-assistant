@@ -130,6 +130,12 @@ export interface MessageMetrics {
   tokens_total?: number;
 }
 
+export interface MessageFileRef {
+  id: string;
+  name: string;
+  type: string;
+}
+
 export interface MessageOut {
   id: string;
   chat_id: string;
@@ -138,6 +144,7 @@ export interface MessageOut {
   created_at: string;
   sources?: Source[] | null;
   metrics?: MessageMetrics | null;
+  files?: MessageFileRef[] | null;
 }
 
 export interface ChatDetail {
@@ -224,7 +231,8 @@ export function sendMessage(
   chatId: string,
   content: string,
   callbacks: SSECallbacks,
-  mode: ChatMode = "balanced"
+  mode: ChatMode = "balanced",
+  fileIds: string[] = []
 ): () => void {
   const controller = new AbortController();
 
@@ -234,7 +242,7 @@ export function sendMessage(
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, mode }),
+        body: JSON.stringify({ content, mode, file_ids: fileIds }),
         signal: controller.signal,
       });
 
@@ -762,4 +770,32 @@ export async function exportChat(chatId: string, format: "markdown" | "pdf"): Pr
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ── File Uploads ──
+
+export interface ChatFileOut {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+}
+
+export async function uploadChatFile(file: File): Promise<ChatFileOut> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/api/uploads`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: { message: "Upload failed" } }));
+    throw new Error(err.error?.message || err.detail || "Upload failed");
+  }
+  return res.json();
+}
+
+export function getFileUrl(fileId: string): string {
+  return `${API_BASE}/api/uploads/${fileId}`;
 }

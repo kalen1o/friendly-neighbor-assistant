@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { register as registerUser } from "@/lib/api";
+import Link from "next/link";
 
 const registerSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -84,7 +85,7 @@ export default function RegisterPage() {
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
-            <a href="/login" className="text-primary hover:underline">Sign in</a>
+            <Link href="/login" className="text-primary hover:underline">Sign in</Link>
           </p>
         </CardContent>
       </Card>

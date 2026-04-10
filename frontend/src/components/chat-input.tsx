@@ -3,8 +3,9 @@
 import { forwardRef, useImperativeHandle, useState, useRef, type KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { SendHorizonal, Zap, Scale, Brain } from "lucide-react";
+import { SendHorizonal, Zap, Scale, Brain, Paperclip, X as XIcon } from "lucide-react";
 import type { ChatMode } from "@/lib/api";
+import { uploadChatFile } from "@/lib/api";
 
 const MODES: { value: ChatMode; label: string; icon: typeof Zap; description: string }[] = [
   { value: "fast", label: "Fast", icon: Zap, description: "Quick answers, fewer tools" },
@@ -12,8 +13,15 @@ const MODES: { value: ChatMode; label: string; icon: typeof Zap; description: st
   { value: "thinking", label: "Thinking", icon: Brain, description: "Deep research, more tools" },
 ];
 
+export interface PendingFile {
+  id: string;
+  filename: string;
+  file_type: string;
+  previewUrl?: string;
+}
+
 interface ChatInputProps {
-  onSend: (content: string, mode: ChatMode) => void;
+  onSend: (content: string, mode: ChatMode, files: PendingFile[]) => void;
   disabled: boolean;
   transparent?: boolean;
 }
@@ -25,7 +33,12 @@ export interface ChatInputHandle {
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, transparent }, ref) {
   const [value, setValue] = useState("");
   const [mode, setMode] = useState<ChatMode>("balanced");
+  const [pendingFiles, setPendingFiles] = useState<
+    { id: string; filename: string; file_type: string; previewUrl?: string }[]
+  >([]);
+  const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useImperativeHandle(ref, () => ({
     setInput(text: string, cursorOffset?: number) {
@@ -41,11 +54,57 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     },
   }));
 
+  const handleFileSelect = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const uploaded = await uploadChatFile(file);
+        const previewUrl = file.type.startsWith("image/")
+          ? URL.createObjectURL(file)
+          : undefined;
+        setPendingFiles((prev) => [
+          ...prev,
+          {
+            id: uploaded.id,
+            filename: uploaded.filename,
+            file_type: uploaded.file_type,
+            previewUrl,
+          },
+        ]);
+      }
+    } catch {
+      // ignore
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      const dt = new DataTransfer();
+      imageFiles.forEach((f) => dt.items.add(f));
+      handleFileSelect(dt.files);
+    }
+  };
+
   const handleSend = () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed, mode);
+    if ((!trimmed && pendingFiles.length === 0) || disabled) return;
+    onSend(trimmed, mode, pendingFiles);
     setValue("");
+    pendingFiles.forEach((f) => { if (f.previewUrl) URL.revokeObjectURL(f.previewUrl); });
+    setPendingFiles([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -59,23 +118,74 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   };
 
   return (
-    <div className={`px-2 py-3 md:p-4 transition-[background-color,border-color,backdrop-filter] duration-500 ${transparent ? "border-t border-transparent" : "border-t border-border/60 bg-card/80 backdrop-blur-sm"}`}>
+    <div className="px-2 py-3 md:p-4">
       <div className="mx-auto max-w-3xl">
+        {pendingFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {pendingFiles.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-2 py-1"
+              >
+                {f.previewUrl ? (
+                  <img
+                    src={f.previewUrl}
+                    alt={f.filename}
+                    className="h-8 w-8 rounded object-cover"
+                  />
+                ) : (
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                )}
+                <span className="max-w-[120px] truncate text-xs">
+                  {f.filename}
+                </span>
+                <button
+                  onClick={() => {
+                    if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+                    setPendingFiles((prev) => prev.filter((p) => p.id !== f.id));
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <Textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Type a message..."
             disabled={disabled}
             autoFocus
             rows={1}
             className="min-h-[44px] max-h-[200px] resize-none rounded-xl border-border/50 bg-muted/40 py-3 leading-[18px] transition-colors focus-visible:bg-background focus-visible:ring-primary/30"
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.txt,.md"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-xl"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled || uploading}
+            title="Attach file"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
           <Button
             onClick={handleSend}
-            disabled={disabled || !value.trim()}
+            disabled={disabled || (!value.trim() && pendingFiles.length === 0)}
             size="icon"
             className="shrink-0 rounded-xl shadow-sm shadow-primary/20 transition-all hover:shadow-md hover:shadow-primary/25"
           >
