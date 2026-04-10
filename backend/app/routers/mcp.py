@@ -51,7 +51,7 @@ async def create_server(body: McpServerCreate, db: AsyncSession = Depends(get_db
         auth_header=body.auth_header,
         user_id=user.id,
     )
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
     # Reload with tools
     result = await db.execute(
         select(McpServer).where(McpServer.id == server.id).options(selectinload(McpServer.tools))
@@ -93,7 +93,7 @@ async def update_server(server_id: str, body: McpServerUpdate, db: AsyncSession 
     if body.enabled is not None:
         server.enabled = body.enabled
     await db.commit()
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
     await db.refresh(server, ["tools"])
     return McpServerOut(
         id=server.public_id,
@@ -117,7 +117,7 @@ async def delete_server(server_id: str, db: AsyncSession = Depends(get_db), user
     await invalidate_cache(server.id)
     await db.delete(server)
     await db.commit()
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
 
 
 @router.post("/servers/{server_id}/refresh", response_model=List[McpToolOut])
@@ -127,7 +127,7 @@ async def refresh_tools(server_id: str, db: AsyncSession = Depends(get_db), user
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     tools = await refresh_server_tools(db, server)
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
     # Reload tools with server relationship for public_id mapping
     result = await db.execute(
         select(McpTool).where(McpTool.server_id == server.id).options(selectinload(McpTool.server))
@@ -152,17 +152,20 @@ async def list_tools(server_id: str, db: AsyncSession = Depends(get_db), user: U
 
 @router.patch("/tools/{tool_id}", response_model=McpToolOut)
 async def update_tool(tool_id: str, body: McpToolUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(McpTool).where(McpTool.public_id == tool_id))
+    result = await db.execute(
+        select(McpTool)
+        .where(McpTool.public_id == tool_id)
+        .options(selectinload(McpTool.server))
+    )
     tool = result.scalar_one_or_none()
-    if not tool:
+    if not tool or not tool.server:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    # Verify the tool's server belongs to the current user
+    if tool.server.user_id is not None and tool.server.user_id != user.id:
         raise HTTPException(status_code=404, detail="Tool not found")
     if body.enabled is not None:
         tool.enabled = body.enabled
     await db.commit()
-    invalidate_agent_cache()
-    # Reload with server for public_id mapping
-    result = await db.execute(
-        select(McpTool).where(McpTool.id == tool.id).options(selectinload(McpTool.server))
-    )
-    tool = result.scalar_one()
+    invalidate_agent_cache(user.id)
+    await db.refresh(tool, ["server"])
     return McpToolOut.from_tool(tool)

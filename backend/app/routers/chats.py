@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
 from app.auth.dependencies import get_current_user
+from app.cache.per_user import PerUserCache
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.hooks.executors import register_all_hook_executors
@@ -32,33 +33,40 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
+_hook_cache: PerUserCache[HookRegistry] = PerUserCache(ttl_seconds=60)
 
-_hook_registry_cache: Optional[HookRegistry] = None
 
+async def _build_hook_registry(db, user_id: int) -> HookRegistry:
+    """Build hook registry with builtin hooks + current user's hooks only.
 
-async def _build_hook_registry(db) -> HookRegistry:
-    global _hook_registry_cache
-    if _hook_registry_cache is not None:
-        return _hook_registry_cache
+    Cached per user for 60 seconds. Call invalidate_hook_cache() on changes.
+    """
+    cached = _hook_cache.get(user_id)
+    if cached is not None:
+        return cached
 
     registry = HookRegistry()
     registry.load_builtin_hooks()
     register_all_hook_executors(registry)
     try:
-        result = await db.execute(select(Hook))
+        result = await db.execute(
+            select(Hook).where(
+                or_(Hook.user_id == None, Hook.user_id == user_id),  # noqa: E711
+                Hook.enabled == True,  # noqa: E712
+            )
+        )
         user_hooks = result.scalars().all()
         registry.load_user_hooks(user_hooks)
     except Exception:
         pass
-    _hook_registry_cache = registry
+
+    _hook_cache.set(user_id, registry)
     return registry
 
 
-def invalidate_hook_cache():
-    """Clear the hook registry cache. Call when hooks are created/updated/deleted."""
-    global _hook_registry_cache
-    _hook_registry_cache = None
-    return registry
+def invalidate_hook_cache(user_id: Optional[int] = None) -> None:
+    """Clear hook registry cache. Pass user_id to clear one user, or None for all."""
+    _hook_cache.invalidate(user_id)
 
 
 @router.post("", status_code=201, response_model=ChatDetail)
@@ -130,10 +138,7 @@ async def update_chat(
         raise HTTPException(status_code=404, detail="Chat not found")
     chat.title = body.title
     await db.commit()
-    result = await db.execute(
-        select(Chat).where(Chat.public_id == chat_id).options(selectinload(Chat.messages))
-    )
-    chat = result.scalar_one()
+    await db.refresh(chat, ["messages"])
     return ChatDetail.from_chat(chat)
 
 
@@ -179,8 +184,8 @@ async def send_message(
 
     # 3. Stream response via SSE
     async def event_generator():
-        # Build hook registry
-        hook_registry = await _build_hook_registry(db)
+        # Build hook registry (per-user: builtin + current user's hooks)
+        hook_registry = await _build_hook_registry(db, user.id)
         hook_ctx = HookContext()
         hook_ctx.user_message = body.content
         hook_ctx.chat_id = chat_id
@@ -199,7 +204,7 @@ async def send_message(
 
         # Build agent context (tools + knowledge prompts)
         from app.agent.agent import build_agent_context, create_tool_executor
-        tool_defs, knowledge_prompts, registry = await build_agent_context(db, settings)
+        tool_defs, knowledge_prompts, registry = await build_agent_context(db, settings, user_id=user.id)
         tool_executor = await create_tool_executor(registry, db, settings)
 
         # 3. post_skills hooks (tools are registered, not yet called)

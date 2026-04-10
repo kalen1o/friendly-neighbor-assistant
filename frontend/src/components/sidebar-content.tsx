@@ -39,6 +39,8 @@ const NAV_ITEMS = [
 
 export function ThemeToggle({ vertical = false }: { vertical?: boolean }) {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const themes = [
     { value: "light", icon: Sun, title: "Light" },
     { value: "dark", icon: Moon, title: "Dark" },
@@ -51,7 +53,7 @@ export function ThemeToggle({ vertical = false }: { vertical?: boolean }) {
       vertical && "flex-col px-0"
     )}>
       {themes.map((t) => {
-        const isActive = theme === t.value;
+        const isActive = mounted && theme === t.value;
         return (
           <button
             key={t.value}
@@ -81,15 +83,25 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
 
   if (loading) {
     return (
-      <div className={cn("border-t", menuCollapsed ? "flex justify-center py-2" : "p-3")}>
-        <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+      <div className={cn("border-t", menuCollapsed ? "flex justify-center py-2" : "")}>
+        {menuCollapsed ? (
+          <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+        ) : (
+          <div className="flex items-center gap-2.5 p-3">
+            <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted" />
+            <div className="flex-1">
+              <div className="h-[20px] flex items-center"><div className="h-3 w-20 animate-pulse rounded bg-muted" /></div>
+              <div className="h-[16px] flex items-center"><div className="h-2.5 w-28 animate-pulse rounded bg-muted" /></div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className={cn("border-t", menuCollapsed ? "flex justify-center py-2" : "p-3")}>
+      <div className={cn("border-t", menuCollapsed ? "flex justify-center py-2" : "")}>
         {menuCollapsed ? (
           <button
             onClick={() => requireAuth()}
@@ -101,10 +113,16 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
         ) : (
           <Button
             variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground"
+            className="h-auto w-full justify-start gap-2.5 px-3 py-3"
             onClick={() => requireAuth()}
           >
-            Sign in
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-xs text-muted-foreground">
+              ?
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Sign in</p>
+              <p className="text-[11px] text-muted-foreground/50">to sync your chats</p>
+            </div>
           </Button>
         )}
       </div>

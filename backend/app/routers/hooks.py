@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
 from app.hooks.registry import HookRegistry
+from app.routers.chats import invalidate_hook_cache
 from app.models.hook import Hook
 from app.models.user import User
-from app.routers.chats import invalidate_hook_cache
 from app.schemas.hook import HookCreate, HookOut, HookUpdate
 
 router = APIRouter(prefix="/api/hooks", tags=["hooks"])
@@ -50,7 +50,12 @@ async def list_hooks(db: AsyncSession = Depends(get_db), user: User = Depends(ge
 
 @router.post("", status_code=201, response_model=HookOut)
 async def create_hook(body: HookCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    existing = await db.execute(select(Hook).where(Hook.name == body.name))
+    existing = await db.execute(
+        select(Hook).where(
+            Hook.name == body.name,
+            or_(Hook.user_id == None, Hook.user_id == user.id),  # noqa: E711
+        )
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail=f"Hook '{body.name}' already exists")
     hook = Hook(
@@ -66,7 +71,7 @@ async def create_hook(body: HookCreate, db: AsyncSession = Depends(get_db), user
     )
     db.add(hook)
     await db.commit()
-    invalidate_hook_cache()
+    invalidate_hook_cache(user.id)
     await db.refresh(hook)
     return hook
 
@@ -97,7 +102,7 @@ async def update_hook(hook_id: str, body: HookUpdate, db: AsyncSession = Depends
     if body.priority is not None:
         hook.priority = body.priority
     await db.commit()
-    invalidate_hook_cache()
+    invalidate_hook_cache(user.id)
     await db.refresh(hook)
     return hook
 
@@ -112,4 +117,5 @@ async def delete_hook(hook_id: str, db: AsyncSession = Depends(get_db), user: Us
         raise HTTPException(status_code=403, detail="Cannot delete built-in hooks")
     await db.delete(hook)
     await db.commit()
-    invalidate_hook_cache()
+    invalidate_hook_cache(user.id)
+

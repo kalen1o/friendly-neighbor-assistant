@@ -6,6 +6,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import or_
+
+from app.cache.per_user import PerUserCache
 from app.config import Settings
 from app.mcp.service import execute_mcp_tool, get_enabled_mcp_tools
 from app.models.skill import Skill
@@ -14,8 +17,7 @@ from app.skills.registry import SkillDefinition, SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-# Cached registry — rebuilt only when skills or MCP tools change
-_registry_cache: Optional[SkillRegistry] = None
+_registry_cache: PerUserCache[SkillRegistry] = PerUserCache(ttl_seconds=60)
 
 # Query abbreviation expansions (used by web search tool)
 _QUERY_EXPANSIONS = {
@@ -35,34 +37,37 @@ def _expand_query(query: str) -> str:
     return query
 
 
-async def _build_registry(db: AsyncSession) -> SkillRegistry:
-    """Build a skill registry with built-in + user + MCP skills.
+async def _build_registry(db: AsyncSession, user_id: int) -> SkillRegistry:
+    """Build a skill registry with built-in + current user's skills + MCP tools.
 
-    Uses a module-level cache. Call invalidate_agent_cache() when
-    skills or MCP tools are created/updated/deleted.
+    Cached per user for 60 seconds. Call invalidate_agent_cache() on changes.
     """
-    global _registry_cache
+    cached = _registry_cache.get(user_id)
+    if cached is not None:
+        logger.debug("Using cached agent registry for user %s", user_id)
+        return cached
 
-    if _registry_cache is not None:
-        logger.debug("Using cached agent registry")
-        return _registry_cache
-
-    logger.info("Building agent registry (cache miss)")
+    logger.info("Building agent registry for user %s (cache miss)", user_id)
     registry = SkillRegistry()
     registry.load_builtin_skills()
     register_all_executors(registry)
 
-    # Load user skills from DB
+    # Load builtin (user_id=None) + current user's skills
     try:
-        result = await db.execute(select(Skill))
+        result = await db.execute(
+            select(Skill).where(
+                or_(Skill.user_id == None, Skill.user_id == user_id),  # noqa: E711
+                Skill.enabled == True,  # noqa: E712
+            )
+        )
         user_skills = result.scalars().all()
         registry.load_user_skills(user_skills)
     except Exception:
         pass
 
-    # Load enabled MCP tools as skills
+    # Load enabled MCP tools from builtin + current user's servers
     try:
-        mcp_tools = await get_enabled_mcp_tools(db)
+        mcp_tools = await get_enabled_mcp_tools(db, user_id)
         for mcp_tool in mcp_tools:
             skill = SkillDefinition(
                 name=f"mcp_{mcp_tool['tool_name']}",
@@ -81,15 +86,14 @@ async def _build_registry(db: AsyncSession) -> SkillRegistry:
     except Exception as e:
         logger.warning(f"Failed to load MCP tools: {e}")
 
-    _registry_cache = registry
+    _registry_cache.set(user_id, registry)
     return registry
 
 
-def invalidate_agent_cache():
-    """Clear the agent registry cache. Call when skills or MCP tools change."""
-    global _registry_cache
-    _registry_cache = None
-    logger.info("Agent registry cache invalidated")
+def invalidate_agent_cache(user_id: Optional[int] = None) -> None:
+    """Clear agent registry cache. Pass user_id to clear one user, or None for all."""
+    _registry_cache.invalidate(user_id)
+    logger.info("Agent registry cache invalidated (user_id=%s)", user_id)
 
 
 def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:
@@ -132,12 +136,13 @@ def get_knowledge_prompts(registry: SkillRegistry) -> List[str]:
 async def build_agent_context(
     db: AsyncSession,
     settings: Settings,
+    user_id: int = None,
 ) -> Tuple[List[Dict], List[str], SkillRegistry]:
     """Build everything needed for a tool-calling LLM request.
 
     Returns: (tool_definitions, knowledge_prompts, registry)
     """
-    registry = await _build_registry(db)
+    registry = await _build_registry(db, user_id)
     tool_defs = build_tool_definitions(registry)
     knowledge_prompts = get_knowledge_prompts(registry)
     return tool_defs, knowledge_prompts, registry

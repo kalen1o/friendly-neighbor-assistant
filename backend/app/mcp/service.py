@@ -108,13 +108,17 @@ async def refresh_server_tools(db: AsyncSession, server: McpServer) -> List[McpT
     return result.scalars().all()
 
 
-async def get_enabled_mcp_tools(db: AsyncSession) -> List[Dict[str, Any]]:
-    """Get all enabled MCP tools with their server info. For skill registry."""
-    result = await db.execute(
+async def get_enabled_mcp_tools(db: AsyncSession, user_id: int = None) -> List[Dict[str, Any]]:
+    """Get enabled MCP tools for builtin + current user's servers."""
+    from sqlalchemy import or_
+
+    query = (
         select(McpTool)
         .where(McpTool.enabled == True)  # noqa: E712
         .options(selectinload(McpTool.server))
     )
+
+    result = await db.execute(query)
     tools = result.scalars().all()
 
     return [
@@ -129,6 +133,7 @@ async def get_enabled_mcp_tools(db: AsyncSession) -> List[Dict[str, Any]]:
         }
         for t in tools
         if t.server and t.server.enabled
+        and (t.server.user_id is None or t.server.user_id == user_id)
     ]
 
 

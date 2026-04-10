@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.agent import invalidate_agent_cache
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.skill import Skill
 from app.models.user import User
 from app.schemas.skill import SkillCreate, SkillOut, SkillUpdate
-from app.agent.agent import invalidate_agent_cache
 from app.skills.registry import SkillRegistry, invalidate_skill_cache
 from app.skills.executors import register_all_executors
 
@@ -58,8 +58,13 @@ async def list_skills(db: AsyncSession = Depends(get_db), user: User = Depends(g
 @router.post("", status_code=201, response_model=SkillOut)
 async def create_skill(body: SkillCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Create a user skill."""
-    # Check if name already exists
-    existing = await db.execute(select(Skill).where(Skill.name == body.name))
+    # Check if name already exists for this user (or as a shared/builtin skill)
+    existing = await db.execute(
+        select(Skill).where(
+            Skill.name == body.name,
+            or_(Skill.user_id == None, Skill.user_id == user.id),  # noqa: E711
+        )
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail=f"Skill '{body.name}' already exists")
 
@@ -75,7 +80,7 @@ async def create_skill(body: SkillCreate, db: AsyncSession = Depends(get_db), us
     db.add(skill)
     await db.commit()
     invalidate_skill_cache()
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
     await db.refresh(skill)
     return skill
 
@@ -107,7 +112,7 @@ async def update_skill(skill_id: str, body: SkillUpdate, db: AsyncSession = Depe
 
     await db.commit()
     invalidate_skill_cache()
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
     await db.refresh(skill)
     return skill
 
@@ -123,4 +128,5 @@ async def delete_skill(skill_id: str, db: AsyncSession = Depends(get_db), user: 
     await db.delete(skill)
     await db.commit()
     invalidate_skill_cache()
-    invalidate_agent_cache()
+    invalidate_agent_cache(user.id)
+
