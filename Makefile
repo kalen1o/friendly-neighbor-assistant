@@ -96,6 +96,25 @@ init: ## First-time setup: copy .env, build, start, migrate
 	@test -f .env || cp .env.example .env
 	@echo "📝 Edit .env with your API keys, then run: make up"
 
+# ── Production ──
+prod-build: ## Build production images
+	docker compose -f docker-compose.prod.yml build
+
+prod-up: ## Start production stack (detached)
+	docker compose -f docker-compose.prod.yml up -d
+
+prod-down: ## Stop production stack
+	docker compose -f docker-compose.prod.yml down
+
+prod-logs: ## Tail production logs
+	docker compose -f docker-compose.prod.yml logs -f
+
+prod-migrate: ## Run migrations in production
+	docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+
+prod-restart: ## Restart production services
+	docker compose -f docker-compose.prod.yml restart
+
 # ── Cleanup ──
 clean: ## Stop services and remove containers
 	docker compose down --remove-orphans

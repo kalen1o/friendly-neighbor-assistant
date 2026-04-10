@@ -1,9 +1,44 @@
+import logging
 from collections.abc import AsyncIterator
 
 import anthropic
 import openai
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
+
+# Retry on transient errors: rate limits, server errors, timeouts
+_RETRYABLE_OPENAI = (
+    openai.RateLimitError,
+    openai.APITimeoutError,
+    openai.InternalServerError,
+    openai.APIConnectionError,
+)
+_RETRYABLE_ANTHROPIC = (
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+    anthropic.APITimeoutError,
+    anthropic.APIConnectionError,
+)
+
+_llm_retry = retry(
+    retry=retry_if_exception_type(_RETRYABLE_OPENAI + _RETRYABLE_ANTHROPIC),
+    wait=wait_exponential(multiplier=1, min=1, max=15),
+    stop=stop_after_attempt(3),
+    before_sleep=lambda rs: logger.warning(
+        "LLM call failed (%s), retrying in %.1fs...",
+        rs.outcome.exception().__class__.__name__,
+        rs.next_action.sleep,
+    ),
+    reraise=True,
+)
 
 SYSTEM_PROMPT = (
     "You are Friendly Neighbor, a helpful AI assistant. "
@@ -52,6 +87,7 @@ async def stream_llm_response(
         raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
 
 
+@_llm_retry
 async def _anthropic_response(messages: list[dict], settings: Settings) -> str:
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     response = await client.messages.create(
@@ -80,6 +116,7 @@ def _build_vision_client(settings: Settings) -> openai.AsyncOpenAI:
     return openai.AsyncOpenAI(**kwargs)
 
 
+@_llm_retry
 async def _openai_response(messages: list[dict], settings: Settings) -> str:
     client = _build_openai_client(settings)
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
@@ -258,8 +295,12 @@ async def _openai_stream_with_tools(
     if tools and not vision:
         kwargs["tools"] = tools
 
+    @_llm_retry
+    async def _create_stream(**kw):
+        return await client.chat.completions.create(**kw)
+
     for _ in range(max_tool_rounds):
-        stream = await client.chat.completions.create(**kwargs)
+        stream = await _create_stream(**kwargs)
 
         # Collect the response — may contain tool calls or content
         collected_content = ""
@@ -373,7 +414,7 @@ async def _openai_stream_with_tools(
 
     # Hit max tool rounds — force a final text response without tools
     kwargs.pop("tools", None)
-    stream = await client.chat.completions.create(**kwargs)
+    stream = await _create_stream(**kwargs)
     async for chunk in stream:
         delta = chunk.choices[0].delta
         if delta.content:

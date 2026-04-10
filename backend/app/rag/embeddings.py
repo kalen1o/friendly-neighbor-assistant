@@ -1,8 +1,21 @@
-from typing import List
+import hashlib
+import logging
+from typing import Dict, List, Optional, Tuple
 
 import openai
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
+
+# In-memory embedding cache: hash(text) -> embedding vector
+# Survives across requests within the same process.
+_embedding_cache: Dict[str, List[float]] = {}
+_CACHE_MAX_SIZE = 10_000
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _embedding_client(settings: Settings) -> openai.AsyncOpenAI:
@@ -27,22 +40,44 @@ async def generate_embedding(text: str, settings: Settings) -> List[float]:
 async def generate_embeddings_batch(
     texts: List[str], settings: Settings
 ) -> List[List[float]]:
-    """Generate embeddings for a batch of texts."""
+    """Generate embeddings for a batch of texts, skipping duplicates via cache."""
     if not texts:
         return []
 
-    client = _embedding_client(settings)
+    # Split into cached hits and texts that need API calls
+    results: List[Optional[List[float]]] = [None] * len(texts)
+    uncached: List[Tuple[int, str]] = []  # (original_index, text)
 
-    # Process in batches of 100
-    all_embeddings: List[List[float]] = []
-    batch_size = 100
+    for i, text in enumerate(texts):
+        h = _text_hash(text)
+        cached = _embedding_cache.get(h)
+        if cached is not None:
+            results[i] = cached
+        else:
+            uncached.append((i, text))
 
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
-        response = await client.embeddings.create(
-            model=settings.embedding_model,
-            input=batch,
-        )
-        all_embeddings.extend([d.embedding for d in response.data])
+    if uncached:
+        cache_hits = len(texts) - len(uncached)
+        if cache_hits > 0:
+            logger.info("Embedding cache: %d hits, %d misses", cache_hits, len(uncached))
 
-    return all_embeddings
+        client = _embedding_client(settings)
+        batch_size = 100
+        uncached_texts = [t for _, t in uncached]
+        all_new: List[List[float]] = []
+
+        for j in range(0, len(uncached_texts), batch_size):
+            batch = uncached_texts[j : j + batch_size]
+            response = await client.embeddings.create(
+                model=settings.embedding_model,
+                input=batch,
+            )
+            all_new.extend([d.embedding for d in response.data])
+
+        # Store in results and cache
+        for (orig_idx, text), embedding in zip(uncached, all_new):
+            results[orig_idx] = embedding
+            if len(_embedding_cache) < _CACHE_MAX_SIZE:
+                _embedding_cache[_text_hash(text)] = embedding
+
+    return results  # type: ignore[return-value]

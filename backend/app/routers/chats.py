@@ -199,7 +199,7 @@ async def get_chat(
     result = await db.execute(
         select(Chat)
         .where(Chat.public_id == chat_id, Chat.user_id == user.id)
-        .options(selectinload(Chat.messages))
+        .options(selectinload(Chat.messages).selectinload(Message.files))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -217,7 +217,7 @@ async def update_chat(
     result = await db.execute(
         select(Chat)
         .where(Chat.public_id == chat_id, Chat.user_id == user.id)
-        .options(selectinload(Chat.messages))
+        .options(selectinload(Chat.messages).selectinload(Message.files))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -268,7 +268,7 @@ async def send_message(
     result = await db.execute(
         select(Chat)
         .where(Chat.public_id == chat_id, Chat.user_id == user.id)
-        .options(selectinload(Chat.messages))
+        .options(selectinload(Chat.messages).selectinload(Message.files))
     )
     chat = result.scalar_one_or_none()
     if not chat:
@@ -560,6 +560,19 @@ async def send_message(
 
         except Exception as e:
             logger.exception(f"Error in event_generator: {e}")
+            await db.rollback()
+            # Save partial response if we got any content before the error
+            if full_response:
+                try:
+                    partial_msg = Message(
+                        chat_id=chat.id,
+                        role="assistant",
+                        content=full_response + "\n\n[Response interrupted due to an error]",
+                    )
+                    db.add(partial_msg)
+                    await db.commit()
+                except Exception:
+                    logger.warning("Failed to save partial message after error")
             yield {"event": "error", "data": str(e)}
 
     return EventSourceResponse(event_generator())

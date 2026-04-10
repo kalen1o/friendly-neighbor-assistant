@@ -7,11 +7,15 @@ from app.config import Settings
 from app.rag.embeddings import generate_embedding
 
 
+MIN_RELEVANCE_SCORE = 0.65
+
+
 async def search_knowledge_base(
     query: str,
     db: AsyncSession,
     settings: Settings,
     top_k: int = 5,
+    min_score: float = MIN_RELEVANCE_SCORE,
 ) -> List[Dict[str, Any]]:
     """Search document chunks by vector similarity."""
     query_embedding = await generate_embedding(query, settings)
@@ -24,13 +28,14 @@ async def search_knowledge_base(
         FROM document_chunks dc
         JOIN documents d ON d.id = dc.document_id
         WHERE d.status = 'ready'
+          AND 1 - (dc.embedding <=> :embedding::vector) >= :min_score
         ORDER BY dc.embedding <=> :embedding::vector
         LIMIT :top_k
     """)
 
     result = await db.execute(
         sql,
-        {"embedding": str(query_embedding), "top_k": top_k},
+        {"embedding": str(query_embedding), "top_k": top_k, "min_score": min_score},
     )
 
     return [
