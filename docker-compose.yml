@@ -60,6 +60,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: builder
     container_name: fn-frontend
     restart: unless-stopped
     environment:

@@ -2,12 +2,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-
-@pytest.fixture(params=["asyncio"])
-def anyio_backend(request):
-    """Restrict anyio tests to asyncio only (skip trio)."""
-    return request.param
-
 from app.auth.jwt import create_access_token
 from app.auth.password import hash_password
 from app.config import Settings, get_settings
@@ -23,6 +17,13 @@ from app.models.artifact import Artifact  # noqa: F401
 from app.models.chat_file import ChatFile  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(params=["asyncio"])
+def anyio_backend(request):
+    """Restrict anyio tests to asyncio only (skip trio)."""
+    return request.param
+
 
 _test_settings = Settings(
     database_url=TEST_DATABASE_URL,
