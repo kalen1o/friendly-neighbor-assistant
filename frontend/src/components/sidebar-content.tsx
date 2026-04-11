@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ChatList } from "@/components/chat-list";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { Skeleton } from "boneyard-js/react";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   createChat,
   deleteChat,
@@ -320,34 +320,31 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
           </p>
         </div>
         <div className="flex-1 overflow-y-auto px-3 pb-3">
-          <Skeleton
-            name="chat-list"
-            loading={isLoading}
-            animate="pulse"
-            fixture={
-              <div className="flex flex-col gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="rounded-lg px-3 py-2">
-                    <div className="h-4 w-3/4 rounded bg-muted" />
-                    <div className="mt-1.5 h-3 w-1/3 rounded bg-muted" />
-                  </div>
-                ))}
-              </div>
-            }
-          >
-            <ChatList
-              chats={chats}
-              activeChatId={activeChatId}
-              onDelete={handleDelete}
-              onRename={handleRename}
-            />
-            {isLoadingMore && (
-              <div className="flex justify-center py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
-            )}
-            <div ref={sentinelRef} className="h-1" />
-          </Skeleton>
+          {isLoading ? (
+            <div className="flex flex-col gap-1">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="rounded-lg px-3 py-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="mt-1.5 h-3 w-1/3" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <ChatList
+                chats={chats}
+                activeChatId={activeChatId}
+                onDelete={handleDelete}
+                onRename={handleRename}
+              />
+              {isLoadingMore && (
+                <div className="flex justify-center py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              <div ref={sentinelRef} className="h-1" />
+            </>
+          )}
         </div>
       </>
     );
@@ -427,34 +424,31 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3">
-        <Skeleton
-          name="chat-list"
-          loading={isLoading}
-          animate="pulse"
-          fixture={
-            <div className="flex flex-col gap-1">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="rounded-lg px-3 py-2">
-                  <div className="h-4 w-3/4 rounded bg-muted" />
-                  <div className="mt-1.5 h-3 w-1/3 rounded bg-muted" />
-                </div>
-              ))}
-            </div>
-          }
-        >
-          <ChatList
-            chats={chats}
-            activeChatId={activeChatId}
-            onDelete={handleDelete}
-            onRename={handleRename}
-          />
-          {isLoadingMore && (
-            <div className="flex justify-center py-2">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            </div>
-          )}
-          <div ref={sentinelRef} className="h-1" />
-        </Skeleton>
+        {isLoading ? (
+          <div className="flex flex-col gap-1">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-lg px-3 py-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="mt-1.5 h-3 w-1/3" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            <ChatList
+              chats={chats}
+              activeChatId={activeChatId}
+              onDelete={handleDelete}
+              onRename={handleRename}
+            />
+            {isLoadingMore && (
+              <div className="flex justify-center py-2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            <div ref={sentinelRef} className="h-1" />
+          </>
+        )}
       </div>
       <ThemeToggle />
       <UserMenu />

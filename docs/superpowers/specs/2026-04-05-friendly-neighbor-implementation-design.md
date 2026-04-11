@@ -559,13 +559,14 @@ When the LLM generates UI code, it wraps it in `<artifact>` tags. The frontend p
 - [x] **8.8** Backend optimizations (retry, caching, N+1 fix, RAG threshold)
 
 ### Phase 9: Future
-- [ ] **9.1** Conversation branching (fork from any message)
-- [ ] **9.2** Collaborative chats (multi-user real-time)
-- [ ] **9.3** Scheduled agents (recurring tasks)
-- [ ] **9.4** Plugin marketplace for community skills
-- [ ] **9.5** Voice input/output
-- [ ] **9.6** Mobile native app (React Native)
-- [ ] **9.7** Self-hosted deployment guide
-- [ ] **9.8** Admin dashboard with usage analytics
-- [ ] **9.9** Workspace / team support with shared knowledge bases
-- [ ] **9.10** Fine-tuned model support for custom domains
+- [ ] **9.1** Sandpack multi-file artifacts (replace iframe with @codesandbox/sandpack-react for file tree, tabs, live bundler)
+- [ ] **9.2** Conversation branching (fork from any message)
+- [ ] **9.3** Collaborative chats (multi-user real-time)
+- [ ] **9.4** Scheduled agents (recurring tasks)
+- [ ] **9.5** Plugin marketplace for community skills
+- [ ] **9.6** Voice input/output
+- [ ] **9.7** Mobile native app (React Native)
+- [ ] **9.8** Self-hosted deployment guide
+- [ ] **9.9** Admin dashboard with usage analytics
+- [ ] **9.10** Workspace / team support with shared knowledge bases
+- [ ] **9.11** Fine-tuned model support for custom domains

@@ -61,7 +61,9 @@ export default function RootLayout({
                     </SheetContent>
                   </Sheet>
                   <img src="/small-logo.png" alt="FN" className="ml-2 h-5 w-5 rounded" />
-                  <h1 className="ml-1.5 text-sm font-semibold">Friendly Neighbor</h1>
+                  <h1 className="ml-1.5 flex-1 truncate text-sm font-semibold">Friendly Neighbor</h1>
+                  {/* Mobile action buttons slot — filled by chat page via portal */}
+                  <div id="mobile-header-actions" className="flex items-center gap-0.5" />
                 </div>
                 {children}
               </main>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Share2, Search, Download } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
@@ -13,7 +14,18 @@ import { getChat, sendMessage, listArtifacts, type Source, type MessageMetrics, 
 import { ArtifactPanel } from "@/components/artifact-panel";
 import { ArtifactCard } from "@/components/artifact-card";
 import { useAuth } from "@/components/auth-guard";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+
+function MobileHeaderActions({ show, children }: { show: boolean; children: React.ReactNode }) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTarget(document.getElementById("mobile-header-actions"));
+  }, []);
+  if (!show || !target) return null;
+  return createPortal(children, target);
+}
 
 export default function ChatPage() {
   const params = useParams();
@@ -24,6 +36,7 @@ export default function ChatPage() {
   const initialQuerySent = useRef(false);
 
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(true);
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -165,6 +178,8 @@ export default function ChatPage() {
     } catch (e) {
       toast.error("Chat not found");
       router.replace("/");
+    } finally {
+      setChatLoading(false);
     }
   }, [chatId]);
 
@@ -252,6 +267,7 @@ export default function ChatPage() {
     if (q && !initialQuerySent.current) {
       // Auto-send from URL — skip loadChat since the chat is empty
       initialQuerySent.current = true;
+      setChatLoading(false);
       router.replace(`/chat/${chatId}`);
       doSend(q, mode);
     } else if (!initialQuerySent.current || !sendingRef.current) {
@@ -268,8 +284,8 @@ export default function ChatPage() {
     doSend(content, mode, files);
   };
 
-  const isEmpty = messages.length === 0 && !streamingContent && !isLoading && !actionText;
-  const [showSuggestions, setShowSuggestions] = useState(true);
+  const isEmpty = messages.length === 0 && !chatLoading && !streamingContent && !isLoading && !actionText;
+  const [showSuggestions, setShowSuggestions] = useState(!chatLoading);
 
   // Keep suggestions visible briefly during the slide-down transition
   useEffect(() => {
@@ -284,39 +300,78 @@ export default function ChatPage() {
     <div className="flex min-h-0 flex-1">
       <div className={`relative flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-out ${activeArtifact ? "hidden md:flex md:w-1/2" : "flex w-full"}`}>
 
+        {/* Desktop action buttons — non-overlapping header row */}
         {!isEmpty && (
-          <div className="absolute right-4 top-3 z-10 flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 md:h-8 md:w-8"
-              onClick={() => setCmdOpen(true)}
-              title="Search (⌘K)"
-            >
+          <div className="hidden items-center justify-end gap-1 px-4 py-2 md:flex">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCmdOpen(true)} title="Search (⌘K)">
               <Search className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 md:h-8 md:w-8"
-              onClick={() => setShareOpen(true)}
-              title="Share conversation"
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShareOpen(true)} title="Share">
               <Share2 className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 md:h-8 md:w-8"
-              onClick={() => setExportOpen(true)}
-              title="Export conversation"
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setExportOpen(true)} title="Export">
               <Download className="h-4 w-4" />
             </Button>
           </div>
         )}
 
-        {!isEmpty && (
+        {/* Mobile action buttons — portaled into the mobile header */}
+        <MobileHeaderActions show={!isEmpty}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCmdOpen(true)} title="Search">
+            <Search className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShareOpen(true)} title="Share">
+            <Share2 className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setExportOpen(true)} title="Export">
+            <Download className="h-4 w-4" />
+          </Button>
+        </MobileHeaderActions>
+
+        {chatLoading ? (
+          <div className="min-h-0 flex-1 px-2 py-4 md:p-4">
+            <div className="mx-auto max-w-3xl space-y-3">
+              {/* User message skeleton */}
+              <div className="flex w-full justify-end">
+                <div className="max-w-[80%] rounded-[20px] rounded-br-md bg-primary/80 px-4 py-3 shadow-sm shadow-primary/20">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-48 rounded bg-primary-foreground/20" />
+                    <Skeleton className="h-3.5 w-32 rounded bg-primary-foreground/20" />
+                  </div>
+                </div>
+              </div>
+              {/* Assistant message skeleton */}
+              <div className="flex w-full justify-start">
+                <div className="w-[min(80%,500px)] rounded-[20px] rounded-bl-md border border-border/60 bg-card px-4 py-3 shadow-sm">
+                  <div className="space-y-2.5">
+                    <Skeleton className="h-3.5 w-full" />
+                    <Skeleton className="h-3.5 w-[90%]" />
+                    <Skeleton className="h-3.5 w-[95%]" />
+                    <Skeleton className="h-3.5 w-[70%]" />
+                  </div>
+                </div>
+              </div>
+              {/* User message skeleton */}
+              <div className="flex w-full justify-end">
+                <div className="max-w-[80%] rounded-[20px] rounded-br-md bg-primary/80 px-4 py-3 shadow-sm shadow-primary/20">
+                  <Skeleton className="h-3.5 w-36 rounded bg-primary-foreground/20" />
+                </div>
+              </div>
+              {/* Assistant message skeleton */}
+              <div className="flex w-full justify-start">
+                <div className="w-[min(80%,520px)] rounded-[20px] rounded-bl-md border border-border/60 bg-card px-4 py-3 shadow-sm">
+                  <div className="space-y-2.5">
+                    <Skeleton className="h-3.5 w-[95%]" />
+                    <Skeleton className="h-3.5 w-[85%]" />
+                    <Skeleton className="h-3.5 w-full" />
+                    <Skeleton className="h-3.5 w-[80%]" />
+                    <Skeleton className="h-3.5 w-[55%]" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : !isEmpty ? (
           <ChatMessages
             messages={messages}
             streamingContent={streamingContent}
@@ -328,7 +383,7 @@ export default function ChatPage() {
               handleSend(newContent);
             }}
           />
-        )}
+        ) : null}
 
         {!isEmpty && artifacts.length > 0 && (
           <div className="mx-auto w-full max-w-3xl px-4 pb-2">
