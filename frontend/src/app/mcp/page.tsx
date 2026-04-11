@@ -8,6 +8,7 @@ import {
   Plus, Trash2, RefreshCw, Server, Plug, AlertCircle, ChevronDown, ChevronRight, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -235,6 +236,7 @@ function ServerCard({
   const [expanded, setExpanded] = useState(false);
   const [tools, setTools] = useState<McpToolOut[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const loadTools = useCallback(async () => {
     try {
@@ -272,6 +274,7 @@ function ServerCard({
   };
 
   return (
+    <>
     <Card>
       <CardContent className="p-0">
         <div className="flex items-center justify-between px-4 py-3">
@@ -294,7 +297,7 @@ function ServerCard({
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onDelete}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setConfirmOpen(true)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -328,6 +331,14 @@ function ServerCard({
         )}
       </CardContent>
     </Card>
+    <ConfirmDialog
+      open={confirmOpen}
+      onOpenChange={setConfirmOpen}
+      title="Delete MCP server?"
+      description={`"${server.name}" and all its tools will be permanently deleted.`}
+      onConfirm={onDelete}
+    />
+    </>
   );
 }
 

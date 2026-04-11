@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import type { ChatSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ function ChatItem({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -67,59 +69,68 @@ function ChatItem({
   };
 
   return (
-    <div
-      onClick={() => !editing && router.push(`/chat/${chat.id}`)}
-      className={cn(
-        "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 min-h-[44px] text-sm transition-colors duration-150 hover:bg-accent active:bg-muted",
-        isActive && "bg-accent"
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") save();
-              if (e.key === "Escape") setEditing(false);
-            }}
-            onBlur={save}
-            className="m-0 h-[1.25rem] w-full truncate border-0 bg-transparent p-0 text-sm font-medium outline-none ring-0 focus:ring-0"
-          />
-        ) : (
-          <p className="truncate font-medium">
-            {chat.title || "New Chat"}
-          </p>
+    <>
+      <div
+        onClick={() => !editing && router.push(`/chat/${chat.id}`)}
+        className={cn(
+          "group flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 min-h-[44px] text-sm transition-colors duration-150 hover:bg-accent active:bg-muted",
+          isActive && "bg-accent"
         )}
-        <p className="text-xs text-muted-foreground">
-          {formatRelativeTime(chat.updated_at)}
-        </p>
-      </div>
-      {!editing && (
-        <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={startEditing}
-          >
-            <Pencil className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+      >
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              onBlur={save}
+              className="m-0 h-[1.25rem] w-full truncate border-0 bg-transparent p-0 text-sm font-medium outline-none ring-0 focus:ring-0"
+            />
+          ) : (
+            <p className="truncate font-medium">
+              {chat.title || "New Chat"}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {formatRelativeTime(chat.updated_at)}
+          </p>
         </div>
-      )}
-    </div>
+        {!editing && (
+          <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={startEditing}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmOpen(true);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Delete chat?"
+        description={`"${chat.title || "New Chat"}" will be permanently deleted. This cannot be undone.`}
+        onConfirm={onDelete}
+      />
+    </>
   );
 }
 

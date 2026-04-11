@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Trash2, Eye, Shield, Wand2, Lock, AlertCircle, Anchor } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -275,6 +276,8 @@ export default function HooksPage() {
     }
   };
 
+  const [deleteTarget, setDeleteTarget] = useState<HookOut | null>(null);
+
   const handleDelete = async (hook: HookOut) => {
     if (hook.builtin) return;
     try {
@@ -336,7 +339,7 @@ export default function HooksPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => handleDelete(hook)}
+                            onClick={() => setDeleteTarget(hook)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -358,6 +361,13 @@ export default function HooksPage() {
           </Card>
         )}
       </div>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+        title="Delete hook?"
+        description={`"${deleteTarget?.name}" will be permanently deleted.`}
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); }}
+      />
     </div>
   );
 }

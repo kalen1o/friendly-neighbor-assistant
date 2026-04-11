@@ -1,7 +1,8 @@
 from datetime import datetime
 from functools import partial
+from typing import Optional
 
-from sqlalchemy import String, func
+from sqlalchemy import String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -19,4 +20,6 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column()
     name: Mapped[str] = mapped_column()
     is_active: Mapped[bool] = mapped_column(default=True)
+    memory_enabled: Mapped[bool] = mapped_column(default=True)
+    memories: Mapped[Optional[str]] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

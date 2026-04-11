@@ -312,6 +312,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
 
   // Chat list only mode (used by collapsed sidebar when expanding chat list section)
   if (chatListOnly) {
+    if (!isAuthenticated) return null;
     return (
       <>
         <div className="px-5 pb-1">
@@ -417,39 +418,44 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
         </Button>
       </div>
 
-      <div className="px-5 pb-1">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-          Recent
-        </p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3 pb-3">
-        {isLoading ? (
-          <div className="flex flex-col gap-1">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="rounded-lg px-3 py-2">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="mt-1.5 h-3 w-1/3" />
-              </div>
-            ))}
+      {isAuthenticated && (
+        <>
+          <div className="px-5 pb-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              Recent
+            </p>
           </div>
-        ) : (
-          <>
-            <ChatList
-              chats={chats}
-              activeChatId={activeChatId}
-              onDelete={handleDelete}
-              onRename={handleRename}
-            />
-            {isLoadingMore && (
-              <div className="flex justify-center py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+
+          <div className="flex-1 overflow-y-auto px-3 pb-3">
+            {isLoading ? (
+              <div className="flex flex-col gap-1">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="rounded-lg px-3 py-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="mt-1.5 h-3 w-1/3" />
+                  </div>
+                ))}
               </div>
+            ) : (
+              <>
+                <ChatList
+                  chats={chats}
+                  activeChatId={activeChatId}
+                  onDelete={handleDelete}
+                  onRename={handleRename}
+                />
+                {isLoadingMore && (
+                  <div className="flex justify-center py-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                <div ref={sentinelRef} className="h-1" />
+              </>
             )}
-            <div ref={sentinelRef} className="h-1" />
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
+      {!isAuthenticated && <div className="flex-1" />}
       <ThemeToggle />
       <UserMenu />
     </>

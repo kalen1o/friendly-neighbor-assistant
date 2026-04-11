@@ -100,7 +100,7 @@ async def _anthropic_response(messages: list[dict], settings: Settings) -> str:
 
 
 def _build_openai_client(settings: Settings) -> openai.AsyncOpenAI:
-    kwargs: dict = {"api_key": settings.openai_api_key}
+    kwargs: dict = {"api_key": settings.openai_api_key, "timeout": 120.0}
     if settings.openai_base_url:
         kwargs["base_url"] = settings.openai_base_url
     return openai.AsyncOpenAI(**kwargs)
@@ -110,7 +110,7 @@ def _build_vision_client(settings: Settings) -> openai.AsyncOpenAI:
     """Build an OpenAI client for vision requests, using vision-specific keys if set."""
     api_key = settings.vision_api_key or settings.openai_api_key
     base_url = settings.vision_base_url or settings.openai_base_url
-    kwargs: dict = {"api_key": api_key}
+    kwargs: dict = {"api_key": api_key, "timeout": 120.0}
     if base_url:
         kwargs["base_url"] = base_url
     return openai.AsyncOpenAI(**kwargs)
@@ -406,7 +406,8 @@ async def _openai_stream_with_tools(
     async def _create_stream(**kw):
         return await client.chat.completions.create(**kw)
 
-    for _ in range(max_tool_rounds):
+    for round_num in range(max_tool_rounds):
+        logger.info("Tool round %d: calling LLM with %d messages", round_num + 1, len(kwargs["messages"]))
         stream = await _create_stream(**kwargs)
 
         # Collect the response — may contain tool calls or content
@@ -451,6 +452,7 @@ async def _openai_stream_with_tools(
 
         # If no tool calls were made, we're done
         if not tool_calls_in_progress:
+            logger.info("Tool round %d: no tool calls, done (content=%d chars)", round_num + 1, len(collected_content))
             return
 
         # Build assistant message with tool calls for the conversation
@@ -517,6 +519,7 @@ async def _openai_stream_with_tools(
             )
 
         # Loop back to get LLM's response after tool results
+        logger.info("Tool round %d: executed %d tools, looping back to LLM", round_num + 1, len(tool_results))
         continue
 
     # Hit max tool rounds — force a final text response without tools

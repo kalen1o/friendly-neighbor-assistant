@@ -287,6 +287,14 @@ async def send_message(
         hook_ctx.user_message = body.content
         hook_ctx.chat_id = chat_id
 
+        # Load user memories for system prompt (Redis-cached)
+        from app.agent.memory import build_memory_prompt, get_cached_memories
+
+        memory_prompt = ""
+        if user.memory_enabled:
+            user_memories = await get_cached_memories(user.id, user)
+            memory_prompt = build_memory_prompt(user_memories)
+
         # 1. pre_message hooks
         hook_ctx = await hook_registry.run_hooks("pre_message", hook_ctx)
         if hook_ctx.blocked:
@@ -318,6 +326,17 @@ async def send_message(
         llm_messages = await build_context_messages(chat, settings)
         # Persist any new summary that was generated
         await db.commit()
+
+        # Inject user memories as context
+        if memory_prompt:
+            llm_messages.insert(0, {"role": "user", "content": memory_prompt})
+            llm_messages.insert(
+                1,
+                {
+                    "role": "assistant",
+                    "content": "Understood, I'll keep these in mind.",
+                },
+            )
 
         # Process file attachments
         has_vision = False
@@ -528,13 +547,6 @@ async def send_message(
                     ),
                 }
 
-            # Auto-title
-            if chat.title is None:
-                title = await _generate_title(body.content, full_response, settings)
-                chat.title = title
-                await db.commit()
-                yield {"event": "title", "data": title}
-
             # 6. post_message hooks (latency calculated here)
             hook_ctx.response = full_response
             hook_ctx.sources = sources_data
@@ -556,7 +568,30 @@ async def send_message(
                 await db.commit()
                 yield {"event": "metrics", "data": json.dumps(metrics)}
 
+            # Signal response complete — title generation follows asynchronously
             yield {"event": "done", "data": ""}
+
+            # Auto-title (runs after done so the user isn't blocked)
+            if chat.title is None:
+                title = await _generate_title(body.content, full_response, settings)
+                chat.title = title
+                await db.commit()
+                yield {"event": "title", "data": title}
+
+            # Background: extract memories from this conversation
+            if user.memory_enabled:
+                import asyncio
+                from app.agent.memory import extract_memories
+                from app.db.engine import get_session_factory
+
+                asyncio.create_task(
+                    extract_memories(
+                        user.id,
+                        llm_messages,
+                        settings,
+                        get_session_factory(),
+                    )
+                )
 
         except Exception as e:
             logger.exception(f"Error in event_generator: {e}")

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Trash2, AlertTriangle, MessageSquare, Sun, Moon, Monitor } from "lucide-react";
+import { Trash2, AlertTriangle, Sun, Moon, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,8 +12,6 @@ import {
 import { cn } from "@/lib/utils";
 import { deleteAllChats } from "@/lib/api";
 import { toast } from "sonner";
-
-type SettingsSection = "chats";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -25,10 +23,6 @@ const THEMES = [
   { value: "light", icon: Sun, title: "Light" },
   { value: "dark", icon: Moon, title: "Dark" },
   { value: "system", icon: Monitor, title: "System" },
-];
-
-const SECTIONS = [
-  { id: "chats" as const, label: "Chats", icon: MessageSquare },
 ];
 
 function ThemeIcons() {
@@ -59,7 +53,6 @@ function ThemeIcons() {
 
 export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsDialogProps) {
   const router = useRouter();
-  const [section, setSection] = useState<SettingsSection>("chats");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -72,17 +65,22 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
       onOpenChange(false);
       onChatsDeleted?.();
       router.push("/");
-    } catch (e) {
+    } catch {
       toast.error("Failed to delete chats");
     } finally {
       setDeleting(false);
     }
   };
 
-  const contentSection = (
-    <>
-      {section === "chats" && (
-        <div>
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setConfirmDelete(false); }}>
+      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <p className="text-sm font-semibold">Settings</p>
+          <ThemeIcons />
+        </div>
+
+        <div className="p-5">
           <h2 className="text-lg font-semibold">Chats</h2>
           <p className="mb-6 text-sm text-muted-foreground">
             Manage your conversation history.
@@ -138,79 +136,6 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setConfirmDelete(false); }}>
-      <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden max-h-[90vh]">
-        {/* ── Mobile layout: vertical ── */}
-        <div className="flex flex-col sm:hidden">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <p className="text-sm font-semibold">Settings</p>
-            <ThemeIcons />
-          </div>
-          <div className="flex gap-1 border-b px-4 py-2">
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSection(s.id)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
-                  section === s.id
-                    ? "bg-accent text-foreground font-medium"
-                    : "text-muted-foreground"
-                )}
-              >
-                <s.icon className="h-3.5 w-3.5" />
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div className="overflow-y-auto p-4">
-            {contentSection}
-          </div>
-        </div>
-
-        {/* ── Desktop layout: sidebar + content ── */}
-        <div className="hidden sm:flex min-h-[400px]">
-          <div className="flex w-48 shrink-0 flex-col border-r bg-muted/30">
-            <div className="flex-1 p-3">
-              <p className="mb-3 px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Settings
-              </p>
-              <nav className="flex flex-col gap-0.5">
-                {SECTIONS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSection(s.id)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                      section === s.id
-                        ? "bg-accent text-foreground font-medium"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    )}
-                  >
-                    <s.icon className="h-4 w-4" />
-                    {s.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
-            <div className="border-t p-3">
-              <p className="mb-2 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Theme
-              </p>
-              <div className="flex items-center gap-1 px-1">
-                <ThemeIcons />
-              </div>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-6">
-            {contentSection}
           </div>
         </div>
       </DialogContent>

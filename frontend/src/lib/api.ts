@@ -799,3 +799,4 @@ export async function uploadChatFile(file: File): Promise<ChatFileOut> {
 export function getFileUrl(fileId: string): string {
   return `${API_BASE}/api/uploads/${fileId}`;
 }
+
