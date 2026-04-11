@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     vision_api_key: str = ""
     vision_base_url: str = ""
 
+    # Cost tracking (USD per 1M tokens)
+    cost_per_million_input: float = 3.0
+    cost_per_million_output: float = 15.0
+
     # File uploads
     upload_dir: str = "uploads"
     max_upload_size_mb: int = 10

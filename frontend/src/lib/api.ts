@@ -153,6 +153,8 @@ export interface ChatDetail {
   created_at: string;
   updated_at: string;
   messages: MessageOut[];
+  has_more?: boolean;
+  next_cursor?: string | null;
 }
 
 // ── Chat CRUD ──
@@ -180,8 +182,12 @@ export async function listChats(cursor?: string | null, limit = 20): Promise<Cha
   return res.json();
 }
 
-export async function getChat(chatId: string): Promise<ChatDetail> {
-  const res = await authFetch(`${API_BASE}/api/chats/${chatId}`);
+export async function getChat(chatId: string, limit?: number, before?: string): Promise<ChatDetail> {
+  const params = new URLSearchParams();
+  if (limit) params.set("limit", String(limit));
+  if (before) params.set("before", before);
+  const qs = params.toString();
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}${qs ? `?${qs}` : ""}`);
   if (!res.ok) throw new Error("Failed to get chat");
   return res.json();
 }
@@ -798,5 +804,66 @@ export async function uploadChatFile(file: File): Promise<ChatFileOut> {
 
 export function getFileUrl(fileId: string): string {
   return `${API_BASE}/api/uploads/${fileId}`;
+}
+
+// ── Usage ──
+
+export interface UsageStats {
+  period: string;
+  messages: number;
+  tokens_input: number;
+  tokens_output: number;
+  tokens_total: number;
+  tool_calls: number;
+}
+
+export async function getUsage(): Promise<UsageStats> {
+  const res = await authFetch(`${API_BASE}/api/auth/usage`);
+  if (!res.ok) throw new Error("Failed to get usage");
+  return res.json();
+}
+
+// ── Analytics ──
+
+export interface MessageCost {
+  message_id: string;
+  chat_id: string;
+  chat_title: string | null;
+  created_at: string;
+  tokens_input: number;
+  tokens_output: number;
+  tokens_total: number;
+  cost_input: number;
+  cost_output: number;
+  cost_total: number;
+  latency: number | null;
+}
+
+export interface DailyAggregate {
+  date: string;
+  messages: number;
+  tokens_total: number;
+  cost_total: number;
+}
+
+export interface AnalyticsResponse {
+  period: string;
+  summary: {
+    total_messages: number;
+    tokens_input: number;
+    tokens_output: number;
+    tokens_total: number;
+    cost_total: number;
+    cost_input: number;
+    cost_output: number;
+  };
+  daily: DailyAggregate[];
+  messages: MessageCost[];
+}
+
+export async function getAnalytics(days: number = 30): Promise<AnalyticsResponse> {
+  const res = await authFetch(`${API_BASE}/api/analytics?days=${days}`);
+  if (!res.ok) throw new Error("Failed to get analytics");
+  return res.json();
 }
 

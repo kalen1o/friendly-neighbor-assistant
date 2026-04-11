@@ -29,6 +29,7 @@ from app.schemas.chat import (
     ChatListResponse,
     ChatUpdate,
     MessageCreate,
+    MessageOut,
     SearchResponse,
     SearchResult,
 )
@@ -190,21 +191,87 @@ async def search_chats(
     return SearchResponse(results=results, total=len(results))
 
 
-@router.get("/{chat_id}", response_model=ChatDetail)
+@router.get("/{chat_id}")
 async def get_chat(
     chat_id: str,
+    limit: Optional[int] = Query(
+        None,
+        ge=1,
+        le=200,
+        description="Max messages to return (newest first). Omit for all.",
+    ),
+    before: Optional[str] = Query(
+        None, description="Cursor: return messages before this message ID"
+    ),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Chat)
-        .where(Chat.public_id == chat_id, Chat.user_id == user.id)
-        .options(selectinload(Chat.messages).selectinload(Message.files))
+    # Load chat without messages (we'll query them separately if paginated)
+    chat_result = await db.execute(
+        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id)
     )
-    chat = result.scalar_one_or_none()
+    chat = chat_result.scalar_one_or_none()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
-    return ChatDetail.from_chat(chat)
+
+    # If no pagination params, return all messages (backward compatible)
+    if limit is None and before is None:
+        msg_result = await db.execute(
+            select(Message)
+            .where(Message.chat_id == chat.id)
+            .options(selectinload(Message.files))
+            .order_by(Message.created_at)
+        )
+        messages = msg_result.scalars().all()
+        return ChatDetail(
+            id=chat.public_id,
+            title=chat.title,
+            created_at=chat.created_at,
+            updated_at=chat.updated_at,
+            messages=[MessageOut.from_message(m) for m in messages],
+        )
+
+    # Paginated: return `limit` most recent messages, or messages before cursor
+    query = (
+        select(Message)
+        .where(Message.chat_id == chat.id)
+        .options(selectinload(Message.files))
+    )
+
+    if before:
+        cursor_result = await db.execute(
+            select(Message.id).where(
+                Message.public_id == before, Message.chat_id == chat.id
+            )
+        )
+        cursor_id = cursor_result.scalar_one_or_none()
+        if cursor_id:
+            query = query.where(Message.id < cursor_id)
+
+    effective_limit = limit or 50
+    # Fetch one extra to determine has_more
+    query = query.order_by(Message.created_at.desc()).limit(effective_limit + 1)
+    msg_result = await db.execute(query)
+    messages = list(msg_result.scalars().all())
+
+    has_more = len(messages) > effective_limit
+    if has_more:
+        messages = messages[:effective_limit]
+
+    # Reverse to chronological order
+    messages.reverse()
+
+    next_cursor = messages[0].public_id if has_more and messages else None
+
+    return {
+        "id": chat.public_id,
+        "title": chat.title,
+        "created_at": chat.created_at.isoformat(),
+        "updated_at": chat.updated_at.isoformat(),
+        "messages": [MessageOut.from_message(m).model_dump() for m in messages],
+        "has_more": has_more,
+        "next_cursor": next_cursor,
+    }
 
 
 @router.patch("/{chat_id}", response_model=ChatDetail)
@@ -437,6 +504,9 @@ async def send_message(
             if tool_name not in skills_used:
                 skills_used.append(tool_name)
             await tool_action_queue.put(f"Using {tool_name}...")
+            from app.usage import track_tool_call
+
+            await track_tool_call(user.id)
 
         # Mode-specific tool rounds
         mode_tool_rounds = {
@@ -567,6 +637,15 @@ async def send_message(
                 assistant_msg.tokens_total = metrics.get("tokens_total")
                 await db.commit()
                 yield {"event": "metrics", "data": json.dumps(metrics)}
+
+            # Track usage analytics
+            from app.usage import track_message
+
+            await track_message(
+                user.id,
+                tokens_input=metrics.get("tokens_input", 0),
+                tokens_output=metrics.get("tokens_output", 0),
+            )
 
             # Signal response complete — title generation follows asynchronously
             yield {"event": "done", "data": ""}

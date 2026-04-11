@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import { MessageBubble } from "@/components/message-bubble";
 import { Badge } from "@/components/ui/badge";
-import { Globe, FileText, Pencil, Code, Sparkles, Calculator } from "lucide-react";
+import { Globe, FileText, Pencil, Code, Sparkles, Calculator, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { Source, MessageMetrics } from "@/lib/api";
 
 const EXPLAIN_CODE_PROMPT = "Explain how this code works:\n```\n\n```";
@@ -67,6 +68,9 @@ interface ChatMessagesProps {
   actionText?: string | null;
   activeSkills?: string[];
   onEditMessage?: (index: number, newContent: string) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 function SkillBadges({ skills }: { skills: string[] }) {
@@ -85,7 +89,7 @@ function SkillBadges({ skills }: { skills: string[] }) {
 }
 
 
-export function ChatMessages({ messages, streamingContent, isLoading, actionText, activeSkills = [], onEditMessage }: ChatMessagesProps) {
+export function ChatMessages({ messages, streamingContent, isLoading, actionText, activeSkills = [], onEditMessage, hasMore, loadingMore, onLoadMore }: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,6 +102,22 @@ export function ChatMessages({ messages, streamingContent, isLoading, actionText
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-2 py-4 md:p-4">
       <div className="mx-auto max-w-3xl space-y-3">
+        {hasMore && onLoadMore && (
+          <div className="flex justify-center pb-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              disabled={loadingMore}
+              className="text-xs text-muted-foreground"
+            >
+              {loadingMore ? (
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+              ) : null}
+              {loadingMore ? "Loading..." : "Load older messages"}
+            </Button>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div key={msg.id}>
             {msg.role === "assistant" && msg.skillsUsed && msg.skillsUsed.length > 0 && (

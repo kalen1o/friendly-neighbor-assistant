@@ -37,6 +37,9 @@ export default function ChatPage() {
 
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(true);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const nextCursorRef = useRef<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,35 +141,39 @@ export default function ChatPage() {
 
   const sendingRef = useRef(false);
 
+  const mapMessages = useCallback((msgs: import("@/lib/api").MessageOut[]): DisplayMessage[] => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    return msgs.map((m) => {
+      const allSources = m.sources || [];
+      const realSources = allSources.filter((s) => s.type !== "skill");
+      const skills = allSources
+        .filter((s) => s.type === "skill" && s.tool)
+        .map((s) => s.tool!);
+      const attachedFiles = m.files?.map((f) => ({
+        url: `${apiBase}/api/uploads/${f.id}`,
+        name: f.name,
+        type: f.type,
+      }));
+      return {
+        id: m.id || nextMsgId(),
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        sources: realSources.length > 0 ? realSources : null,
+        skillsUsed: skills.length > 0 ? skills : null,
+        metrics: m.metrics || null,
+        files: attachedFiles && attachedFiles.length > 0 ? attachedFiles : undefined,
+      };
+    });
+  }, []);
+
   const loadChat = useCallback(async () => {
     // Don't overwrite messages while a send is in progress
     if (sendingRef.current) return;
     try {
-      const chat = await getChat(chatId);
-      setMessages(
-        chat.messages.map((m) => {
-          const allSources = m.sources || [];
-          const realSources = allSources.filter((s) => s.type !== "skill");
-          const skills = allSources
-            .filter((s) => s.type === "skill" && s.tool)
-            .map((s) => s.tool!);
-          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-          const attachedFiles = m.files?.map((f) => ({
-            url: `${apiBase}/api/uploads/${f.id}`,
-            name: f.name,
-            type: f.type,
-          }));
-          return {
-            id: m.id || nextMsgId(),
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            sources: realSources.length > 0 ? realSources : null,
-            skillsUsed: skills.length > 0 ? skills : null,
-            metrics: m.metrics || null,
-            files: attachedFiles && attachedFiles.length > 0 ? attachedFiles : undefined,
-          };
-        })
-      );
+      const chat = await getChat(chatId, 50);
+      setMessages(mapMessages(chat.messages));
+      setHasMoreMessages(chat.has_more ?? false);
+      nextCursorRef.current = chat.next_cursor ?? null;
       listArtifacts(chatId).then(arts => {
         setArtifacts(arts.map(a => ({
           id: a.id,
@@ -181,7 +188,23 @@ export default function ChatPage() {
     } finally {
       setChatLoading(false);
     }
-  }, [chatId]);
+  }, [chatId, mapMessages]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!nextCursorRef.current || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const chat = await getChat(chatId, 50, nextCursorRef.current);
+      const older = mapMessages(chat.messages);
+      setMessages((prev) => [...older, ...prev]);
+      setHasMoreMessages(chat.has_more ?? false);
+      nextCursorRef.current = chat.next_cursor ?? null;
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [chatId, loadingMore, mapMessages]);
 
   const doSend = (content: string, mode: ChatMode = "balanced", files: import("@/components/chat-input").PendingFile[] = []) => {
     sendingRef.current = true; // eslint-disable-line react-hooks/immutability -- ref is intentionally mutable
@@ -382,6 +405,9 @@ export default function ChatPage() {
               setMessages((prev) => prev.slice(0, index));
               handleSend(newContent);
             }}
+            hasMore={hasMoreMessages}
+            loadingMore={loadingMore}
+            onLoadMore={loadOlderMessages}
           />
         ) : null}
 

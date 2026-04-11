@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Trash2, AlertTriangle, Sun, Moon, Monitor } from "lucide-react";
+import { Trash2, AlertTriangle, Sun, Moon, Monitor, MessageSquare, Zap, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { deleteAllChats } from "@/lib/api";
+import { deleteAllChats, getUsage, type UsageStats } from "@/lib/api";
 import { toast } from "sonner";
 
 interface SettingsDialogProps {
@@ -47,6 +47,46 @@ function ThemeIcons() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function UsageSection() {
+  const [usage, setUsage] = useState<UsageStats | null>(null);
+
+  useEffect(() => {
+    getUsage().then(setUsage).catch(() => {});
+  }, []);
+
+  if (!usage) return null;
+
+  const stats = [
+    { icon: MessageSquare, label: "Messages", value: usage.messages },
+    { icon: Zap, label: "Tokens", value: formatTokens(usage.tokens_total) },
+    { icon: Wrench, label: "Tool calls", value: usage.tool_calls },
+  ];
+
+  return (
+    <div className="mt-6">
+      <h2 className="text-lg font-semibold">Usage</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Your usage this month ({usage.period})
+      </p>
+      <div className="grid grid-cols-3 gap-3">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-lg border p-3 text-center">
+            <s.icon className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground" />
+            <p className="text-lg font-semibold">{s.value}</p>
+            <p className="text-[10px] text-muted-foreground">{s.label}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -137,6 +177,8 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
               </div>
             </div>
           </div>
+
+          {open && <UsageSection />}
         </div>
       </DialogContent>
     </Dialog>
