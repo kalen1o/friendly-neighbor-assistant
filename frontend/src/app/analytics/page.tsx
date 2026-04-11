@@ -32,7 +32,7 @@ function formatLatency(s: number | null): string {
   return `${s.toFixed(1)}s`;
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { date: string; messages: number; tokens_total: number; cost_total: number } }> }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
@@ -120,7 +120,8 @@ export default function AnalyticsPage() {
   }, [requireAuth, days]);
 
   useEffect(() => {
-    fetchData();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchData();
   }, [fetchData]);
 
   if (loading) {
