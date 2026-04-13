@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SendHorizonal, Zap, Scale, Brain, Paperclip, X as XIcon } from "lucide-react";
 import type { ChatMode } from "@/lib/api";
 import { uploadChatFile } from "@/lib/api";
+import { ModelPicker } from "@/components/model-picker";
 
 const MODES: { value: ChatMode; label: string; icon: typeof Zap; description: string }[] = [
   { value: "fast", label: "Fast", icon: Zap, description: "Quick answers, fewer tools" },
@@ -24,13 +25,15 @@ interface ChatInputProps {
   onSend: (content: string, mode: ChatMode, files: PendingFile[]) => void;
   disabled: boolean;
   transparent?: boolean;
+  chatModelId?: string | null;
+  onModelChange?: (modelId: string | null) => void;
 }
 
 export interface ChatInputHandle {
   setInput: (text: string, cursorOffset?: number) => void;
 }
 
-export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, transparent }, ref) {
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, transparent, chatModelId, onModelChange }, ref) {
   const [value, setValue] = useState("");
   const [mode, setMode] = useState<ChatMode>("balanced");
   const [pendingFiles, setPendingFiles] = useState<
@@ -118,7 +121,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   };
 
   return (
-    <div className="px-2 py-3 md:p-4">
+    <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm px-2 py-3 md:relative md:bg-transparent md:backdrop-blur-none md:p-4">
       <div className="mx-auto max-w-3xl">
         {pendingFiles.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
@@ -193,6 +196,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           </Button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1">
+          <ModelPicker
+            selectedModelId={chatModelId ?? null}
+            onSelect={(id) => onModelChange?.(id)}
+          />
+          <div className="mx-1 h-4 w-px bg-border/50" />
           {MODES.map((m) => {
             const Icon = m.icon;
             const isActive = mode === m.value;
@@ -201,7 +209,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 key={m.value}
                 onClick={() => setMode(m.value)}
                 title={m.description}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] md:text-[11px] font-medium transition-all ${
+                className={`flex items-center gap-1 rounded-full px-3 py-2 text-[11px] md:text-[11px] md:px-2.5 md:py-1 font-medium transition-all ${
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground/60 hover:text-muted-foreground"

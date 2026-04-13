@@ -20,6 +20,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column()
     name: Mapped[str] = mapped_column()
     is_active: Mapped[bool] = mapped_column(default=True)
+    role: Mapped[str] = mapped_column(String(20), default="user", server_default="user")
     memory_enabled: Mapped[bool] = mapped_column(default=True)
     memories: Mapped[Optional[str]] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { Plus, FileText, Zap, Anchor, Plug, PanelLeft, PanelLeftClose, BarChart3 } from "lucide-react";
 import { useAuth } from "@/components/auth-guard";
 import { cn } from "@/lib/utils";
@@ -58,13 +59,13 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
           </Button>
         ) : (
           <>
-            <div className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg" />
               <div className="overflow-hidden">
                 <h1 className="truncate text-lg font-bold leading-tight tracking-tight">Friendly Neighbor</h1>
                 <p className="truncate text-xs text-muted-foreground">Your AI assistant</p>
               </div>
-            </div>
+            </Link>
             <Button variant="ghost" size="icon-sm" onClick={onToggle} title="Collapse sidebar" className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/sidebar:opacity-100">
               <PanelLeftClose className="h-4 w-4" />
             </Button>
@@ -73,8 +74,8 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
       </div>
 
       {/* Nav items */}
-      <div className={cn("flex flex-col gap-1.5", collapsed ? "items-center px-0" : "px-3")}>
-        {NAV_ITEMS.map(({ href, icon: Icon, label, iconBg, iconBgActive, iconColor }) => {
+      <div className={cn("flex flex-col gap-0.5", collapsed ? "items-center px-0" : "px-3")}>
+        {NAV_ITEMS.map(({ href, icon: Icon, label, iconBgActive, iconColor }) => {
           const isActive = pathname.startsWith(href);
           return (
             <button
@@ -82,29 +83,20 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
               onClick={() => router.push(href)}
               title={collapsed ? label : undefined}
               className={cn(
-                "group flex items-center rounded-xl transition-all",
+                "group flex items-center rounded-lg transition-colors",
                 collapsed
-                  ? cn("h-9 w-9 justify-center", isActive ? iconBgActive : iconBg)
+                  ? cn("h-9 w-9 justify-center", isActive ? iconBgActive : "hover:bg-accent")
                   : cn(
-                      "gap-3 border px-3 py-2.5 hover:shadow-md",
+                      "gap-2.5 px-2.5 py-1.5",
                       isActive
-                        ? "border-primary/30 bg-primary/5 shadow-md"
-                        : "border-border/60 bg-card shadow-sm hover:border-primary/30 hover:bg-accent"
+                        ? cn("bg-accent", iconColor)
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
                     )
               )}
             >
-              <div className={cn(
-                "flex shrink-0 items-center justify-center rounded-lg transition-colors",
-                collapsed ? "" : "h-8 w-8",
-                !collapsed && (isActive ? iconBgActive : iconBg)
-              )}>
-                <Icon className={cn("h-4 w-4", iconColor)} />
-              </div>
+              <Icon className="h-4 w-4 shrink-0" />
               {!collapsed && (
-                <span className={cn(
-                  "truncate text-sm font-medium transition-colors",
-                  isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
-                )}>
+                <span className="truncate text-[13px] font-medium">
                   {label}
                 </span>
               )}

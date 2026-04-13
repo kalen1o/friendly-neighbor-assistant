@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from typing import Optional
 
 import anthropic
 import openai
@@ -11,6 +12,7 @@ from tenacity import (
 )
 
 from app.config import Settings
+from app.llm.model_config import ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -65,33 +67,41 @@ SYSTEM_PROMPT = (
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 
 
-async def get_llm_response(messages: list[dict], settings: Settings) -> str:
-    if settings.ai_provider == "anthropic":
-        return await _anthropic_response(messages, settings)
-    elif settings.ai_provider == "openai":
-        return await _openai_response(messages, settings)
+async def get_llm_response(
+    messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
+) -> str:
+    provider = model_config.provider if model_config else settings.ai_provider
+    if provider == "anthropic":
+        return await _anthropic_response(messages, settings, model_config)
+    elif provider in ("openai", "openai_compatible"):
+        return await _openai_response(messages, settings, model_config)
     else:
-        raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
+        raise ValueError(f"Unsupported AI provider: {provider}")
 
 
 async def stream_llm_response(
-    messages: list[dict], settings: Settings
+    messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
 ) -> AsyncIterator[str]:
-    if settings.ai_provider == "anthropic":
-        async for chunk in _anthropic_stream(messages, settings):
+    provider = model_config.provider if model_config else settings.ai_provider
+    if provider == "anthropic":
+        async for chunk in _anthropic_stream(messages, settings, model_config):
             yield chunk
-    elif settings.ai_provider == "openai":
-        async for chunk in _openai_stream(messages, settings):
+    elif provider in ("openai", "openai_compatible"):
+        async for chunk in _openai_stream(messages, settings, model_config):
             yield chunk
     else:
-        raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
+        raise ValueError(f"Unsupported AI provider: {provider}")
 
 
 @_llm_retry
-async def _anthropic_response(messages: list[dict], settings: Settings) -> str:
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+async def _anthropic_response(
+    messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
+) -> str:
+    api_key = model_config.api_key if model_config else settings.anthropic_api_key
+    model = model_config.model_id if model_config else ANTHROPIC_MODEL
+    client = anthropic.AsyncAnthropic(api_key=api_key)
     response = await client.messages.create(
-        model=ANTHROPIC_MODEL,
+        model=model,
         max_tokens=4096,
         system=SYSTEM_PROMPT,
         messages=messages,
@@ -99,10 +109,17 @@ async def _anthropic_response(messages: list[dict], settings: Settings) -> str:
     return response.content[0].text
 
 
-def _build_openai_client(settings: Settings) -> openai.AsyncOpenAI:
-    kwargs: dict = {"api_key": settings.openai_api_key, "timeout": 120.0}
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
+def _build_openai_client(
+    settings: Settings, model_config: Optional[ModelConfig] = None
+) -> openai.AsyncOpenAI:
+    if model_config:
+        kwargs: dict = {"api_key": model_config.api_key, "timeout": 120.0}
+        if model_config.base_url:
+            kwargs["base_url"] = model_config.base_url
+    else:
+        kwargs = {"api_key": settings.openai_api_key, "timeout": 120.0}
+        if settings.openai_base_url:
+            kwargs["base_url"] = settings.openai_base_url
     return openai.AsyncOpenAI(**kwargs)
 
 
@@ -117,11 +134,14 @@ def _build_vision_client(settings: Settings) -> openai.AsyncOpenAI:
 
 
 @_llm_retry
-async def _openai_response(messages: list[dict], settings: Settings) -> str:
-    client = _build_openai_client(settings)
+async def _openai_response(
+    messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
+) -> str:
+    client = _build_openai_client(settings, model_config)
+    model = model_config.model_id if model_config else settings.openai_model
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     response = await client.chat.completions.create(
-        model=settings.openai_model,
+        model=model,
         messages=full_messages,
     )
     return response.choices[0].message.content
@@ -180,12 +200,14 @@ def _convert_tools_to_anthropic(tools: list) -> list:
 
 
 async def _anthropic_stream(
-    messages: list[dict], settings: Settings
+    messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
 ) -> AsyncIterator[str]:
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    api_key = model_config.api_key if model_config else settings.anthropic_api_key
+    model = model_config.model_id if model_config else ANTHROPIC_MODEL
+    client = anthropic.AsyncAnthropic(api_key=api_key)
     converted = _convert_to_anthropic_format(messages)
     async with client.messages.stream(
-        model=ANTHROPIC_MODEL,
+        model=model,
         max_tokens=4096,
         system=SYSTEM_PROMPT,
         messages=converted,
@@ -201,16 +223,19 @@ async def _anthropic_stream_with_tools(
     tool_executor=None,
     on_tool_call=None,
     max_tool_rounds: int = 5,
+    model_config: Optional[ModelConfig] = None,
 ) -> AsyncIterator[str]:
     """Anthropic streaming with multi-turn tool calling loop."""
     import asyncio as _asyncio
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    api_key = model_config.api_key if model_config else settings.anthropic_api_key
+    model = model_config.model_id if model_config else ANTHROPIC_MODEL
+    client = anthropic.AsyncAnthropic(api_key=api_key)
     converted = _convert_to_anthropic_format(messages)
     anthropic_tools = _convert_tools_to_anthropic(tools) if tools else []
 
     kwargs = {
-        "model": ANTHROPIC_MODEL,
+        "model": model,
         "max_tokens": 4096,
         "system": SYSTEM_PROMPT,
         "messages": converted,
@@ -278,12 +303,13 @@ async def _anthropic_stream_with_tools(
 
 
 async def _openai_stream(
-    messages: list[dict], settings: Settings
+    messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
 ) -> AsyncIterator[str]:
-    client = _build_openai_client(settings)
+    client = _build_openai_client(settings, model_config)
+    model = model_config.model_id if model_config else settings.openai_model
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     stream = await client.chat.completions.create(
-        model=settings.openai_model,
+        model=model,
         messages=full_messages,
         stream=True,
     )
@@ -332,6 +358,7 @@ async def stream_with_tools(
     on_tool_call=None,
     max_tool_rounds: int = None,
     vision: bool = False,
+    model_config: Optional[ModelConfig] = None,
 ) -> AsyncIterator[str]:
     """Stream LLM response with native tool calling support.
 
@@ -346,9 +373,11 @@ async def stream_with_tools(
         tools: List of tool definitions (OpenAI function calling format)
         tool_executor: async fn(tool_name, arguments) -> str
         on_tool_call: async fn(tool_name) -> None (for SSE action events)
+        model_config: Optional per-request model override
     """
     rounds = max_tool_rounds or settings.max_tool_rounds
-    if settings.ai_provider == "openai":
+    provider = model_config.provider if model_config else settings.ai_provider
+    if provider in ("openai", "openai_compatible"):
         raw = _openai_stream_with_tools(
             messages,
             settings,
@@ -357,16 +386,18 @@ async def stream_with_tools(
             on_tool_call,
             rounds,
             vision=vision,
+            model_config=model_config,
         )
-    elif settings.ai_provider == "anthropic":
+    elif provider == "anthropic":
         if tools and not vision:
             raw = _anthropic_stream_with_tools(
-                messages, settings, tools, tool_executor, on_tool_call, rounds
+                messages, settings, tools, tool_executor, on_tool_call, rounds,
+                model_config=model_config,
             )
         else:
-            raw = _anthropic_stream(messages, settings)
+            raw = _anthropic_stream(messages, settings, model_config)
     else:
-        raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
+        raise ValueError(f"Unsupported AI provider: {provider}")
 
     async for chunk in _buffered_stream(raw):
         yield chunk
@@ -380,17 +411,19 @@ async def _openai_stream_with_tools(
     on_tool_call=None,
     max_tool_rounds: int = 5,
     vision: bool = False,
+    model_config: Optional[ModelConfig] = None,
 ) -> AsyncIterator[str]:
     """OpenAI-compatible streaming with tool calling loop."""
 
-    client = (
-        _build_vision_client(settings) if vision else _build_openai_client(settings)
-    )
-    model = (
-        (settings.vision_model or settings.openai_model)
-        if vision
-        else settings.openai_model
-    )
+    if model_config:
+        client = _build_openai_client(settings, model_config)
+        model = model_config.model_id
+    elif vision:
+        client = _build_vision_client(settings)
+        model = settings.vision_model or settings.openai_model
+    else:
+        client = _build_openai_client(settings)
+        model = settings.openai_model
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
 
     # Build API kwargs
@@ -453,6 +486,18 @@ async def _openai_stream_with_tools(
 
             if chunk.choices[0].finish_reason == "tool_calls":
                 break  # Need to execute tools
+
+        # Log what the LLM returned this round
+        if tool_calls_in_progress:
+            for tc_idx, tc_data in tool_calls_in_progress.items():
+                logger.info(
+                    "Tool round %d: LLM requested tool=%s query=%s",
+                    round_num + 1,
+                    tc_data["name"],
+                    tc_data["arguments"][:200],
+                )
+        else:
+            logger.info("Tool round %d: LLM returned text only, no tool calls", round_num + 1)
 
         # If no tool calls were made, we're done
         if not tool_calls_in_progress:

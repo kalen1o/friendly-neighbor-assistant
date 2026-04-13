@@ -54,6 +54,7 @@ class SkillDefinition:
         enabled: bool = True,
         builtin: bool = False,
         file_path: Optional[str] = None,
+        model: Optional[str] = None,
     ):
         self.name = name
         self.description = description
@@ -62,6 +63,7 @@ class SkillDefinition:
         self.enabled = enabled
         self.builtin = builtin
         self.file_path = file_path  # for lazy content loading
+        self.model = model  # e.g. "anthropic:claude-sonnet-4-20250514"
 
     @property
     def content(self) -> str:
@@ -106,6 +108,7 @@ class SkillRegistry:
                     enabled=skill.enabled,
                     builtin=True,
                     file_path=skill.file_path,
+                    model=skill.model,
                 )
             logger.debug(f"Loaded {len(_metadata_cache)} skills from cache")
             return
@@ -131,6 +134,7 @@ class SkillRegistry:
                     enabled=meta.get("enabled", True),
                     builtin=True,
                     file_path=str(path),
+                    model=meta.get("model") or None,
                 )
                 self._skills[name] = skill
                 _metadata_cache[name] = skill
@@ -141,7 +145,7 @@ class SkillRegistry:
     def load_user_skills(self, db_skills: list):
         """Load user-created skills from DB records."""
         for record in db_skills:
-            _, body = _parse_frontmatter(record.content)
+            meta, body = _parse_frontmatter(record.content)
             skill = SkillDefinition(
                 name=record.name,
                 description=record.description,
@@ -149,6 +153,7 @@ class SkillRegistry:
                 content=body,
                 enabled=record.enabled,
                 builtin=False,
+                model=meta.get("model") or None,
             )
             self._skills[record.name] = skill
 
@@ -170,6 +175,19 @@ class SkillRegistry:
         for skill in enabled:
             lines.append(skill.to_index_entry())
         return "\n".join(lines)
+
+    def get_skill_model(self, skill_names: List[str]) -> Optional[str]:
+        """Get the model override from the first skill that specifies one.
+
+        When multiple skills are selected, the first skill with a `model`
+        field takes priority. Returns format like "anthropic:claude-sonnet-4-20250514"
+        or None if no skill specifies a model.
+        """
+        for name in skill_names:
+            skill = self._skills.get(name)
+            if skill and skill.model:
+                return skill.model
+        return None
 
     def get_skill_names(self) -> List[str]:
         return list(self._skills.keys())

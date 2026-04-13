@@ -58,6 +58,7 @@ export interface UserInfo {
   id: string;
   email: string;
   name: string;
+  role: string;
   created_at: string;
 }
 
@@ -110,6 +111,9 @@ export interface ChatSummary {
   id: string;
   title: string | null;
   updated_at: string;
+  folder_id: string | null;
+  model_id: string | null;
+  has_notification: boolean;
 }
 
 export interface Source {
@@ -155,6 +159,7 @@ export interface ChatDetail {
   messages: MessageOut[];
   has_more?: boolean;
   next_cursor?: string | null;
+  model_id?: string | null;
 }
 
 // ── Chat CRUD ──
@@ -174,9 +179,14 @@ export interface ChatListResponse {
   has_more: boolean;
 }
 
-export async function listChats(cursor?: string | null, limit = 20): Promise<ChatListResponse> {
+export async function listChats(
+  cursor?: string | null,
+  limit = 20,
+  folderId?: string | null
+): Promise<ChatListResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
+  if (folderId !== undefined && folderId !== null) params.set("folder_id", folderId);
   const res = await authFetch(`${API_BASE}/api/chats?${params}`);
   if (!res.ok) throw new Error("Failed to list chats");
   return res.json();
@@ -194,11 +204,17 @@ export async function getChat(chatId: string, limit?: number, before?: string): 
 
 export async function updateChat(
   chatId: string,
-  title: string
+  title?: string,
+  folderId?: string | null,
+  modelId?: string | null
 ): Promise<ChatDetail> {
+  const body: Record<string, unknown> = {};
+  if (title !== undefined) body.title = title;
+  if (folderId !== undefined) body.folder_id = folderId === null ? "none" : folderId;
+  if (modelId !== undefined) body.model_id = modelId === null ? "" : modelId;
   const res = await authFetch(`${API_BASE}/api/chats/${chatId}`, {
     method: "PATCH",
-    body: JSON.stringify({ title }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error("Failed to update chat");
   return res.json();
@@ -216,6 +232,163 @@ export async function deleteAllChats(): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete all chats");
+}
+
+// ── Folder Types ──
+
+export interface FolderOut {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  color: string | null;
+  icon: string | null;
+  position: number;
+  chat_count: number;
+}
+
+export interface FolderCreate {
+  name: string;
+  parent_id?: string | null;
+  color?: string | null;
+  icon?: string | null;
+}
+
+export interface FolderUpdate {
+  name?: string;
+  parent_id?: string | null;
+  color?: string | null;
+  icon?: string | null;
+  position?: number;
+}
+
+// ── Folder CRUD ──
+
+export async function listFolders(): Promise<FolderOut[]> {
+  const res = await authFetch(`${API_BASE}/api/folders`);
+  if (!res.ok) throw new Error("Failed to list folders");
+  return res.json();
+}
+
+export async function createFolder(folder: FolderCreate): Promise<FolderOut> {
+  const res = await authFetch(`${API_BASE}/api/folders`, {
+    method: "POST",
+    body: JSON.stringify(folder),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create folder" }));
+    throw new Error(err.detail || "Failed to create folder");
+  }
+  return res.json();
+}
+
+export async function updateFolder(
+  folderId: string,
+  updates: FolderUpdate
+): Promise<FolderOut> {
+  const res = await authFetch(`${API_BASE}/api/folders/${folderId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update folder" }));
+    throw new Error(err.detail || "Failed to update folder");
+  }
+  return res.json();
+}
+
+export async function deleteFolder(
+  folderId: string,
+  action: "move_up" | "delete_all"
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/api/folders/${folderId}?action=${action}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error("Failed to delete folder");
+}
+
+// ── Model Types ──
+
+export interface ModelOut {
+  id: string;
+  name: string;
+  provider: string;
+  model_id: string;
+  base_url: string | null;
+  is_default: boolean;
+  builtin: boolean;
+  created_at: string | null;
+}
+
+export interface ModelCreate {
+  name: string;
+  provider: string;
+  model_id: string;
+  api_key: string;
+  base_url?: string | null;
+}
+
+export interface ModelUpdate {
+  name?: string;
+  model_id?: string;
+  api_key?: string;
+  base_url?: string | null;
+  is_default?: boolean;
+}
+
+export interface ModelTestResult {
+  success: boolean;
+  message: string;
+}
+
+// ── Model CRUD ──
+
+export async function listModels(): Promise<ModelOut[]> {
+  const res = await authFetch(`${API_BASE}/api/models`);
+  if (!res.ok) throw new Error("Failed to list models");
+  return res.json();
+}
+
+export async function createModel(model: ModelCreate): Promise<ModelOut> {
+  const res = await authFetch(`${API_BASE}/api/models`, {
+    method: "POST",
+    body: JSON.stringify(model),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create model" }));
+    throw new Error(err.detail || "Failed to create model");
+  }
+  return res.json();
+}
+
+export async function updateModel(
+  modelId: string,
+  updates: ModelUpdate
+): Promise<ModelOut> {
+  const res = await authFetch(`${API_BASE}/api/models/${modelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update model" }));
+    throw new Error(err.detail || "Failed to update model");
+  }
+  return res.json();
+}
+
+export async function deleteModel(modelId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/models/${modelId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete model");
+}
+
+export async function testModel(modelId: string): Promise<ModelTestResult> {
+  const res = await authFetch(`${API_BASE}/api/models/${modelId}/test`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to test model");
+  return res.json();
 }
 
 // ── Streaming messages ──
@@ -865,5 +1038,137 @@ export async function getAnalytics(days: number = 30): Promise<AnalyticsResponse
   const res = await authFetch(`${API_BASE}/api/analytics?days=${days}`);
   if (!res.ok) throw new Error("Failed to get analytics");
   return res.json();
+}
+
+// ── Admin Types ──
+
+export interface UserAdmin {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+  is_env_admin: boolean;
+  created_at: string;
+  messages_this_month: number;
+  tokens_this_month: number;
+}
+
+export interface SystemAnalytics {
+  total_users: number;
+  active_users_30d: number;
+  total_messages: number;
+  total_tokens: number;
+  total_cost: number;
+  daily: { date: string; messages: number; tokens: number; cost: number }[];
+}
+
+export interface AuditEntry {
+  id: number;
+  user_email: string | null;
+  user_name: string | null;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  details: string | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+export interface AuditPage {
+  entries: AuditEntry[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface UserQuotaOut {
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  messages_soft: number | null;
+  messages_hard: number | null;
+  tokens_soft: number | null;
+  tokens_hard: number | null;
+  messages_used: number;
+  tokens_used: number;
+}
+
+// ── Admin API ──
+
+export async function adminListUsers(): Promise<UserAdmin[]> {
+  const res = await authFetch(`${API_BASE}/api/admin/users`);
+  if (!res.ok) throw new Error("Failed to list users");
+  return res.json();
+}
+
+export async function adminUpdateUser(
+  userId: string,
+  updates: { role?: string; is_active?: boolean }
+): Promise<UserAdmin> {
+  const res = await authFetch(`${API_BASE}/api/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed" }));
+    throw new Error(err.detail || "Failed to update user");
+  }
+  return res.json();
+}
+
+export async function adminDeleteUser(userId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed" }));
+    throw new Error(err.detail || "Failed to delete user");
+  }
+}
+
+export async function adminGetAnalytics(days = 30): Promise<SystemAnalytics> {
+  const res = await authFetch(`${API_BASE}/api/admin/analytics?days=${days}`);
+  if (!res.ok) throw new Error("Failed to get analytics");
+  return res.json();
+}
+
+export async function adminGetAudit(
+  cursor?: string | null,
+  action?: string,
+  userId?: string
+): Promise<AuditPage> {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+  if (action) params.set("action", action);
+  if (userId) params.set("user_id", userId);
+  const qs = params.toString();
+  const res = await authFetch(`${API_BASE}/api/admin/audit${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw new Error("Failed to get audit log");
+  return res.json();
+}
+
+export async function adminListQuotas(): Promise<UserQuotaOut[]> {
+  const res = await authFetch(`${API_BASE}/api/admin/quotas`);
+  if (!res.ok) throw new Error("Failed to list quotas");
+  return res.json();
+}
+
+export async function adminSetQuota(
+  userId: string,
+  quota: { messages_soft?: number | null; messages_hard?: number | null; tokens_soft?: number | null; tokens_hard?: number | null }
+): Promise<UserQuotaOut> {
+  const res = await authFetch(`${API_BASE}/api/admin/quotas/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify(quota),
+  });
+  if (!res.ok) throw new Error("Failed to set quota");
+  return res.json();
+}
+
+export async function adminDeleteQuota(userId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/admin/quotas/${userId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete quota");
 }
 

@@ -19,6 +19,9 @@ from app.routers.analytics import router as analytics_router
 from app.routers.artifacts import router as artifacts_router
 from app.routers.export import router as export_router
 
+from app.routers.folders import router as folders_router
+from app.routers.admin import router as admin_router
+from app.routers.models import router as models_router
 from app.routers.skills import router as skills_router
 from app.routers.uploads import router as uploads_router
 
@@ -65,4 +68,7 @@ app.include_router(sharing_router)
 app.include_router(artifacts_router)
 app.include_router(export_router)
 app.include_router(analytics_router)
+app.include_router(folders_router)
 app.include_router(uploads_router)
+app.include_router(models_router)
+app.include_router(admin_router)

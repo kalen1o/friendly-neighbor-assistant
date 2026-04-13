@@ -4,7 +4,7 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -12,6 +12,8 @@ from app.utils.ids import generate_public_id
 
 if TYPE_CHECKING:
     from app.models.chat_file import ChatFile
+    from app.models.folder import Folder
+    from app.models.user_model import UserModel
 
 
 class Chat(Base):
@@ -26,6 +28,18 @@ class Chat(Base):
     )
     title: Mapped[Optional[str]] = mapped_column(default=None)
     context_summary: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    folder_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("folders.id", ondelete="SET NULL"), default=None, nullable=True
+    )
+    user_model_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("user_models.id", ondelete="SET NULL"), default=None, nullable=True
+    )
+    selected_model_slug: Mapped[Optional[str]] = mapped_column(
+        String(200), default=None, nullable=True
+    )
+    has_notification: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -37,6 +51,9 @@ class Chat(Base):
         back_populates="chat",
         cascade="all, delete-orphan",
         order_by="Message.created_at",
+    )
+    folder: Mapped[Optional["Folder"]] = relationship(
+        "Folder", back_populates="chats", foreign_keys=[folder_id]
     )
 
 

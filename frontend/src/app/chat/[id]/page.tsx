@@ -1,21 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Share2, Search, Download } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
-import { ChatMessages, EmptyState, nextMsgId, type DisplayMessage } from "@/components/chat-messages";
-import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
+import { ChatMessages, EmptyState } from "@/components/chat-messages";
+import { ChatInput, type ChatInputHandle, type PendingFile } from "@/components/chat-input";
 import { Button } from "@/components/ui/button";
 import { ShareDialog } from "@/components/share-dialog";
 import { ExportDialog } from "@/components/export-dialog";
-import { getChat, sendMessage, listArtifacts, type Source, type MessageMetrics, type ChatMode, type ArtifactData } from "@/lib/api";
+import { updateChat, type ChatMode } from "@/lib/api";
 import { ArtifactPanel } from "@/components/artifact-panel";
 import { ArtifactCard } from "@/components/artifact-card";
 import { useAuth } from "@/components/auth-guard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
+import { useMessageStream } from "@/hooks/use-message-stream";
+
+function KbdShortcut() {
+  const [mod, setMod] = useState("Ctrl");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (/Mac|iPhone|iPad/.test(navigator.userAgent)) setMod("⌘");
+  }, []);
+  return <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{mod} + K</kbd>;
+}
 
 function MobileHeaderActions({ show, children }: { show: boolean; children: React.ReactNode }) {
   const [target, setTarget] = useState<HTMLElement | null>(null);
@@ -29,28 +38,34 @@ function MobileHeaderActions({ show, children }: { show: boolean; children: Reac
 
 export default function ChatPage() {
   const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { requireAuth } = useAuth();
   const chatId = params.id as string;
-  const initialQuerySent = useRef(false);
 
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
-  const [chatLoading, setChatLoading] = useState(true);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const nextCursorRef = useRef<string | null>(null);
-  const [streamingContent, setStreamingContent] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [actionText, setActionText] = useState<string | null>(null);
-  const [activeSkills, setActiveSkills] = useState<string[]>([]);
+  const {
+    messages,
+    setMessages,
+    chatLoading,
+    hasMoreMessages,
+    loadingMore,
+    streamingContent,
+    isStreaming,
+    isLoading,
+    actionText,
+    activeSkills,
+    artifacts,
+    setArtifacts,
+    activeArtifact,
+    setActiveArtifact,
+    chatModelId,
+    setChatModelId,
+    loadOlderMessages,
+    doSend,
+  } = useMessageStream(chatId);
+
   const chatInputRef = useRef<ChatInputHandle>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
-  const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
-  const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
 
   // Cmd+K shortcut
   useEffect(() => {
@@ -64,241 +79,7 @@ export default function ChatPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Accumulated text from SSE chunks (full received text)
-  const fullTextRef = useRef("");
-  // How many characters have been revealed by the typewriter
-  const revealedRef = useRef(0);
-  // Whether the SSE stream has finished
-  const doneRef = useRef(false);
-  // Typewriter interval ID
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Sources received from SSE for the current response
-  const sourcesRef = useRef<Source[] | null>(null);
-  // Metrics received from SSE for the current response
-  const metricsRef = useRef<MessageMetrics | null>(null);
-  // Skills used during the current response
-  const skillsUsedRef = useRef<string[]>([]);
-
-  const stopTypewriter = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  const finalizeMessage = useCallback(() => {
-    stopTypewriter();
-    const finalContent = fullTextRef.current;
-    const allSources = sourcesRef.current || [];
-    const realSources = allSources.filter((s) => s.type !== "skill");
-    const finalSkills = [...skillsUsedRef.current];
-    const finalMetrics = metricsRef.current;
-    if (finalContent) {
-      setMessages((msgs) => [
-        ...msgs,
-        { id: nextMsgId(), role: "assistant", content: finalContent, sources: realSources.length > 0 ? realSources : null, skillsUsed: finalSkills.length > 0 ? finalSkills : null, metrics: finalMetrics },
-      ]);
-    }
-    setStreamingContent("");
-    setActiveSkills([]);
-    fullTextRef.current = "";
-    revealedRef.current = 0;
-    doneRef.current = false;
-    sourcesRef.current = null;
-    metricsRef.current = null;
-    skillsUsedRef.current = [];
-    setIsStreaming(false);
-    sendingRef.current = false;
-  }, [stopTypewriter]);
-
-  const startTypewriter = useCallback(() => {
-    if (intervalRef.current) return;
-    intervalRef.current = setInterval(() => {
-      const full = fullTextRef.current;
-      const revealed = revealedRef.current;
-
-      if (revealed < full.length) {
-        // Advance to next word boundary
-        const behind = full.length - revealed;
-        const wordsPerTick = behind > 200 ? Math.ceil(behind / 15) : behind > 50 ? 2 : 1;
-        let next = revealed;
-        for (let w = 0; w < wordsPerTick && next < full.length; w++) {
-          // Skip whitespace
-          while (next < full.length && /\s/.test(full[next])) next++;
-          // Skip to end of word
-          while (next < full.length && !/\s/.test(full[next])) next++;
-        }
-        revealedRef.current = next;
-        setStreamingContent(full.slice(0, next));
-      } else if (doneRef.current) {
-        finalizeMessage();
-      }
-    }, 30);
-  }, [finalizeMessage]);
-
-  // Clean up interval on unmount
-  useEffect(() => stopTypewriter, [stopTypewriter]);
-
-  const sendingRef = useRef(false);
-
-  const mapMessages = useCallback((msgs: import("@/lib/api").MessageOut[]): DisplayMessage[] => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    return msgs.map((m) => {
-      const allSources = m.sources || [];
-      const realSources = allSources.filter((s) => s.type !== "skill");
-      const skills = allSources
-        .filter((s) => s.type === "skill" && s.tool)
-        .map((s) => s.tool!);
-      const attachedFiles = m.files?.map((f) => ({
-        url: `${apiBase}/api/uploads/${f.id}`,
-        name: f.name,
-        type: f.type,
-      }));
-      return {
-        id: m.id || nextMsgId(),
-        role: m.role as "user" | "assistant",
-        content: m.content,
-        sources: realSources.length > 0 ? realSources : null,
-        skillsUsed: skills.length > 0 ? skills : null,
-        metrics: m.metrics || null,
-        files: attachedFiles && attachedFiles.length > 0 ? attachedFiles : undefined,
-      };
-    });
-  }, []);
-
-  const loadChat = useCallback(async () => {
-    // Don't overwrite messages while a send is in progress
-    if (sendingRef.current) return;
-    try {
-      const chat = await getChat(chatId, 50);
-      setMessages(mapMessages(chat.messages));
-      setHasMoreMessages(chat.has_more ?? false);
-      nextCursorRef.current = chat.next_cursor ?? null;
-      listArtifacts(chatId).then(arts => {
-        setArtifacts(arts.map(a => ({
-          id: a.id,
-          type: (a.artifact_type || a.type) as "react" | "html",
-          title: a.title,
-          code: a.code,
-        })));
-      }).catch(() => {});
-    } catch (e) {
-      toast.error("Chat not found");
-      router.replace("/");
-    } finally {
-      setChatLoading(false);
-    }
-  }, [chatId, mapMessages]);
-
-  const loadOlderMessages = useCallback(async () => {
-    if (!nextCursorRef.current || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const chat = await getChat(chatId, 50, nextCursorRef.current);
-      const older = mapMessages(chat.messages);
-      setMessages((prev) => [...older, ...prev]);
-      setHasMoreMessages(chat.has_more ?? false);
-      nextCursorRef.current = chat.next_cursor ?? null;
-    } catch {
-      // ignore
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [chatId, loadingMore, mapMessages]);
-
-  const doSend = (content: string, mode: ChatMode = "balanced", files: import("@/components/chat-input").PendingFile[] = []) => {
-    sendingRef.current = true; // eslint-disable-line react-hooks/immutability -- ref is intentionally mutable
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const attachedFiles = files.map((f) => ({
-      url: f.previewUrl || `${apiBase}/api/uploads/${f.id}`,
-      name: f.filename,
-      type: f.file_type,
-    }));
-    setMessages((prev) => [...prev, { id: nextMsgId(), role: "user", content, files: attachedFiles.length > 0 ? attachedFiles : undefined }]);
-    const fileIds = files.map((f) => f.id);
-    setStreamingContent("");
-    fullTextRef.current = "";
-    revealedRef.current = 0;
-    doneRef.current = false;
-    sourcesRef.current = null;
-    metricsRef.current = null;
-    skillsUsedRef.current = [];
-    setActiveSkills([]);
-    setIsStreaming(true);
-    setIsLoading(true);
-    setActionText(null);
-
-    sendMessage(chatId, content, {
-      onAction: (action) => {
-        setActionText(action);
-        setIsLoading(true);
-        const match = action.match(/^Using (\w+)/);
-        if (match) {
-          const skillName = match[1];
-          if (!skillsUsedRef.current.includes(skillName)) {
-            skillsUsedRef.current.push(skillName);
-            setActiveSkills([...skillsUsedRef.current]);
-          }
-        }
-      },
-      onMetrics: (metrics) => {
-        metricsRef.current = metrics;
-      },
-      onSources: (sources) => {
-        sourcesRef.current = sources;
-      },
-      onArtifact: (artifact) => {
-        setArtifacts(prev => [...prev, artifact]);
-        setActiveArtifact(artifact);
-      },
-      onMessage: (chunk) => {
-        setIsLoading(false);
-        fullTextRef.current += chunk;
-        startTypewriter();
-      },
-      onTitle: () => {
-        window.dispatchEvent(new Event("chat-title-updated"));
-      },
-      onDone: () => {
-        doneRef.current = true;
-        setIsLoading(false);
-        setActionText(null);
-        // If typewriter already caught up, finalize now
-        if (!intervalRef.current) {
-          finalizeMessage();
-        }
-      },
-      onError: (err) => {
-        stopTypewriter();
-        sendingRef.current = false;
-        toast.error(err);
-        setStreamingContent("");
-        fullTextRef.current = "";
-        revealedRef.current = 0;
-        doneRef.current = false;
-        setIsLoading(false);
-        setActionText(null);
-        setIsStreaming(false);
-      },
-    }, mode, fileIds);
-  };
-
-  useEffect(() => {
-    const q = searchParams.get("q");
-    const mode = (searchParams.get("mode") || "balanced") as ChatMode;
-
-    if (q && !initialQuerySent.current) {
-      // Auto-send from URL — skip loadChat since the chat is empty
-      initialQuerySent.current = true;
-      setChatLoading(false);
-      router.replace(`/chat/${chatId}`);
-      doSend(q, mode);
-    } else if (!initialQuerySent.current || !sendingRef.current) {
-      loadChat();
-    }
-  }, [loadChat]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleSend = async (content: string, mode: ChatMode = "balanced", files: import("@/components/chat-input").PendingFile[] = []) => {
+  const handleSend = async (content: string, mode: ChatMode = "balanced", files: PendingFile[] = []) => {
     const authed = await requireAuth();
     if (!authed) {
       chatInputRef.current?.setInput(content);
@@ -316,6 +97,7 @@ export default function ChatPage() {
       const timer = setTimeout(() => setShowSuggestions(false), 500);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowSuggestions(true);
   }, [isEmpty]);
 
@@ -326,8 +108,9 @@ export default function ChatPage() {
         {/* Desktop action buttons — non-overlapping header row */}
         {!isEmpty && (
           <div className="hidden items-center justify-end gap-1 px-4 py-2 md:flex">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCmdOpen(true)} title="Search (⌘K)">
-              <Search className="h-4 w-4" />
+            <Button variant="ghost" className="h-8 gap-1.5 px-2.5 text-muted-foreground" onClick={() => setCmdOpen(true)}>
+              <Search className="h-3.5 w-3.5" />
+              <KbdShortcut />
             </Button>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShareOpen(true)} title="Share">
               <Share2 className="h-4 w-4" />
@@ -437,7 +220,17 @@ export default function ChatPage() {
         )}
 
         <div className={`transition-[padding] duration-500 ${isEmpty ? "pt-6" : "pt-0"}`}>
-          <ChatInput ref={chatInputRef} onSend={handleSend} disabled={isStreaming} transparent={isEmpty} />
+          <ChatInput
+            ref={chatInputRef}
+            onSend={handleSend}
+            disabled={isStreaming}
+            transparent={isEmpty}
+            chatModelId={chatModelId}
+            onModelChange={async (modelId) => {
+              setChatModelId(modelId);
+              await updateChat(chatId, undefined, undefined, modelId);
+            }}
+          />
         </div>
 
         {/* Bottom spacer: mirrors top spacer to keep content centered */}

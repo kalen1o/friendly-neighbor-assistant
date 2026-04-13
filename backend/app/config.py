@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Project models — comma-separated, format: provider:model_id
+    # e.g. "openai:gpt-4o,openai:gpt-4o-mini,anthropic:claude-sonnet-4-20250514"
+    # If empty, a single default is derived from ai_provider + openai_model
+    project_models: str = ""
+
+    # Encryption for user API keys
+    encryption_key: str = ""  # Fernet key; if empty, custom models disabled
+
+    # Admin — emails that get admin role on registration
+    admin_emails: str = ""  # comma-separated
+
 
 def get_settings() -> Settings:
     settings = Settings()

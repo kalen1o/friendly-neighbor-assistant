@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { deleteAllChats, getUsage, type UsageStats } from "@/lib/api";
 import { toast } from "sonner";
+import { ModelSettings } from "@/components/model-settings";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -93,6 +94,7 @@ function UsageSection() {
 
 export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsDialogProps) {
   const router = useRouter();
+  const [tab, setTab] = useState<"general" | "models">("general");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -114,13 +116,40 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setConfirmDelete(false); }}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="h-full max-h-screen w-full sm:h-auto sm:max-w-lg p-0 gap-0 overflow-hidden">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <p className="text-sm font-semibold">Settings</p>
           <ThemeIcons />
         </div>
 
-        <div className="p-5">
+        <div className="flex border-b">
+          <button
+            onClick={() => setTab("general")}
+            className={cn(
+              "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+              tab === "general"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            General
+          </button>
+          <button
+            onClick={() => setTab("models")}
+            className={cn(
+              "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+              tab === "models"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Models
+          </button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto p-5 sm:max-h-none">
+          {tab === "general" ? (
+            <>
           <h2 className="text-lg font-semibold">Chats</h2>
           <p className="mb-6 text-sm text-muted-foreground">
             Manage your conversation history.
@@ -179,6 +208,10 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
           </div>
 
           {open && <UsageSection />}
+            </>
+          ) : (
+            <ModelSettings />
+          )}
         </div>
       </DialogContent>
     </Dialog>

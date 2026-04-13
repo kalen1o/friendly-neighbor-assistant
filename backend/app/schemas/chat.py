@@ -9,7 +9,9 @@ class ChatCreate(BaseModel):
 
 
 class ChatUpdate(BaseModel):
-    title: str
+    title: Optional[str] = None
+    folder_id: Optional[str] = None
+    model_id: Optional[str] = None
 
 
 class MessageCreate(BaseModel):
@@ -79,6 +81,9 @@ class ChatSummary(BaseModel):
     id: str = Field(validation_alias="public_id")
     title: Optional[str]
     updated_at: datetime
+    folder_id: Optional[str] = None
+    model_id: Optional[str] = None
+    has_notification: bool = False
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

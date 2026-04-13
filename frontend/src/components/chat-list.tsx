@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Pencil } from "lucide-react";
+import { Trash2, Pencil, Loader2, CheckCircle2 } from "lucide-react";
+import { isStreamGenerating } from "@/lib/active-streams";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import type { ChatSummary } from "@/lib/api";
@@ -13,6 +14,12 @@ interface ChatListProps {
   activeChatId: string | null;
   onDelete: (chatId: string) => void;
   onRename: (chatId: string, title: string) => void;
+}
+
+function isRecentlyUpdated(dateStr: string): boolean {
+  const updated = new Date(dateStr).getTime();
+  const now = Date.now();
+  return now - updated < 30000; // 30 seconds
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -91,9 +98,16 @@ function ChatItem({
               className="m-0 h-[1.25rem] w-full truncate border-0 bg-transparent p-0 text-sm font-medium outline-none ring-0 focus:ring-0"
             />
           ) : (
-            <p className="truncate font-medium">
-              {chat.title || "New Chat"}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="truncate font-medium">
+                {chat.title || "New Chat"}
+              </p>
+              {chat.has_notification && (
+                isStreamGenerating(chat.id)
+                  ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                  : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+              )}
+            </div>
           )}
           <p className="text-xs text-muted-foreground">
             {formatRelativeTime(chat.updated_at)}

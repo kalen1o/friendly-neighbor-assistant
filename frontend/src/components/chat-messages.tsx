@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { MessageBubble } from "@/components/message-bubble";
 import { Badge } from "@/components/ui/badge";
 import { Globe, FileText, Pencil, Code, Sparkles, Calculator, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import type { Source, MessageMetrics } from "@/lib/api";
 
 const EXPLAIN_CODE_PROMPT = "Explain how this code works:\n```\n\n```";
@@ -91,35 +90,72 @@ function SkillBadges({ skills }: { skills: string[] }) {
 
 export function ChatMessages({ messages, streamingContent, isLoading, actionText, activeSkills = [], onEditMessage, hasMore, loadingMore, onLoadMore }: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(messages.length);
+  const isLoadingOlderRef = useRef(false);
 
+  // Auto-scroll to bottom only for new messages (not when prepending older ones)
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) {
+    if (!el) return;
+
+    if (isLoadingOlderRef.current) {
+      // Older messages were prepended — restore scroll position
+      isLoadingOlderRef.current = false;
+    } else {
+      // New message appended or streaming — scroll to bottom
       el.scrollTop = el.scrollHeight;
     }
+    prevMsgCountRef.current = messages.length;
   }, [messages, streamingContent, isLoading, actionText]);
+
+  // Preserve scroll position when older messages are prepended
+  const handleLoadMore = useCallback(() => {
+    if (!onLoadMore || loadingMore) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const prevScrollHeight = el.scrollHeight;
+    isLoadingOlderRef.current = true;
+
+    // Wait for DOM update after messages prepend, then restore scroll
+    const observer = new MutationObserver(() => {
+      observer.disconnect();
+      el.scrollTop = el.scrollHeight - prevScrollHeight;
+    });
+    observer.observe(el, { childList: true, subtree: true });
+
+    onLoadMore();
+  }, [onLoadMore, loadingMore]);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const container = scrollRef.current;
+    if (!sentinel || !container) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          handleLoadMore();
+        }
+      },
+      { root: container, threshold: 0 }
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasMore, loadingMore, handleLoadMore]);
 
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-2 py-4 md:p-4">
       <div className="mx-auto max-w-3xl space-y-3">
-        {hasMore && onLoadMore && (
-          <div className="flex justify-center pb-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onLoadMore}
-              disabled={loadingMore}
-              className="text-xs text-muted-foreground"
-            >
-              {loadingMore ? (
-                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-              ) : null}
-              {loadingMore ? "Loading..." : "Load older messages"}
-            </Button>
+        {/* Sentinel for infinite scroll */}
+        {hasMore && (
+          <div ref={sentinelRef} className="flex justify-center py-2">
+            {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
         )}
         {messages.map((msg, i) => (
-          <div key={msg.id}>
+          <div key={msg.id} className="animate-message-in">
             {msg.role === "assistant" && msg.skillsUsed && msg.skillsUsed.length > 0 && (
               <SkillBadges skills={msg.skillsUsed} />
             )}

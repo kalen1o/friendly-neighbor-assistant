@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,7 @@ from app.auth.jwt import (
     set_auth_cookies,
 )
 from app.auth.password import hash_password, verify_password
+from app.auth.admin import get_client_ip, log_audit
 from app.auth.rate_limit import rate_limit_login, rate_limit_register
 from app.config import Settings, get_settings
 from app.db.session import get_db
@@ -50,6 +51,7 @@ async def _create_tokens_and_set_cookies(
 @router.post("/register", status_code=201, response_model=TokenResponse)
 async def register(
     body: RegisterRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -83,9 +85,22 @@ async def register(
         password_hash=hash_password(body.password),
         name=body.name,
     )
+    # Check if email should get admin role
+    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    if body.email.lower() in admin_list:
+        user.role = "admin"
+
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    await log_audit(
+        db, "register",
+        user_id=user.id,
+        resource_type="user",
+        resource_id=user.public_id,
+        ip_address=get_client_ip(request),
+    )
 
     return await _create_tokens_and_set_cookies(user, response, db, settings)
 
@@ -93,6 +108,7 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -109,6 +125,20 @@ async def login(
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    # Auto-promote to admin if email is in ADMIN_EMAILS
+    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    if user.email.lower() in admin_list and user.role != "admin":
+        user.role = "admin"
+        await db.commit()
+
+    await log_audit(
+        db, "login",
+        user_id=user.id,
+        resource_type="user",
+        resource_id=user.public_id,
+        ip_address=get_client_ip(request),
+    )
 
     return await _create_tokens_and_set_cookies(user, response, db, settings)
 

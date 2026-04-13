@@ -2,29 +2,78 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Plus, FileText, Zap, Anchor, Plug, Loader2, LogOut, Settings, ChevronUp, Sun, Moon, Monitor } from "lucide-react";
-import { useTheme } from "next-themes";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import Link from "next/link";
+import { Plus, FileText, Zap, Anchor, Plug, Loader2, FolderPlus } from "lucide-react";
 import { useAuth } from "@/components/auth-guard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ChatList } from "@/components/chat-list";
-import { SettingsDialog } from "@/components/settings-dialog";
+import { FolderTree } from "@/components/folder-tree";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   createChat,
   deleteChat,
   listChats,
   updateChat,
+  listFolders,
+  createFolder,
   type ChatSummary,
+  type FolderOut,
 } from "@/lib/api";
+import { ThemeToggle } from "./theme-toggle";
+import { UserMenu } from "./user-menu";
+
+export { ThemeToggle } from "./theme-toggle";
+export { UserMenu } from "./user-menu";
+
+// ── Loading skeletons ──
+
+function ChatListSkeleton() {
+  const widths = ["w-3/4", "w-1/2", "w-2/3", "w-3/5", "w-4/5"];
+  return (
+    <div className="flex flex-col gap-1">
+      {widths.map((w, i) => (
+        <div key={i} className="flex min-h-[44px] flex-col justify-center rounded-lg px-3 py-2">
+          <Skeleton className={cn("h-4 rounded", w)} />
+          <Skeleton className="mt-1.5 h-3 w-1/4 rounded" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FolderTreeSkeleton() {
+  return (
+    <div className="flex flex-col gap-0.5">
+      {/* Folder 1 — expanded with 2 chats */}
+      <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
+        <Skeleton className="h-3.5 w-3.5 rounded" />
+        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-3.5 w-24 rounded" />
+      </div>
+      <div className="flex items-center gap-1 rounded-lg py-1.5" style={{ paddingLeft: 40 }}>
+        <Skeleton className="h-3.5 w-32 rounded" />
+      </div>
+      <div className="flex items-center gap-1 rounded-lg py-1.5" style={{ paddingLeft: 40 }}>
+        <Skeleton className="h-3.5 w-24 rounded" />
+      </div>
+      {/* Folder 2 — collapsed */}
+      <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
+        <Skeleton className="h-3.5 w-3.5 rounded" />
+        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-3.5 w-20 rounded" />
+      </div>
+      {/* Folder 3 — collapsed */}
+      <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
+        <Skeleton className="h-3.5 w-3.5 rounded" />
+        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-3.5 w-28 rounded" />
+      </div>
+    </div>
+  );
+}
 
 // ── Nav items ──
 
@@ -34,157 +83,6 @@ const NAV_ITEMS = [
   { href: "/hooks", icon: Anchor, label: "Hooks", iconBg: "bg-blue-500/10", iconBgActive: "bg-blue-500/25", iconColor: "text-blue-500", activeBorder: "border-blue-500/30", activeBg: "bg-blue-500/5" },
   { href: "/mcp", icon: Plug, label: "MCP", iconBg: "bg-purple-500/10", iconBgActive: "bg-purple-500/25", iconColor: "text-purple-500", activeBorder: "border-purple-500/30", activeBg: "bg-purple-500/5" },
 ];
-
-// ── Theme Toggle ──
-
-export function ThemeToggle({ vertical = false }: { vertical?: boolean }) {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration guard
-  useEffect(() => setMounted(true), []);
-  const themes = [
-    { value: "light", icon: Sun, title: "Light" },
-    { value: "dark", icon: Moon, title: "Dark" },
-    { value: "system", icon: Monitor, title: "System" },
-  ];
-
-  return (
-    <div className={cn(
-      "flex items-center justify-center gap-1 border-t px-3 py-2",
-      vertical && "flex-col px-0"
-    )}>
-      {themes.map((t) => {
-        const isActive = mounted && theme === t.value;
-        return (
-          <button
-            key={t.value}
-            onClick={() => setTheme(t.value)}
-            title={t.title}
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-accent"
-            )}
-          >
-            <t.icon className="h-4 w-4" />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── User Menu ──
-
-export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boolean }) {
-  const router = useRouter();
-  const { user, loading, isAuthenticated, requireAuth, logout: handleLogout } = useAuth();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  const wrapperClass = cn("border-t", menuCollapsed ? "flex justify-center py-2" : "min-h-[63px]");
-
-  if (loading) {
-    return (
-      <div className={wrapperClass}>
-        {menuCollapsed ? (
-          <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
-        ) : (
-          <div className="flex items-center gap-2.5 p-3">
-            <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted" />
-            <div className="flex-1 space-y-1">
-              <div className="h-3 w-20 animate-pulse rounded bg-muted" />
-              <div className="h-2.5 w-28 animate-pulse rounded bg-muted" />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className={wrapperClass}>
-        {menuCollapsed ? (
-          <button
-            onClick={() => requireAuth()}
-            title="Sign in"
-            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-xs text-muted-foreground hover:border-primary/50 hover:text-primary"
-          >
-            ?
-          </button>
-        ) : (
-          <Button
-            variant="ghost"
-            className="h-auto w-full justify-start gap-2.5 px-3 py-3"
-            onClick={() => requireAuth()}
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-xs text-muted-foreground">
-              ?
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Sign in</p>
-              <p className="text-[11px] text-muted-foreground/50">to sync your chats</p>
-            </div>
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  const initial = (user?.name?.[0] || user?.email?.[0] || "?").toUpperCase();
-
-  return (
-    <div className={wrapperClass}>
-      <DropdownMenu>
-        <DropdownMenuTrigger className={cn(
-          "flex cursor-pointer items-center border-0 bg-transparent transition-colors hover:bg-accent",
-          menuCollapsed
-            ? "h-8 w-8 justify-center rounded-full"
-            : "w-full gap-2.5 p-3 text-left"
-        )}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-            {initial}
-          </div>
-          {!menuCollapsed && (
-            <>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{user?.name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{user?.email}</p>
-              </div>
-              <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </>
-          )}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className={menuCollapsed ? "w-48" : "w-[var(--anchor-width)]"}>
-          <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => {
-              handleLogout();
-              router.push("/");
-            }}
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        onChatsDeleted={() => {
-          setSettingsOpen(false);
-          window.dispatchEvent(new Event("chats-cleared"));
-        }}
-      />
-    </div>
-  );
-}
 
 // ── Sidebar Content (shared between Sidebar and Drawer) ──
 
@@ -197,7 +95,7 @@ interface SidebarContentProps {
 export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: SidebarContentProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { requireAuth, isAuthenticated } = useAuth();
+  const { requireAuth, isAuthenticated, loading: authLoading } = useAuth();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -210,10 +108,29 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
     ? pathname.split("/")[2]
     : null;
 
+  const [viewMode, setViewMode] = useState<"all" | "folders">("all");
+  const [folders, setFolders] = useState<FolderOut[]>([]);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+
+  // Read persisted view mode after hydration to avoid SSR mismatch
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sidebar-view-mode") as "all" | "folders" | null;
+      if (saved) setViewMode(saved);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("sidebar-view-mode", viewMode);
+  }, [viewMode]);
+
+  // Track which chats had notifications last poll (to detect new ones)
+  const prevNotifIdsRef = useRef<Set<string>>(new Set());
+
   const fetchChats = useCallback(async () => {
     if (!isAuthenticated) {
       setChats([]);
-      setIsLoading(false);
+      if (!authLoading) setIsLoading(false);
       return;
     }
     try {
@@ -221,12 +138,41 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
       setChats(data.chats);
       cursorRef.current = data.next_cursor;
       hasMoreRef.current = data.has_more;
+
+      // Detect NEW notifications (not previously seen)
+      const newNotifChats = data.chats.filter(
+        (c) => c.has_notification && !prevNotifIdsRef.current.has(c.id)
+      );
+      for (const chat of newNotifChats) {
+        if (pathname !== `/chat/${chat.id}`) {
+          toast.success(`Response ready: ${chat.title || "New Chat"}`);
+        }
+      }
+      // Update tracked notification IDs
+      prevNotifIdsRef.current = new Set(
+        data.chats.filter((c) => c.has_notification).map((c) => c.id)
+      );
     } catch (e) {
       console.error("Failed to fetch chats:", e);
     } finally {
       setIsLoading(false);
     }
+  }, [isAuthenticated, authLoading]);
+
+  const fetchFolders = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const data = await listFolders();
+      setFolders(data);
+    } catch (e) {
+      console.error("Failed to fetch folders:", e);
+    }
   }, [isAuthenticated]);
+
+  const handleRefreshAll = useCallback(() => {
+    fetchChats();
+    fetchFolders();
+  }, [fetchChats, fetchFolders]);
 
   const loadMore = useCallback(async () => {
     if (!hasMoreRef.current || isLoadingMoreRef.current) return;
@@ -249,16 +195,39 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
     fetchChats();
   }, [fetchChats, pathname]);
 
+  // Handle notification click navigation
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const chatId = (e as CustomEvent).detail?.chatId;
+      if (chatId) router.push(`/chat/${chatId}`);
+    };
+    window.addEventListener("notification-navigate", handler);
+    return () => window.removeEventListener("notification-navigate", handler);
+  }, [router]);
+
+  // Poll for notification updates every 10 seconds
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const interval = setInterval(fetchChats, 10000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, fetchChats]);
+
+  useEffect(() => {
+    fetchFolders();
+  }, [fetchFolders]);
+
   useEffect(() => {
     const handleRefresh = () => fetchChats();
     const handleClear = () => { setChats([]); cursorRef.current = null; hasMoreRef.current = true; };
     window.addEventListener("chat-title-updated", handleRefresh);
     window.addEventListener("chats-cleared", handleClear);
+    window.addEventListener("folders-changed", handleRefreshAll);
     return () => {
       window.removeEventListener("chat-title-updated", handleRefresh);
       window.removeEventListener("chats-cleared", handleClear);
+      window.removeEventListener("folders-changed", handleRefreshAll);
     };
-  }, [fetchChats]);
+  }, [fetchChats, handleRefreshAll]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -310,27 +279,64 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
     }
   };
 
-  // Chat list only mode (used by collapsed sidebar when expanding chat list section)
+  const handleNewFolder = async () => {
+    const authed = await requireAuth();
+    if (!authed) return;
+    try {
+      const folder = await createFolder({ name: "New Folder" });
+      await fetchFolders();
+      setEditingFolderId(folder.id);
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to create folder");
+    }
+  };
+
+  // Chat list only mode (used by desktop sidebar)
   if (chatListOnly) {
-    if (!isAuthenticated) return null;
+    if (!isAuthenticated && !authLoading) return null;
     return (
       <>
-        <div className="px-5 pb-1">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-            Recent
-          </p>
+        <div className="flex items-center justify-between px-5 pb-1">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setViewMode("all")}
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                viewMode === "all"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground/50 hover:text-muted-foreground"
+              )}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setViewMode("folders")}
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                viewMode === "folders"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground/50 hover:text-muted-foreground"
+              )}
+            >
+              Folders
+            </button>
+          </div>
+          {viewMode === "folders" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 text-muted-foreground/50 hover:text-muted-foreground"
+              onClick={handleNewFolder}
+              title="New folder"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           {isLoading ? (
-            <div className="flex flex-col gap-1">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="rounded-lg px-3 py-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="mt-1.5 h-3 w-1/3" />
-                </div>
-              ))}
-            </div>
-          ) : (
+            viewMode === "folders" ? <FolderTreeSkeleton /> : <ChatListSkeleton />
+          ) : viewMode === "all" ? (
             <>
               <ChatList
                 chats={chats}
@@ -345,6 +351,20 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
               )}
               <div ref={sentinelRef} className="h-1" />
             </>
+          ) : (
+            <>
+              <FolderTree
+                folders={folders}
+                chats={chats}
+                activeChatId={activeChatId}
+                editingFolderId={editingFolderId}
+                onEditingComplete={() => setEditingFolderId(null)}
+                onStartEditing={setEditingFolderId}
+                onRefresh={handleRefreshAll}
+                onDeleteChat={handleDelete}
+                onRenameChat={handleRename}
+              />
+            </>
           )}
         </div>
       </>
@@ -356,7 +376,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
     <>
       <div className="p-3">
         <div className="mb-3 flex items-center justify-between px-2">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg" />
             <div>
               <h1 className="text-lg font-bold leading-tight tracking-tight">
@@ -366,7 +386,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
                 Your AI assistant
               </p>
             </div>
-          </div>
+          </Link>
           {showCollapseToggle && onToggle && (
             <Button variant="ghost" size="icon-sm" onClick={onToggle} title="Collapse sidebar" className="text-muted-foreground">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
@@ -374,30 +394,22 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          {NAV_ITEMS.map(({ href, icon: Icon, label, iconBg, iconBgActive, iconColor, activeBorder, activeBg }) => {
+        <div className="flex flex-col gap-0.5">
+          {NAV_ITEMS.map(({ href, icon: Icon, label, iconColor }) => {
             const isActive = pathname.startsWith(href);
             return (
               <button
                 key={href}
                 onClick={() => router.push(href)}
                 className={cn(
-                  "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all hover:shadow-md",
+                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors",
                   isActive
-                    ? `${activeBorder} ${activeBg} shadow-md`
-                    : "border-border/60 bg-card shadow-sm hover:border-primary/30 hover:bg-accent"
+                    ? cn("bg-accent", iconColor)
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <div className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
-                  isActive ? iconBgActive : iconBg
-                )}>
-                  <Icon className={cn("h-4 w-4", iconColor)} />
-                </div>
-                <span className={cn(
-                  "text-sm font-medium transition-colors",
-                  isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
-                )}>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate text-[13px] font-medium">
                   {label}
                 </span>
               </button>
@@ -420,23 +432,48 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
 
       {isAuthenticated && (
         <>
-          <div className="px-5 pb-1">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-              Recent
-            </p>
+          <div className="flex items-center justify-between px-5 pb-1">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setViewMode("all")}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                  viewMode === "all"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                )}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setViewMode("folders")}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                  viewMode === "folders"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                )}
+              >
+                Folders
+              </button>
+            </div>
+            {viewMode === "folders" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 text-muted-foreground/50 hover:text-muted-foreground"
+                onClick={handleNewFolder}
+                title="New folder"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto px-3 pb-3">
             {isLoading ? (
-              <div className="flex flex-col gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="rounded-lg px-3 py-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="mt-1.5 h-3 w-1/3" />
-                  </div>
-                ))}
-              </div>
-            ) : (
+              viewMode === "folders" ? <FolderTreeSkeleton /> : <ChatListSkeleton />
+            ) : viewMode === "all" ? (
               <>
                 <ChatList
                   chats={chats}
@@ -450,6 +487,39 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
                   </div>
                 )}
                 <div ref={sentinelRef} className="h-1" />
+              </>
+            ) : (
+              <>
+                <FolderTree
+                  folders={folders}
+                  chats={chats}
+                  activeChatId={activeChatId}
+                  editingFolderId={editingFolderId}
+                  onEditingComplete={() => setEditingFolderId(null)}
+                  onStartEditing={setEditingFolderId}
+                  onRefresh={handleRefreshAll}
+                  onDeleteChat={handleDelete}
+                  onRenameChat={handleRename}
+                />
+                <div
+                  className="mt-2 min-h-[40px] rounded-lg border-2 border-dashed border-transparent transition-colors"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add("border-muted-foreground/30");
+                  }}
+                  onDragLeave={(e) => {
+                    e.currentTarget.classList.remove("border-muted-foreground/30");
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove("border-muted-foreground/30");
+                    const chatId = e.dataTransfer.getData("text/chat-id");
+                    if (chatId) {
+                      await updateChat(chatId, undefined, null);
+                      handleRefreshAll();
+                    }
+                  }}
+                />
               </>
             )}
           </div>
