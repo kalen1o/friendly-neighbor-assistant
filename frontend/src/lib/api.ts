@@ -114,6 +114,7 @@ export interface ChatSummary {
   folder_id: string | null;
   model_id: string | null;
   has_notification: boolean;
+  is_generating: boolean;
 }
 
 export interface Source {
@@ -149,6 +150,7 @@ export interface MessageOut {
   sources?: Source[] | null;
   metrics?: MessageMetrics | null;
   files?: MessageFileRef[] | null;
+  status?: "generating" | "completed" | "error";
 }
 
 export interface ChatDetail {

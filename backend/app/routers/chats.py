@@ -163,6 +163,17 @@ async def list_chats(
         )
         model_map = dict(mres.all())
 
+    # Check which chats have a message with status='generating'
+    generating_chat_ids = set()
+    if chats:
+        chat_internal_ids = [c.id for c in chats]
+        gen_result = await db.execute(
+            select(Message.chat_id)
+            .where(Message.chat_id.in_(chat_internal_ids), Message.status == "generating")
+            .distinct()
+        )
+        generating_chat_ids = set(gen_result.scalars().all())
+
     chat_summaries = [
         {
             "public_id": c.public_id,
@@ -171,6 +182,7 @@ async def list_chats(
             "folder_id": folder_map.get(c.folder_id) if c.folder_id else None,
             "model_id": c.selected_model_slug or (model_map.get(c.user_model_id) if c.user_model_id else None),
             "has_notification": c.has_notification,
+            "is_generating": c.id in generating_chat_ids,
         }
         for c in chats
     ]
@@ -471,8 +483,7 @@ async def send_message(
     db.add(user_msg)
     await db.commit()
 
-    chat.has_notification = True
-    await db.commit()
+    # has_notification is set in _llm_background_task after response completes
 
     # 3. Start background task and stream via SSE
     queue: asyncio.Queue = asyncio.Queue()
@@ -845,7 +856,7 @@ async def _llm_background_task(
 
                     # Create assistant message on first text chunk
                     if assistant_msg is None and full_response:
-                        assistant_msg = Message(chat_id=chat.id, role="assistant", content=full_response)
+                        assistant_msg = Message(chat_id=chat.id, role="assistant", content=full_response, status="generating")
                         db.add(assistant_msg)
                         await db.commit()
                         await db.refresh(assistant_msg)
@@ -904,6 +915,7 @@ async def _llm_background_task(
                     # Update the progressively-saved message
                     assistant_msg.content = cleaned_response
                     assistant_msg.sources_json = sources_json
+                    assistant_msg.status = "completed"
                 else:
                     # No progressive save happened — create the message now
                     assistant_msg = Message(
@@ -911,9 +923,11 @@ async def _llm_background_task(
                         role="assistant",
                         content=cleaned_response,
                         sources_json=sources_json,
+                        status="completed",
                     )
                     db.add(assistant_msg)
                 chat.updated_at = func.now()
+                chat.has_notification = True
                 await db.commit()
                 await db.refresh(assistant_msg)
 
@@ -1005,13 +1019,20 @@ async def _llm_background_task(
                 # Save partial response if we got any content before the error
                 if full_response:
                     try:
-                        partial_msg = Message(
-                            chat_id=chat.id,
-                            role="assistant",
-                            content=full_response
-                            + "\n\n[Response interrupted due to an error]",
-                        )
-                        db.add(partial_msg)
+                        if assistant_msg:
+                            # Update the existing progressively-saved message
+                            await db.refresh(assistant_msg)
+                            assistant_msg.content = full_response + "\n\n[Response interrupted due to an error]"
+                            assistant_msg.status = "error"
+                        else:
+                            partial_msg = Message(
+                                chat_id=chat.id,
+                                role="assistant",
+                                content=full_response
+                                + "\n\n[Response interrupted due to an error]",
+                                status="error",
+                            )
+                            db.add(partial_msg)
                         await db.commit()
                     except Exception:
                         logger.warning("Failed to save partial message after error")

@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
@@ -18,25 +17,6 @@ from app.skills.registry import SkillDefinition, SkillRegistry
 logger = logging.getLogger(__name__)
 
 _registry_cache: PerUserCache[SkillRegistry] = PerUserCache(ttl_seconds=60)
-
-# Query abbreviation expansions (used by web search tool)
-_QUERY_EXPANSIONS = {
-    "hcm": "Ho Chi Minh City Vietnam",
-    "hn": "Hanoi Vietnam",
-    "sg": "Singapore",
-    "bkk": "Bangkok Thailand",
-    "nyc": "New York City",
-    "sf": "San Francisco",
-    "la": "Los Angeles",
-}
-
-
-def _expand_query(query: str) -> str:
-    for abbr, expansion in _QUERY_EXPANSIONS.items():
-        query = re.sub(
-            r"\b" + re.escape(abbr) + r"\b", expansion, query, flags=re.IGNORECASE
-        )
-    return query
 
 
 async def _build_registry(db: AsyncSession, user_id: int) -> SkillRegistry:
@@ -171,7 +151,6 @@ async def create_tool_executor(
 
     async def executor(tool_name: str, arguments: Dict[str, Any]) -> str:
         query = arguments.get("query", "")
-        query = _expand_query(query)
 
         skill_executor = registry.get_executor(tool_name)
         if not skill_executor:

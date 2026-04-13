@@ -117,7 +117,16 @@ export function useMessageStream(chatId: string) {
   }, [finalizeMessage]);
 
   // Clean up interval on unmount
-  useEffect(() => stopTypewriter, [stopTypewriter]);
+  useEffect(() => {
+    return () => {
+      stopTypewriter();
+      const bgCleanup = (window as any).__bgPollCleanup;
+      if (bgCleanup) {
+        bgCleanup();
+        delete (window as any).__bgPollCleanup;
+      }
+    };
+  }, [stopTypewriter]);
 
   const mapMessages = useCallback((msgs: MessageOut[]): DisplayMessage[] => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -216,6 +225,62 @@ export function useMessageStream(chatId: string) {
       nextCursorRef.current = chat.next_cursor ?? null;
       setChatModelId(chat.model_id ?? null);
       chatTitleRef.current = chat.title || "";
+
+      // Check if last message is still generating (e.g. after page reload)
+      const lastMsg = chat.messages[chat.messages.length - 1];
+      if (lastMsg?.status === "generating") {
+        // Show the partial message with a streaming cursor (no extra loading bubble)
+        setIsStreaming(true);
+        fullTextRef.current = lastMsg.content || "";
+        revealedRef.current = fullTextRef.current.length;
+        setStreamingContent(fullTextRef.current);
+
+        // Poll every 3 seconds until generation completes
+        const pollInterval = setInterval(async () => {
+          try {
+            const updated = await getChat(chatId, 20);
+            const updatedLast = updated.messages[updated.messages.length - 1];
+            if (updatedLast?.status === "generating") {
+              // Update partial content in place
+              const mapped = mapMessages(updated.messages);
+              // Remove the generating message from the list — we show it via streamingContent
+              const withoutLast = mapped.slice(0, -1);
+              setMessages(withoutLast);
+              fullTextRef.current = updatedLast.content || "";
+              revealedRef.current = fullTextRef.current.length;
+              setStreamingContent(fullTextRef.current);
+            } else {
+              clearInterval(pollInterval);
+              delete (window as any).__bgPollCleanup;
+              setMessages(mapMessages(updated.messages));
+              setStreamingContent("");
+              fullTextRef.current = "";
+              revealedRef.current = 0;
+              setIsStreaming(false);
+              setIsLoading(false);
+              setActionText(null);
+              chatTitleRef.current = updated.title || "";
+            }
+          } catch {
+            clearInterval(pollInterval);
+            delete (window as any).__bgPollCleanup;
+            setStreamingContent("");
+            fullTextRef.current = "";
+            revealedRef.current = 0;
+            setIsStreaming(false);
+            setIsLoading(false);
+            setActionText(null);
+          }
+        }, 3000);
+
+        // Remove the generating message from displayed list — show via streamingContent instead
+        const mapped = mapMessages(chat.messages);
+        setMessages(mapped.slice(0, -1));
+
+        // Store cleanup for effect teardown
+        (window as any).__bgPollCleanup = () => clearInterval(pollInterval);
+      }
+
       listArtifacts(chatId)
         .then((arts) => {
           setArtifacts(

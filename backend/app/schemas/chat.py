@@ -36,6 +36,7 @@ class MessageOut(BaseModel):
     sources: Optional[List[Dict[str, Any]]] = None
     metrics: Optional[MessageMetrics] = None
     files: Optional[List[Dict[str, str]]] = None
+    status: str = "completed"
 
     model_config = {"from_attributes": True}
 
@@ -74,6 +75,7 @@ class MessageOut(BaseModel):
             sources=sources,
             metrics=metrics,
             files=files,
+            status=getattr(msg, "status", "completed"),
         )
 
 
@@ -84,6 +86,7 @@ class ChatSummary(BaseModel):
     folder_id: Optional[str] = None
     model_id: Optional[str] = None
     has_notification: bool = False
+    is_generating: bool = False
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

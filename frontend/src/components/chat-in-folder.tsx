@@ -86,8 +86,8 @@ export function ChatInFolder({
             <span className="flex-1 truncate">
               {chat.title || "New Chat"}
             </span>
-            {chat.has_notification && (
-              isStreamGenerating(chat.id)
+            {(chat.has_notification || chat.is_generating || isStreamGenerating(chat.id)) && (
+              chat.is_generating || isStreamGenerating(chat.id)
                 ? <Loader2 className="ml-1.5 h-3 w-3 shrink-0 animate-spin text-primary" />
                 : <CheckCircle2 className="ml-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
             )}

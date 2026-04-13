@@ -371,7 +371,7 @@ function FolderNodeItem({
   const folderChats = chatsByFolder.get(folder.id) || [];
   const notifChats = folderChats.filter((c) => c.has_notification);
   const notificationCount = notifChats.length;
-  const hasGenerating = notifChats.some((c) => isStreamGenerating(c.id));
+  const hasGenerating = notifChats.some((c) => c.is_generating || isStreamGenerating(c.id));
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);

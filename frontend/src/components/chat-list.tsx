@@ -102,8 +102,8 @@ function ChatItem({
               <p className="truncate font-medium">
                 {chat.title || "New Chat"}
               </p>
-              {chat.has_notification && (
-                isStreamGenerating(chat.id)
+              {(chat.has_notification || chat.is_generating || isStreamGenerating(chat.id)) && (
+                chat.is_generating || isStreamGenerating(chat.id)
                   ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
                   : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
               )}

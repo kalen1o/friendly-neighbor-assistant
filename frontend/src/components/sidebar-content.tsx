@@ -126,6 +126,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
 
   // Track which chats had notifications last poll (to detect new ones)
   const prevNotifIdsRef = useRef<Set<string>>(new Set());
+  const prevGeneratingIdsRef = useRef<Set<string>>(new Set());
 
   const fetchChats = useCallback(async () => {
     if (!isAuthenticated) {
@@ -139,25 +140,61 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
       cursorRef.current = data.next_cursor;
       hasMoreRef.current = data.has_more;
 
-      // Detect NEW notifications (not previously seen)
+      // Detect NEW notifications (not previously seen, not still generating)
       const newNotifChats = data.chats.filter(
-        (c) => c.has_notification && !prevNotifIdsRef.current.has(c.id)
+        (c) => c.has_notification && !c.is_generating && !prevNotifIdsRef.current.has(c.id)
       );
-      for (const chat of newNotifChats) {
-        if (pathname !== `/chat/${chat.id}`) {
-          toast.success(`Response ready: ${chat.title || "New Chat"}`);
+
+      // Detect generating→completed transitions (for post-reload toasts)
+      const justFinished = data.chats.filter(
+        (c) => !c.is_generating && prevGeneratingIdsRef.current.has(c.id)
+      );
+
+      // Show toast for newly finished chats (avoid duplicating with newNotifChats)
+      const newNotifIds = new Set(newNotifChats.map((c) => c.id));
+      for (const chat of justFinished) {
+        if (!newNotifIds.has(chat.id) && pathname !== `/chat/${chat.id}`) {
+          toast.success(`Response ready: ${chat.title || "New Chat"}`, {
+            action: {
+              label: "View",
+              onClick: () => {
+                window.dispatchEvent(
+                  new CustomEvent("notification-navigate", { detail: { chatId: chat.id } })
+                );
+              },
+            },
+          });
         }
       }
-      // Update tracked notification IDs
+
+      for (const chat of newNotifChats) {
+        if (pathname !== `/chat/${chat.id}`) {
+          toast.success(`Response ready: ${chat.title || "New Chat"}`, {
+            action: {
+              label: "View",
+              onClick: () => {
+                window.dispatchEvent(
+                  new CustomEvent("notification-navigate", { detail: { chatId: chat.id } })
+                );
+              },
+            },
+          });
+        }
+      }
+
+      // Update tracked IDs
       prevNotifIdsRef.current = new Set(
         data.chats.filter((c) => c.has_notification).map((c) => c.id)
+      );
+      prevGeneratingIdsRef.current = new Set(
+        data.chats.filter((c) => c.is_generating).map((c) => c.id)
       );
     } catch (e) {
       console.error("Failed to fetch chats:", e);
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, pathname]);
 
   const fetchFolders = useCallback(async () => {
     if (!isAuthenticated) return;

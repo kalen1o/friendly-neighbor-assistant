@@ -18,11 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMessageStream } from "@/hooks/use-message-stream";
 
 function KbdShortcut() {
-  const [mod, setMod] = useState("Ctrl");
+  const [mod, setMod] = useState<string | null>(null);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (/Mac|iPhone|iPad/.test(navigator.userAgent)) setMod("⌘");
+    setMod(/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl");
   }, []);
+  if (!mod) return <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium invisible">⌘ + K</kbd>;
   return <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{mod} + K</kbd>;
 }
 

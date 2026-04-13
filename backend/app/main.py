@@ -35,6 +35,31 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.upload_dir, exist_ok=True)
     init_engine(settings)
     await init_redis(settings)
+    # Clean up messages stuck in 'generating' status (e.g. from server restart)
+    from app.db.session import get_session_factory
+    from app.models.chat import Message
+    from sqlalchemy import update
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        async with get_session_factory()() as db:
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+            result = await db.execute(
+                update(Message)
+                .where(Message.status == "generating", Message.created_at < cutoff)
+                .values(
+                    status="error",
+                    content=Message.content + "\n\n[Response interrupted]",
+                )
+            )
+            if result.rowcount > 0:
+                await db.commit()
+                import logging
+                logging.getLogger(__name__).info(
+                    f"Cleaned up {result.rowcount} stuck generating message(s)"
+                )
+    except Exception:
+        pass  # Don't block startup
     yield
     await close_redis()
     await dispose_engine()

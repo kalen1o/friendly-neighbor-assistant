@@ -75,6 +75,9 @@ class Message(Base):
     tokens_input: Mapped[Optional[int]] = mapped_column(Integer, default=None)
     tokens_output: Mapped[Optional[int]] = mapped_column(Integer, default=None)
     tokens_total: Mapped[Optional[int]] = mapped_column(Integer, default=None)
+    status: Mapped[str] = mapped_column(
+        String(20), server_default="completed", default="completed"
+    )
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")
     files: Mapped[List["ChatFile"]] = relationship(

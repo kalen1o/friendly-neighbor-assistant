@@ -110,7 +110,7 @@ The agent uses an LLM to select which skills to run for each message:
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 15 + Tailwind CSS + shadcn/ui |
+| Frontend | Next.js 16 + Tailwind CSS + shadcn/ui |
 | Backend / API | FastAPI (Python 3.12) |
 | Database | PostgreSQL 16 + pgvector |
 | Embeddings | OpenAI `text-embedding-3-small` |
@@ -224,7 +224,7 @@ User <-> Next.js UI <-> FastAPI Backend
 ## Roadmap
 
 - [x] Project scaffolding, Docker, Makefile
-- [x] Database schema + Alembic migrations (24 migrations)
+- [x] Database schema + Alembic migrations (27 migrations)
 - [x] AI provider integration (Anthropic + OpenAI + any compatible API)
 - [x] Basic chat with SSE streaming and auto-titles
 - [x] Multi-conversation support
@@ -249,7 +249,7 @@ User <-> Next.js UI <-> FastAPI Backend
 - [x] Admin dashboard (user management, audit log, quotas)
 - [x] Mobile-responsive polish (swipe gestures, safe areas, animations)
 - [x] Browser push notifications (with first-login prompt)
-- [ ] Background LLM tasks — decouple response generation from SSE connection so responses survive navigation away (currently lost if user leaves during tool calls)
+- [x] Background LLM tasks — response generation survives navigation and page reload (message-level status tracking, server-driven sidebar indicators, toast notifications)
 - [ ] Prompt chaining — sequential multi-step LLM pipelines
 - [ ] Orchestrator-workers — dynamic sub-task delegation to worker LLMs
 - [ ] Evaluator-optimizer — self-evaluation feedback loop for higher quality responses
