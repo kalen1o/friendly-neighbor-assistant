@@ -182,6 +182,7 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
       options={{
         activeFile: Object.keys(props.artifact.files)[0] ?? "/App.js",
       }}
+      style={{ height: "100%", display: "flex", flexDirection: "column" }}
     >
       <SandpackContent {...props} />
     </SandpackProvider>

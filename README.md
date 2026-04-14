@@ -271,7 +271,7 @@ User <-> Next.js UI <-> FastAPI Backend
 ## Roadmap
 
 - [x] Project scaffolding, Docker, Makefile
-- [x] Database schema + Alembic migrations (30 migrations)
+- [x] Database schema + Alembic migrations (31 migrations)
 - [x] AI provider integration (Anthropic + OpenAI + any compatible API)
 - [x] Basic chat with SSE streaming and auto-titles
 - [x] Multi-conversation support
@@ -313,6 +313,7 @@ User <-> Next.js UI <-> FastAPI Backend
 - [x] Prompt chaining + Parallelization — workflow engine with sequential chaining, parallel execution, per-step model override, retry-then-stop error handling
 - [x] Agent-computer interface — per-tool typed parameter schemas with validation and multi-parameter support
 - [ ] Scheduled agents — recurring tasks
+- [ ] Artifact enhancements — multi-file project generation (Sandpack), Mermaid diagrams, SVG, folder organization
 - [ ] CI/CD & deployment pipeline
 - [ ] Voice input/output
 
