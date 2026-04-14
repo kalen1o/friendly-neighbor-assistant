@@ -312,9 +312,8 @@ User <-> Next.js UI <-> FastAPI Backend
 **Additional Features**:
 - [ ] Prompt chaining — sequential multi-step LLM pipelines
 - [ ] Parallelization — sectioning/voting across multiple LLM calls
-- [ ] Agent-computer interface — systematic tool design for better LLM interaction
+- [x] Agent-computer interface — per-tool typed parameter schemas with validation and multi-parameter support
 - [ ] Scheduled agents — recurring tasks
-- [ ] Plugin marketplace — share/install community skills
 - [ ] CI/CD & deployment pipeline
 - [ ] Voice input/output
 

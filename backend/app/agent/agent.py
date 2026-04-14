@@ -82,12 +82,108 @@ def invalidate_agent_cache(user_id: Optional[int] = None) -> None:
     logger.info("Agent registry cache invalidated (user_id=%s)", user_id)
 
 
+# Per-tool parameter schemas for OpenAI function calling
+TOOL_PARAMETERS = {
+    "web_search": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query for finding current information on the web",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum number of search results to return",
+                "default": 3,
+            },
+        },
+        "required": ["query"],
+    },
+    "knowledge_base": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query to find relevant passages in uploaded documents",
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "Number of most relevant document chunks to return",
+                "default": 5,
+            },
+        },
+        "required": ["query"],
+    },
+    "web_reader": {
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "The URL to fetch and extract content from",
+            },
+        },
+        "required": ["url"],
+    },
+    "calculate": {
+        "type": "object",
+        "properties": {
+            "expression": {
+                "type": "string",
+                "description": "Mathematical expression to evaluate (e.g., '2 + 2', 'sqrt(16)', '15% of 200')",
+            },
+        },
+        "required": ["expression"],
+    },
+    "datetime_info": {
+        "type": "object",
+        "properties": {
+            "timezone": {
+                "type": "string",
+                "description": "Timezone name (e.g., 'America/New_York', 'Asia/Ho_Chi_Minh', 'UTC')",
+                "default": "UTC",
+            },
+        },
+        "required": [],
+    },
+    "summarize": {
+        "type": "object",
+        "properties": {
+            "text": {
+                "type": "string",
+                "description": "The text content to summarize",
+            },
+            "style": {
+                "type": "string",
+                "description": "Summary style: 'brief' (1-2 sentences), 'detailed' (bullet points), or 'executive' (key takeaways)",
+                "enum": ["brief", "detailed", "executive"],
+                "default": "brief",
+            },
+        },
+        "required": ["text"],
+    },
+}
+
+# Default fallback for tools without a specific schema
+_DEFAULT_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "query": {
+            "type": "string",
+            "description": "The input for this tool",
+        },
+    },
+    "required": ["query"],
+}
+
+
 def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:
     """Convert enabled skills into OpenAI function calling format."""
     tools = []
     for skill in registry.get_enabled_skills():
         if skill.skill_type != "tool":
-            continue  # Only tool-type skills become function tools
+            continue
+
+        parameters = TOOL_PARAMETERS.get(skill.name, _DEFAULT_PARAMETERS)
 
         tools.append(
             {
@@ -95,16 +191,7 @@ def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:
                 "function": {
                     "name": skill.name,
                     "description": skill.description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The search query or input for this tool",
-                            },
-                        },
-                        "required": ["query"],
-                    },
+                    "parameters": parameters,
                 },
             }
         )
@@ -150,31 +237,40 @@ async def create_tool_executor(
     collected_sources: List[Dict[str, Any]] = []
 
     async def executor(tool_name: str, arguments: Dict[str, Any]) -> str:
-        query = arguments.get("query", "")
-
         skill_executor = registry.get_executor(tool_name)
         if not skill_executor:
-            return f"Tool '{tool_name}' not found"
+            return "Tool '{}' not found".format(tool_name)
 
         try:
-            result = await skill_executor(query=query, db=db, settings=settings)
+            # Pass all arguments + db/settings to the executor
+            result = await skill_executor(**arguments, db=db, settings=settings)
             if isinstance(result, dict):
                 if result.get("sources"):
                     collected_sources.extend(result["sources"])
                 return result.get("content", json.dumps(result))
             return str(result)
         except TypeError:
+            # Fallback: try with just query (for backward compat with simple executors)
+            query = arguments.get("query", arguments.get("expression", arguments.get("url", arguments.get("text", ""))))
             try:
-                result = await skill_executor(query)
+                result = await skill_executor(query=query, db=db, settings=settings)
                 if isinstance(result, dict):
                     if result.get("sources"):
                         collected_sources.extend(result["sources"])
                     return result.get("content", json.dumps(result))
                 return str(result)
-            except Exception as e:
-                return f"Tool error: {str(e)}"
+            except TypeError:
+                try:
+                    result = await skill_executor(query)
+                    if isinstance(result, dict):
+                        if result.get("sources"):
+                            collected_sources.extend(result["sources"])
+                        return result.get("content", json.dumps(result))
+                    return str(result)
+                except Exception as e:
+                    return "Tool error: {}".format(str(e))
         except Exception as e:
-            return f"Tool error: {str(e)}"
+            return "Tool error: {}".format(str(e))
 
     executor.collected_sources = collected_sources
     return executor

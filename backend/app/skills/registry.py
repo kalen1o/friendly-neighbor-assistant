@@ -55,6 +55,7 @@ class SkillDefinition:
         builtin: bool = False,
         file_path: Optional[str] = None,
         model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
     ):
         self.name = name
         self.description = description
@@ -64,6 +65,7 @@ class SkillDefinition:
         self.builtin = builtin
         self.file_path = file_path  # for lazy content loading
         self.model = model  # e.g. "anthropic:claude-sonnet-4-20250514"
+        self.parameters = parameters  # OpenAI function parameters schema
 
     @property
     def content(self) -> str:

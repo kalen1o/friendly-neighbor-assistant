@@ -15,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 async def execute_web_search(
-    query: str, db, settings: Settings, **kwargs
+    query: str, db, settings: Settings, max_results: int = 3, **kwargs
 ) -> Dict[str, Any]:
     """Execute web search skill."""
-    max_results = kwargs.get("max_results", 3)
     results = await tool_search_web(query, max_results=max_results)
     if not results:
         return {"content": "No web results found.", "sources": []}
@@ -35,10 +34,9 @@ async def execute_web_search(
 
 
 async def execute_knowledge_base(
-    query: str, db, settings: Settings, **kwargs
+    query: str, db, settings: Settings, top_k: int = 5, **kwargs
 ) -> Dict[str, Any]:
     """Execute knowledge base search skill with numbered citations."""
-    top_k = kwargs.get("top_k", 5)
     results = await tool_search_knowledge_base(query, db, settings, top_k=top_k)
     if not results:
         return {"content": "No relevant documents found.", "sources": []}
@@ -59,21 +57,24 @@ async def execute_knowledge_base(
     }
 
 
-async def execute_web_reader(url: str, **kwargs) -> Dict[str, Any]:
+async def execute_web_reader(url: str = "", query: str = "", **kwargs) -> Dict[str, Any]:
     """Fetch and extract content from a URL."""
-    content = await _fetch_page_content(url, timeout=10.0)
+    # Accept both 'url' (new) and 'query' (backward compat) parameters
+    target_url = url or query
+    if not target_url:
+        return {"content": "No URL provided", "sources": []}
+    content = await _fetch_page_content(target_url, timeout=10.0)
     if not content:
-        return {"content": f"Failed to fetch content from {url}", "sources": []}
-
+        return {"content": "Failed to fetch content from {}".format(target_url), "sources": []}
     return {
         "content": content,
         "sources": [
-            {"type": "web", "title": url, "url": url, "snippet": content[:200]}
+            {"type": "web", "title": target_url, "url": target_url, "snippet": content[:200]}
         ],
     }
 
 
-async def execute_datetime_info(timezone: str = "UTC", **kwargs) -> Dict[str, Any]:
+async def execute_datetime_info(timezone: str = "UTC", query: str = "", **kwargs) -> Dict[str, Any]:
     """Get current date/time information."""
     try:
         import zoneinfo
@@ -94,8 +95,10 @@ async def execute_datetime_info(timezone: str = "UTC", **kwargs) -> Dict[str, An
     return {"content": content, "sources": []}
 
 
-async def execute_calculate(expression: str, **kwargs) -> Dict[str, Any]:
+async def execute_calculate(expression: str = "", query: str = "", **kwargs) -> Dict[str, Any]:
     """Safely evaluate a math expression."""
+    # Accept both 'expression' (new) and 'query' (backward compat)
+    expr = expression or query
     # Whitelist safe functions
     safe_names = {
         "abs": abs,
@@ -117,21 +120,23 @@ async def execute_calculate(expression: str, **kwargs) -> Dict[str, Any]:
     }  # type: Dict[str, Any]
     try:
         # Remove anything that's not math-related
-        clean = re.sub(r"[^\d\s\+\-\*/\.\(\)\,\%\^]", "", expression.replace("^", "**"))
+        clean = re.sub(r"[^\d\s\+\-\*/\.\(\)\,\%\^]", "", expr.replace("^", "**"))
         result = eval(clean, {"__builtins__": {}}, safe_names)
-        return {"content": f"{expression} = {result}", "sources": []}
+        return {"content": "{} = {}".format(expr, result), "sources": []}
     except Exception as e:
         return {
-            "content": f"Could not calculate: {expression}. Error: {str(e)}",
+            "content": "Could not calculate: {}. Error: {}".format(expr, str(e)),
             "sources": [],
         }
 
 
 async def execute_summarize(
-    text: str, settings: Settings, style: str = "brief", **kwargs
+    text: str = "", query: str = "", settings: Settings = None, style: str = "brief", **kwargs
 ) -> Dict[str, Any]:
     """Summarize text using LLM."""
     from app.llm.provider import get_llm_response
+
+    content = text or query
 
     style_instructions = {
         "brief": "Summarize in 1-2 sentences.",
@@ -140,7 +145,7 @@ async def execute_summarize(
     }
     instruction = style_instructions.get(style, style_instructions["brief"])
 
-    messages = [{"role": "user", "content": f"{instruction}\n\nText:\n{text[:4000]}"}]
+    messages = [{"role": "user", "content": "{}\n\nText:\n{}".format(instruction, content[:4000])}]
     summary = await get_llm_response(messages, settings)
     return {"content": summary, "sources": []}
 

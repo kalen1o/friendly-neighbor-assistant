@@ -877,12 +877,15 @@ async def _llm_background_task(
 
             # Track tool calls for sources and badges
             skills_used = []
+            skills_params = {}
 
             tool_action_queue = asyncio.Queue()
 
-            async def on_tool_call_track(tool_name):
+            async def on_tool_call_track(tool_name, arguments=None):
                 if tool_name not in skills_used:
                     skills_used.append(tool_name)
+                if arguments:
+                    skills_params[tool_name] = arguments
                 await tool_action_queue.put(f"Using {tool_name}...")
                 from app.usage import track_tool_call
 
@@ -969,7 +972,10 @@ async def _llm_background_task(
                 sourced_tools = {s.get("tool") for s in sources_data if s.get("tool")}
                 for s in skills_used:
                     if s not in sourced_tools:
-                        sources_data.append({"type": "skill", "tool": s})
+                        entry = {"type": "skill", "tool": s}
+                        if s in skills_params:
+                            entry["params"] = skills_params[s]
+                        sources_data.append(entry)
                 if sources_data:
                     await queue.put({"event": "sources", "data": json.dumps(sources_data)})
 

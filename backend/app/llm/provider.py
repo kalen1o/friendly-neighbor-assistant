@@ -269,7 +269,7 @@ async def _anthropic_stream_with_tools(
         # Execute tools in parallel
         async def _execute_tool(tu):
             if on_tool_call:
-                await on_tool_call(tu["name"])
+                await on_tool_call(tu["name"], tu.get("input", {}))
             if tool_executor:
                 try:
                     result = await tool_executor(tu["name"], tu["input"])
@@ -535,8 +535,6 @@ async def _openai_stream_with_tools(
 
         async def _execute_single_tool(tc_data):
             tool_name = tc_data["name"]
-            if on_tool_call:
-                await on_tool_call(tool_name)
             try:
                 import json as _json
 
@@ -545,6 +543,9 @@ async def _openai_stream_with_tools(
                 )
             except _json.JSONDecodeError:
                 arguments = {}
+
+            if on_tool_call:
+                await on_tool_call(tool_name, arguments)
 
             if tool_executor:
                 try:
