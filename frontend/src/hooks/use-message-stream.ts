@@ -306,9 +306,11 @@ export function useMessageStream(chatId: string) {
           setArtifacts(
             arts.map((a) => ({
               id: a.id,
-              type: (a.artifact_type || a.type) as "react" | "html",
+              type: "project" as const,
               title: a.title,
-              code: a.code,
+              template: a.template ?? "react",
+              files: a.files ?? {},
+              dependencies: a.dependencies ?? {},
             }))
           );
         })

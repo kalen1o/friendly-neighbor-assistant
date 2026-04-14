@@ -1040,8 +1040,10 @@ async def _llm_background_task(
                         chat_id=chat.id,
                         user_id=user_id,
                         title=art_data["title"],
-                        artifact_type=art_data["type"],
-                        code=art_data["code"],
+                        artifact_type="project",
+                        template=art_data.get("template", "react"),
+                        files=art_data.get("files", {}),
+                        dependencies=art_data.get("dependencies", {}),
                     )
                     db.add(artifact)
                     await db.commit()
@@ -1051,9 +1053,11 @@ async def _llm_background_task(
                         "data": json.dumps(
                             {
                                 "id": artifact.public_id,
-                                "type": artifact.artifact_type,
+                                "type": "project",
                                 "title": artifact.title,
-                                "code": artifact.code,
+                                "template": artifact.template,
+                                "files": artifact.files,
+                                "dependencies": artifact.dependencies,
                             }
                         ),
                     })

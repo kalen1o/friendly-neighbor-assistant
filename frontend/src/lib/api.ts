@@ -900,9 +900,11 @@ export async function revokeShare(shareId: string): Promise<void> {
 
 export interface ArtifactData {
   id: string;
-  type: "react" | "html";
+  type: "project";
   title: string;
-  code: string;
+  template: string;
+  files: Record<string, string>;
+  dependencies: Record<string, string>;
 }
 
 export interface ArtifactOut extends ArtifactData {
@@ -923,7 +925,7 @@ export async function listArtifacts(chatId: string): Promise<ArtifactOut[]> {
 
 export async function updateArtifact(
   artifactId: string,
-  updates: { code?: string; title?: string }
+  updates: { title?: string; files?: Record<string, string> }
 ): Promise<ArtifactOut> {
   const res = await authFetch(`${API_BASE}/api/artifacts/${artifactId}`, {
     method: "PATCH",

@@ -1,3 +1,5 @@
+import json
+
 from app.agent.artifact_parser import parse_artifacts
 
 
@@ -8,13 +10,13 @@ def test_no_artifacts():
     assert artifacts == []
 
 
-def test_single_react_artifact():
+def test_single_file_react_project():
+    files = {"/App.js": "export default function App() { return <h1>Hello</h1>; }"}
+    manifest = json.dumps({"files": files})
     text = (
         "Here is your app:\n\n"
-        '<artifact type="react" title="Todo App">\n'
-        "export default function App() {\n"
-        "  return <h1>Hello</h1>;\n"
-        "}\n"
+        f'<artifact type="project" title="Hello App" template="react">\n'
+        f"{manifest}\n"
         "</artifact>\n\n"
         "Let me know if you want changes."
     )
@@ -22,38 +24,97 @@ def test_single_react_artifact():
     assert "artifact" not in cleaned.lower()
     assert "Let me know" in cleaned
     assert len(artifacts) == 1
-    assert artifacts[0]["type"] == "react"
-    assert artifacts[0]["title"] == "Todo App"
-    assert "export default" in artifacts[0]["code"]
+    a = artifacts[0]
+    assert a["type"] == "project"
+    assert a["title"] == "Hello App"
+    assert a["template"] == "react"
+    assert a["files"] == files
+    assert a["dependencies"] == {}
 
 
-def test_single_html_artifact():
+def test_multi_file_react_project_with_deps():
+    files = {
+        "/App.js": "import TodoList from './TodoList';\nexport default function App() { return <TodoList />; }",
+        "/TodoList.js": "export default function TodoList() { return <ul><li>Learn React</li></ul>; }",
+    }
+    deps = {"uuid": "latest"}
+    manifest = json.dumps({"files": files, "dependencies": deps})
     text = (
-        '<artifact type="html" title="Landing Page">\n'
-        "<!DOCTYPE html>\n<html><body>Hi</body></html>\n"
+        f'<artifact type="project" title="Todo App" template="react">\n'
+        f"{manifest}\n"
         "</artifact>"
     )
     cleaned, artifacts = parse_artifacts(text)
     assert len(artifacts) == 1
-    assert artifacts[0]["type"] == "html"
-    assert artifacts[0]["title"] == "Landing Page"
-    assert "<!DOCTYPE html>" in artifacts[0]["code"]
+    a = artifacts[0]
+    assert a["type"] == "project"
+    assert a["template"] == "react"
+    assert a["files"] == files
+    assert a["dependencies"] == deps
 
 
-def test_multiple_artifacts():
+def test_vanilla_project():
+    files = {"/index.html": "<!DOCTYPE html><html><body>Hi</body></html>"}
+    manifest = json.dumps({"files": files})
     text = (
-        '<artifact type="react" title="App">\nfunction App() {}\n</artifact>\n'
-        "Some text\n"
-        '<artifact type="html" title="Page">\n<div>hi</div>\n</artifact>'
+        f'<artifact type="project" title="Static Site" template="vanilla">\n'
+        f"{manifest}\n"
+        "</artifact>"
+    )
+    cleaned, artifacts = parse_artifacts(text)
+    assert len(artifacts) == 1
+    a = artifacts[0]
+    assert a["template"] == "vanilla"
+    assert a["files"] == files
+    assert a["dependencies"] == {}
+
+
+def test_multiple_project_artifacts():
+    files1 = {"/App.js": "function App() {}"}
+    files2 = {"/index.html": "<div>hi</div>"}
+    text = (
+        f'<artifact type="project" title="React App" template="react">\n'
+        f'{json.dumps({"files": files1})}\n'
+        "</artifact>\n"
+        "And also:\n"
+        f'<artifact type="project" title="HTML Page" template="vanilla">\n'
+        f'{json.dumps({"files": files2})}\n'
+        "</artifact>"
     )
     cleaned, artifacts = parse_artifacts(text)
     assert len(artifacts) == 2
-    assert artifacts[0]["title"] == "App"
-    assert artifacts[1]["title"] == "Page"
+    assert artifacts[0]["title"] == "React App"
+    assert artifacts[0]["files"] == files1
+    assert artifacts[1]["title"] == "HTML Page"
+    assert artifacts[1]["files"] == files2
+
+
+def test_template_defaults_to_react():
+    files = {"/App.js": "function App() {}"}
+    manifest = json.dumps({"files": files})
+    text = (
+        f'<artifact type="project" title="No Template">\n'
+        f"{manifest}\n"
+        "</artifact>"
+    )
+    cleaned, artifacts = parse_artifacts(text)
+    assert len(artifacts) == 1
+    assert artifacts[0]["template"] == "react"
+
+
+def test_invalid_json_returns_empty():
+    text = (
+        '<artifact type="project" title="Bad" template="react">\n'
+        "this is not json\n"
+        "</artifact>"
+    )
+    cleaned, artifacts = parse_artifacts(text)
+    assert artifacts == []
+    assert cleaned.strip() == ""
 
 
 def test_malformed_no_closing_tag():
-    text = '<artifact type="react" title="Broken">\nsome code\n'
+    text = '<artifact type="project" title="Broken" template="react">\nsome code\n'
     cleaned, artifacts = parse_artifacts(text)
     assert artifacts == []
     assert "some code" in cleaned

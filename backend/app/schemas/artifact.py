@@ -10,7 +10,10 @@ class ArtifactOut(BaseModel):
     chat_id: str
     title: str
     artifact_type: str
-    code: str
+    code: Optional[str] = None
+    template: Optional[str] = None
+    files: Optional[dict] = None
+    dependencies: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -25,6 +28,9 @@ class ArtifactOut(BaseModel):
             title=artifact.title,
             artifact_type=artifact.artifact_type,
             code=artifact.code,
+            template=artifact.template,
+            files=artifact.files,
+            dependencies=artifact.dependencies,
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
         )
@@ -33,3 +39,4 @@ class ArtifactOut(BaseModel):
 class ArtifactUpdate(BaseModel):
     code: Optional[str] = None
     title: Optional[str] = None
+    files: Optional[dict] = None

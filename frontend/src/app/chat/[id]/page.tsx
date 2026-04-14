@@ -263,14 +263,6 @@ export default function ChatPage() {
           <ArtifactPanel
             artifact={activeArtifact}
             onClose={() => setActiveArtifact(null)}
-            onCodeChange={(id, code) => {
-              setArtifacts(prev =>
-                prev.map(a => (a.id === id ? { ...a, code } : a))
-              );
-              setActiveArtifact(prev =>
-                prev && prev.id === id ? { ...prev, code } : prev
-              );
-            }}
           />
         )}
       </div>

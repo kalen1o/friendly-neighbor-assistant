@@ -73,6 +73,8 @@ async def update_artifact(
         artifact.code = body.code
     if body.title is not None:
         artifact.title = body.title
+    if body.files is not None:
+        artifact.files = body.files
     await db.commit()
     await db.refresh(artifact)
     return ArtifactOut.from_artifact(artifact)

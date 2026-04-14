@@ -1,7 +1,8 @@
 from datetime import datetime
 from functools import partial
+from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import ForeignKey, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,7 +25,10 @@ class Artifact(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     artifact_type: Mapped[str] = mapped_column(String(20))
-    code: Mapped[str] = mapped_column(Text)
+    code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    template: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    files: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    dependencies: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()
