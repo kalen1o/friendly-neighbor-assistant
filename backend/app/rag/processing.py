@@ -93,6 +93,24 @@ async def process_document(
 
         logger.info(f"Document {document_id} processed: {len(chunk_texts)} chunks")
 
+        # Emit webhook event
+        try:
+            from app.webhooks.events import emit_event
+            if doc.user_id:
+                await emit_event(
+                    "document_processed",
+                    {
+                        "document_id": doc.public_id,
+                        "filename": doc.filename,
+                        "status": "ready",
+                        "chunk_count": len(chunk_texts),
+                    },
+                    user_id=doc.user_id,
+                    db=db,
+                )
+        except Exception:
+            pass
+
     except Exception as e:
         logger.exception(f"Failed to process document {document_id}")
         try:

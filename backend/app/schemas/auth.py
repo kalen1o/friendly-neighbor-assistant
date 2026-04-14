@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,9 +25,14 @@ class UserOut(BaseModel):
     email: str
     name: str
     role: str
+    memory_enabled: bool
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class UserUpdate(BaseModel):
+    memory_enabled: Optional[bool] = None
 
 
 class ProvidersResponse(BaseModel):

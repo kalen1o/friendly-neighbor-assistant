@@ -21,6 +21,7 @@ from app.routers.export import router as export_router
 
 from app.routers.folders import router as folders_router
 from app.routers.admin import router as admin_router
+from app.routers.webhooks import router as webhooks_router
 from app.routers.models import router as models_router
 from app.routers.skills import router as skills_router
 from app.routers.uploads import router as uploads_router
@@ -97,3 +98,4 @@ app.include_router(folders_router)
 app.include_router(uploads_router)
 app.include_router(models_router)
 app.include_router(admin_router)
+app.include_router(webhooks_router)

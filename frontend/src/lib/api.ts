@@ -59,6 +59,7 @@ export interface UserInfo {
   email: string;
   name: string;
   role: string;
+  memory_enabled: boolean;
   created_at: string;
 }
 
@@ -1199,9 +1200,78 @@ export async function getAuthProviders(): Promise<AuthProviders> {
 
 // ── Account Deletion ──
 
+export async function updateMe(data: { memory_enabled?: boolean }): Promise<UserInfo> {
+  const res = await authFetch(`${API_BASE}/api/auth/me`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update settings");
+  return res.json();
+}
+
 export async function deleteAccount(): Promise<void> {
   const res = await authFetch(`${API_BASE}/api/auth/me`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete account");
+}
+
+// ── Webhook Integrations ──
+
+export interface WebhookIntegration {
+  id: string;
+  name: string;
+  platform: "slack" | "discord" | "generic";
+  direction: "outbound" | "inbound" | "both";
+  webhook_url: string | null;
+  inbound_token: string | null;
+  inbound_url: string | null;
+  subscribed_events: string[];
+  config: Record<string, unknown> | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface WebhookCreate {
+  name: string;
+  platform: "slack" | "discord" | "generic";
+  direction: "outbound" | "inbound" | "both";
+  webhook_url?: string;
+  subscribed_events?: string[];
+  config_json?: Record<string, unknown>;
+}
+
+export async function listWebhooks(): Promise<WebhookIntegration[]> {
+  const res = await authFetch(`${API_BASE}/api/webhooks`);
+  if (!res.ok) throw new Error("Failed to list webhooks");
+  return res.json();
+}
+
+export async function createWebhook(data: WebhookCreate): Promise<WebhookIntegration> {
+  const res = await authFetch(`${API_BASE}/api/webhooks`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create webhook");
+  return res.json();
+}
+
+export async function updateWebhook(
+  id: string,
+  data: Partial<WebhookCreate & { enabled: boolean }>
+): Promise<WebhookIntegration> {
+  const res = await authFetch(`${API_BASE}/api/webhooks/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update webhook");
+  return res.json();
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/webhooks/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete webhook");
 }

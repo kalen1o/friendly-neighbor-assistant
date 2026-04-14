@@ -19,6 +19,7 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
   const router = useRouter();
   const { user, loading, isAuthenticated, requireAuth, logout: handleLogout } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const wrapperClass = cn("border-t", menuCollapsed ? "flex justify-center py-2" : "min-h-[63px]");
 
@@ -74,7 +75,7 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
 
   return (
     <div className={wrapperClass}>
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={(open) => { if (!open) setConfirmLogout(false); }}>
         <DropdownMenuTrigger className={cn(
           "flex cursor-pointer items-center border-0 bg-transparent transition-colors hover:bg-accent",
           menuCollapsed
@@ -106,16 +107,39 @@ export function UserMenu({ collapsed: menuCollapsed = false }: { collapsed?: boo
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => {
-              handleLogout();
-              router.push("/");
-            }}
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
-          </DropdownMenuItem>
+          {!confirmLogout ? (
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={(e) => {
+                e.preventDefault();
+                setConfirmLogout(true);
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          ) : (
+            <div className="flex flex-col gap-1 px-2 py-1.5">
+              <p className="text-xs text-muted-foreground">Sign out?</p>
+              <div className="flex gap-1">
+                <button
+                  className="flex-1 rounded px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    handleLogout();
+                    router.push("/");
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  className="flex-1 rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent"
+                  onClick={() => setConfirmLogout(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <SettingsDialog

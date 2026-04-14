@@ -15,6 +15,7 @@ from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.shared_chat import SharedChat  # noqa: F401
 from app.models.artifact import Artifact  # noqa: F401
 from app.models.chat_file import ChatFile  # noqa: F401
+from app.models.webhook import WebhookIntegration  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

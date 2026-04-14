@@ -271,7 +271,7 @@ User <-> Next.js UI <-> FastAPI Backend
 ## Roadmap
 
 - [x] Project scaffolding, Docker, Makefile
-- [x] Database schema + Alembic migrations (27 migrations)
+- [x] Database schema + Alembic migrations (30 migrations)
 - [x] AI provider integration (Anthropic + OpenAI + any compatible API)
 - [x] Basic chat with SSE streaming and auto-titles
 - [x] Multi-conversation support
@@ -297,16 +297,23 @@ User <-> Next.js UI <-> FastAPI Backend
 - [x] Mobile-responsive polish (swipe gestures, safe areas, animations)
 - [x] Browser push notifications (with first-login prompt)
 - [x] Background LLM tasks — response generation survives navigation and page reload (message-level status tracking, server-driven sidebar indicators, toast notifications)
-- [ ] Prompt chaining — sequential multi-step LLM pipelines
-- [ ] Orchestrator-workers — dynamic sub-task delegation to worker LLMs
-- [ ] Evaluator-optimizer — self-evaluation feedback loop for higher quality responses
-- [ ] Parallelization — sectioning/voting across multiple LLM calls
-- [ ] Agent-computer interface — systematic tool design for better LLM interaction
 - [x] OAuth/SSO login (Google, GitHub) — OAuth2 authorization code flow with account linking by email
 - [x] RAG enhancements — hybrid search (Postgres FTS + RRF), Cohere reranking, inline citations, semantic chunking, configurable pipeline, auto-KB injection
-- [ ] Scheduled agents — recurring tasks
-- [ ] Webhook integrations (Slack, Discord)
+- [x] Webhook integrations — Slack, Discord, generic URL (outbound notifications + inbound triggers)
 - [x] Delete account — user self-service account deletion with full data cleanup
+
+**Multi-Agent Evolution** (Level 3 → Level 4):
+- [ ] Evaluator-optimizer — reviewer agent checks response quality before sending (same LLM, different prompt); opt-in via `evaluate: true` in skill frontmatter; use cheaper model for evaluation
+- [ ] Plan-validate-execute — planner agent generates step list, validator checks for invalid tools/unreasonable steps, executor runs the validated plan
+- [ ] Specialist worker agents — route to domain-specific agents (Research, Code, Writing, Admin) each with tailored system prompts; `agent:` field in skill frontmatter
+- [ ] Coder-reviewer for artifacts — reviewer agent checks generated React/HTML code for correctness and safety before rendering
+- [ ] Orchestrator-workers — central orchestrator decomposes complex requests into subtasks, delegates to specialist workers (parallel where possible), synthesizes final output
+
+**Additional Features**:
+- [ ] Prompt chaining — sequential multi-step LLM pipelines
+- [ ] Parallelization — sectioning/voting across multiple LLM calls
+- [ ] Agent-computer interface — systematic tool design for better LLM interaction
+- [ ] Scheduled agents — recurring tasks
 - [ ] Plugin marketplace — share/install community skills
 - [ ] CI/CD & deployment pipeline
 - [ ] Voice input/output

@@ -28,7 +28,7 @@ from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
-from app.schemas.auth import LoginRequest, ProvidersResponse, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import LoginRequest, ProvidersResponse, RegisterRequest, TokenResponse, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -233,6 +233,19 @@ async def logout(
 
 @router.get("/me", response_model=UserOut)
 async def get_me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_me(
+    body: UserUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if body.memory_enabled is not None:
+        user.memory_enabled = body.memory_enabled
+    await db.commit()
+    await db.refresh(user)
     return user
 
 

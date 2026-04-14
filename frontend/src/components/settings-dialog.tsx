@@ -1,18 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Trash2, AlertTriangle, Sun, Moon, Monitor, MessageSquare, Zap, Wrench, UserX } from "lucide-react";
+import { Trash2, AlertTriangle, Sun, Moon, Monitor, MessageSquare, Zap, Wrench, UserX, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { deleteAllChats, deleteAccount, getUsage, type UsageStats } from "@/lib/api";
+import { deleteAllChats, deleteAccount, getUsage, getMe, updateMe, type UsageStats } from "@/lib/api";
 import { toast } from "sonner";
 import { ModelSettings } from "@/components/model-settings";
+import { IntegrationsSettings } from "@/components/integrations-settings";
+import { Switch } from "@/components/ui/switch";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -94,11 +96,28 @@ function UsageSection() {
 
 export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsDialogProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "models">("general");
+  const [tab, setTab] = useState<"general" | "models" | "integrations">("general");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+
+  useEffect(() => {
+    if (open) {
+      getMe().then((u) => setMemoryEnabled(u.memory_enabled)).catch(() => {});
+    }
+  }, [open]);
+
+  const handleToggleMemory = async (checked: boolean) => {
+    setMemoryEnabled(checked);
+    try {
+      await updateMe({ memory_enabled: checked });
+    } catch {
+      setMemoryEnabled(!checked);
+      toast.error("Failed to update memory setting");
+    }
+  };
 
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
@@ -161,11 +180,41 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
           >
             Models
           </button>
+          <button
+            onClick={() => setTab("integrations")}
+            className={cn(
+              "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+              tab === "integrations"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Integrations
+          </button>
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto p-5 sm:max-h-none">
           {tab === "general" ? (
             <>
+          <h2 className="text-lg font-semibold">Memory</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            When enabled, the assistant remembers your preferences across conversations.
+          </p>
+          <div className="mb-6 flex items-center justify-between rounded-lg border p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Brain className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Enable memory</p>
+                <p className="text-xs text-muted-foreground">
+                  Learn from your conversations and personalize responses
+                </p>
+              </div>
+            </div>
+            <Switch checked={memoryEnabled} onCheckedChange={handleToggleMemory} />
+          </div>
+
           <h2 className="text-lg font-semibold">Chats</h2>
           <p className="mb-6 text-sm text-muted-foreground">
             Manage your conversation history.
@@ -283,9 +332,11 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
             </div>
           </div>
             </>
-          ) : (
+          ) : tab === "models" ? (
             <ModelSettings />
-          )}
+          ) : tab === "integrations" ? (
+            <IntegrationsSettings />
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

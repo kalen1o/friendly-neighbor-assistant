@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     github_client_id: str = ""
     github_client_secret: str = ""
 
+    # Webhooks
+    max_webhooks_per_user: int = 10
+
     # Frontend URL for OAuth redirect after login
     frontend_url: str = "http://localhost:3000"
 

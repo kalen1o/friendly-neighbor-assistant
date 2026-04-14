@@ -998,6 +998,22 @@ async def _llm_background_task(
                 await db.commit()
                 await db.refresh(assistant_msg)
 
+                # Emit webhook event
+                try:
+                    from app.webhooks.events import emit_event
+                    await emit_event(
+                        "message_completed",
+                        {
+                            "chat_id": chat_public_id,
+                            "message": cleaned_response[:200],
+                            "user": user_msg_content_resolved[:100],
+                        },
+                        user_id=user_id,
+                        db=db,
+                    )
+                except Exception:
+                    pass  # Don't break chat flow for webhook failures
+
                 # Audit logging
                 from app.auth.admin import log_audit as _log_audit
                 await _log_audit(db, "send_message", user_id=user_id, resource_type="chat", resource_id=chat_public_id)
