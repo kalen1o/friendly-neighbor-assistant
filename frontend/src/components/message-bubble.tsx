@@ -26,6 +26,15 @@ interface MessageBubbleProps {
   metrics?: MessageMetrics | null;
   onEdit?: (newContent: string) => void;
   files?: AttachedFile[];
+  messageId?: string;
+}
+
+function processCitations(content: string, messageId?: string): string {
+  // Convert [1], [2] etc. into clickable markdown links scoped to this message
+  const prefix = messageId || "msg";
+  return content.replace(/\[(\d+)\]/g, (_match, num: string) => {
+    return `[${num}](#${prefix}-source-${num})`;
+  });
 }
 
 const mdComponents: Components = {
@@ -97,8 +106,46 @@ const mdComponents: Components = {
   hr() {
     return <hr className="my-4 border-border/40" />;
   },
-  // Links
+  // Links — citation anchors scroll in-page, external links open new tab
   a({ href, children }) {
+    const isCitation = href?.includes("-source-") && href?.startsWith("#");
+    if (isCitation) {
+      return (
+        <a
+          href={href}
+          onClick={(e) => {
+            e.preventDefault();
+            const highlight = (target: Element) => {
+              target.scrollIntoView({ behavior: "smooth", block: "center" });
+              target.classList.add("ring-2", "ring-primary/40", "bg-primary/5");
+              setTimeout(() => target.classList.remove("ring-2", "ring-primary/40", "bg-primary/5"), 2000);
+            };
+            let el = document.querySelector(href!);
+            if (!el) {
+              // Sources collapsed — find and click the "N sources" expand button
+              const msgContainer = (e.target as HTMLElement).closest("[data-message-id]");
+              const btns = msgContainer?.querySelectorAll("button") || [];
+              for (const btn of btns) {
+                if (/\d+\s+source/.test(btn.textContent || "")) {
+                  btn.click();
+                  break;
+                }
+              }
+              // Wait for React state update + DOM render
+              setTimeout(() => {
+                el = document.querySelector(href!);
+                if (el) highlight(el);
+              }, 300);
+              return;
+            }
+            highlight(el);
+          }}
+          className="inline-flex items-center justify-center ml-0.5 -mt-2 h-4 min-w-4 rounded-md bg-primary/10 px-1 text-[9px] font-semibold text-primary align-super no-underline transition-colors hover:bg-primary/20 active:bg-primary/30"
+        >
+          {children}
+        </a>
+      );
+    }
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary/60">
         {children}
@@ -111,7 +158,7 @@ const mdComponents: Components = {
   },
 };
 
-export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit, files }: MessageBubbleProps) {
+export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit, files, messageId }: MessageBubbleProps) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -153,6 +200,7 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
 
   return (
     <div
+      data-message-id={messageId}
       className={cn(
         "flex w-full animate-fade-in-up",
         isUser ? "justify-end" : "justify-start"
@@ -234,14 +282,14 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
           ) : (
             <div className="max-w-none overflow-hidden text-sm leading-relaxed">
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                {content}
+                {processCitations(content, messageId)}
               </ReactMarkdown>
             </div>
           )}
         </div>
         {!isUser && (sources?.length || metrics) ? (
           <div className="flex items-center justify-between gap-1">
-            <SourceAttribution sources={sources || []} metrics={metrics} />
+            <SourceAttribution sources={sources || []} metrics={metrics} messageId={messageId} />
             {!isEditing && (
               <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 <Button

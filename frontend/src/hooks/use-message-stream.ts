@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { nextMsgId, type DisplayMessage } from "@/components/chat-messages";
+import { nextMsgId, type DisplayMessage, type SkillUsage } from "@/components/chat-messages";
 import type { PendingFile } from "@/components/chat-input";
 import {
   getChat,
@@ -30,7 +30,7 @@ export function useMessageStream(chatId: string) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [actionText, setActionText] = useState<string | null>(null);
-  const [activeSkills, setActiveSkills] = useState<string[]>([]);
+  const [activeSkills, setActiveSkills] = useState<SkillUsage[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
   const [chatModelId, setChatModelId] = useState<string | null>(null);
@@ -48,9 +48,17 @@ export function useMessageStream(chatId: string) {
   // Metrics received from SSE for the current response
   const metricsRef = useRef<MessageMetrics | null>(null);
   // Skills used during the current response
-  const skillsUsedRef = useRef<string[]>([]);
+  const skillsUsedRef = useRef<SkillUsage[]>([]);
   const sendingRef = useRef(false);
   const chatTitleRef = useRef<string>("");
+  const bgPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopBgPoll = useCallback(() => {
+    if (bgPollRef.current) {
+      clearInterval(bgPollRef.current);
+      bgPollRef.current = null;
+    }
+  }, []);
 
   const stopTypewriter = useCallback(() => {
     if (intervalRef.current) {
@@ -64,7 +72,11 @@ export function useMessageStream(chatId: string) {
     const finalContent = fullTextRef.current;
     const allSources = sourcesRef.current || [];
     const realSources = allSources.filter((s) => s.type !== "skill");
-    const finalSkills = [...skillsUsedRef.current];
+    // Merge params from sources into skills
+    const skillSources = allSources.filter((s) => s.type === "skill" && s.tool);
+    const finalSkills: SkillUsage[] = skillSources.length > 0
+      ? skillSources.map((s) => ({ name: s.tool!, params: s.params }))
+      : [...skillsUsedRef.current];
     const finalMetrics = metricsRef.current;
     if (finalContent) {
       setMessages((msgs) => [
@@ -120,22 +132,18 @@ export function useMessageStream(chatId: string) {
   useEffect(() => {
     return () => {
       stopTypewriter();
-      const bgCleanup = (window as any).__bgPollCleanup;
-      if (bgCleanup) {
-        bgCleanup();
-        delete (window as any).__bgPollCleanup;
-      }
+      stopBgPoll();
     };
-  }, [stopTypewriter]);
+  }, [stopTypewriter, stopBgPoll]);
 
   const mapMessages = useCallback((msgs: MessageOut[]): DisplayMessage[] => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return msgs.map((m) => {
       const allSources = m.sources || [];
       const realSources = allSources.filter((s) => s.type !== "skill");
-      const skills = allSources
+      const skills: SkillUsage[] = allSources
         .filter((s) => s.type === "skill" && s.tool)
-        .map((s) => s.tool!);
+        .map((s) => ({ name: s.tool!, params: s.params }));
       const attachedFiles = m.files?.map((f) => ({
         url: `${apiBase}/api/uploads/${f.id}`,
         name: f.name,
@@ -250,8 +258,7 @@ export function useMessageStream(chatId: string) {
               revealedRef.current = fullTextRef.current.length;
               setStreamingContent(fullTextRef.current);
             } else {
-              clearInterval(pollInterval);
-              delete (window as any).__bgPollCleanup;
+              stopBgPoll();
               setMessages(mapMessages(updated.messages));
               setStreamingContent("");
               fullTextRef.current = "";
@@ -262,8 +269,7 @@ export function useMessageStream(chatId: string) {
               chatTitleRef.current = updated.title || "";
             }
           } catch {
-            clearInterval(pollInterval);
-            delete (window as any).__bgPollCleanup;
+            stopBgPoll();
             setStreamingContent("");
             fullTextRef.current = "";
             revealedRef.current = 0;
@@ -277,8 +283,8 @@ export function useMessageStream(chatId: string) {
         const mapped = mapMessages(chat.messages);
         setMessages(mapped.slice(0, -1));
 
-        // Store cleanup for effect teardown
-        (window as any).__bgPollCleanup = () => clearInterval(pollInterval);
+        // Store interval ref for cleanup
+        bgPollRef.current = pollInterval;
       }
 
       listArtifacts(chatId)
@@ -355,6 +361,8 @@ export function useMessageStream(chatId: string) {
         },
       ]);
       const fileIds = files.map((f) => f.id);
+      // Stop any background poll from a previous generating message
+      stopBgPoll();
       setStreamingContent("");
       fullTextRef.current = "";
       revealedRef.current = 0;
@@ -380,8 +388,8 @@ export function useMessageStream(chatId: string) {
             const match = action.match(/^Using (\w+)/);
             if (match) {
               const skillName = match[1];
-              if (!skillsUsedRef.current.includes(skillName)) {
-                skillsUsedRef.current.push(skillName);
+              if (!skillsUsedRef.current.some((s) => s.name === skillName)) {
+                skillsUsedRef.current.push({ name: skillName });
                 setActiveSkills([...skillsUsedRef.current]);
               }
             }
@@ -429,7 +437,7 @@ export function useMessageStream(chatId: string) {
         }
       );
     },
-    [chatId, startTypewriter, finalizeMessage, stopTypewriter]
+    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll]
   );
 
   // Initial load / auto-send from URL

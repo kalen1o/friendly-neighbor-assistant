@@ -59,5 +59,6 @@ class DocumentChunk(Base):
         else mapped_column(Text, nullable=True)
     )
     metadata_json: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    search_vector: Mapped[Optional[str]] = mapped_column(Text, default=None)
 
     document: Mapped["Document"] = relationship(back_populates="chunks")

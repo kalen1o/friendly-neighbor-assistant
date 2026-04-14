@@ -29,6 +29,8 @@ async def tool_search_knowledge_base(
             "text": r["text"],
             "filename": r["filename"],
             "score": round(r["score"], 3),
+            "chunk_index": r.get("chunk_index", 0),
+            "relevance_score": round(r.get("relevance_score", r["score"]), 3),
         }
         for r in results
     ]

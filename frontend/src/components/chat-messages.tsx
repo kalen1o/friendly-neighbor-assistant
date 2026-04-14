@@ -50,12 +50,17 @@ export interface AttachedFile {
   type: string; // MIME type
 }
 
+export interface SkillUsage {
+  name: string;
+  params?: Record<string, unknown>;
+}
+
 export interface DisplayMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   sources?: Source[] | null;
-  skillsUsed?: string[] | null;
+  skillsUsed?: SkillUsage[] | null;
   metrics?: MessageMetrics | null;
   files?: AttachedFile[];
 }
@@ -65,24 +70,47 @@ interface ChatMessagesProps {
   streamingContent: string;
   isLoading?: boolean;
   actionText?: string | null;
-  activeSkills?: string[];
+  activeSkills?: SkillUsage[];
   onEditMessage?: (index: number, newContent: string) => void;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
 }
 
-function SkillBadges({ skills }: { skills: string[] }) {
-  const unique = [...new Set(skills)];
+function SkillBadges({ skills }: { skills: SkillUsage[] }) {
+  const seen = new Set<string>();
+  const unique = skills.filter((s) => {
+    if (seen.has(s.name)) return false;
+    seen.add(s.name);
+    return true;
+  });
   if (!unique.length) return null;
   return (
     <div className="mb-1.5 flex flex-wrap gap-1.5 pl-1">
-      {unique.map((skill) => (
-        <Badge key={skill} variant="secondary" className="gap-1 text-[10px]">
-          <span className="h-1 w-1 rounded-full bg-primary" />
-          {skill.replace(/_/g, " ")}
-        </Badge>
-      ))}
+      {unique.map((skill) => {
+        const hasParams = skill.params && Object.keys(skill.params).length > 0;
+        return (
+          <span key={skill.name} className="group/skill relative">
+            <Badge
+              variant="secondary"
+              className="gap-1 text-[10px] cursor-default transition-colors group-hover/skill:bg-accent"
+            >
+              <span className="h-1 w-1 rounded-full bg-primary" />
+              {skill.name.replace(/_/g, " ")}
+            </Badge>
+            {hasParams && (
+              <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 hidden w-max max-w-sm rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md group-hover/skill:block">
+                {Object.entries(skill.params!).map(([k, v]) => (
+                  <div key={k} className="break-all">
+                    <span className="font-medium text-muted-foreground">{k}:</span>{" "}
+                    {String(v)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -166,6 +194,7 @@ export function ChatMessages({ messages, streamingContent, isLoading, actionText
               metrics={msg.role === "assistant" ? msg.metrics : undefined}
               onEdit={msg.role === "user" && onEditMessage ? (newContent) => onEditMessage(i, newContent) : undefined}
               files={msg.files}
+              messageId={msg.id}
             />
           </div>
         ))}

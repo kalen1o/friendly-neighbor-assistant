@@ -51,3 +51,4 @@ frontend/playwright-report/
 # ── Misc ──
 *.log
 .superpowers/
+.worktrees/

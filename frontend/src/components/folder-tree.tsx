@@ -387,7 +387,7 @@ function FolderNodeItem({
     if (editingFolderId === folder.id) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRenameValue("");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setRenaming(true);
     }
   }, [editingFolderId, folder.id]);

@@ -37,19 +37,25 @@ async def execute_web_search(
 async def execute_knowledge_base(
     query: str, db, settings: Settings, **kwargs
 ) -> Dict[str, Any]:
-    """Execute knowledge base search skill."""
+    """Execute knowledge base search skill with numbered citations."""
     top_k = kwargs.get("top_k", 5)
     results = await tool_search_knowledge_base(query, db, settings, top_k=top_k)
     if not results:
         return {"content": "No relevant documents found.", "sources": []}
 
     content_parts = []
-    for r in results:
-        content_parts.append(f"[{r['filename']}]: {r['text']}")
+    sources = []
+    for i, r in enumerate(results, 1):
+        content_parts.append("[{}] [{}]: {}".format(i, r["filename"], r["text"]))
+        sources.append({
+            **r,
+            "citation_index": i,
+            "chunk_excerpt": r["text"][:150],
+        })
 
     return {
         "content": "\n\n".join(content_parts),
-        "sources": results,
+        "sources": sources,
     }
 
 

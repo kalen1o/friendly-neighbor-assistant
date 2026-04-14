@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { register as registerUser } from "@/lib/api";
+import { OAuthButtons } from "@/components/oauth-buttons";
 import Link from "next/link";
 
 const registerSchema = z.object({
@@ -52,6 +53,7 @@ export default function RegisterPage() {
           <CardDescription>Sign up for Friendly Neighbor</CardDescription>
         </CardHeader>
         <CardContent>
+          <OAuthButtons />
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && (
               <Alert variant="destructive">

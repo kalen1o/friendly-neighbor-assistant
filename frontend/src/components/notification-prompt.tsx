@@ -58,7 +58,7 @@ export function NotificationPrompt({ user }: NotificationPromptProps) {
         <div className="flex-1">
           <p className="text-sm font-medium">Enable notifications?</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Get notified when a response is ready while you're on another tab or chat.
+            Get notified when a response is ready while you&apos;re on another tab or chat.
           </p>
           <div className="mt-3 flex gap-2">
             <Button size="sm" onClick={handleEnable}>

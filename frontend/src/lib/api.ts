@@ -126,6 +126,12 @@ export interface Source {
   url?: string;
   snippet?: string;
   tool?: string;
+  params?: Record<string, unknown>;
+  // Citation enhancements
+  citation_index?: number;
+  chunk_excerpt?: string;
+  chunk_index?: number;
+  relevance_score?: number;
 }
 
 export interface MessageMetrics {
@@ -1172,5 +1178,22 @@ export async function adminDeleteQuota(userId: string): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete quota");
+}
+
+// ── OAuth Providers ──
+
+export interface AuthProviders {
+  google: boolean;
+  github: boolean;
+}
+
+export async function getAuthProviders(): Promise<AuthProviders> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/providers`);
+    if (!res.ok) return { google: false, github: false };
+    return res.json();
+  } catch {
+    return { google: false, github: false };
+  }
 }
 

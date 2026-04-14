@@ -161,3 +161,64 @@ async def test_404_error_format(client):
     assert response.status_code == 404
     data = response.json()
     assert data["error"]["code"] == "not_found"
+
+
+@pytest.mark.anyio
+async def test_auth_providers(anon_client):
+    response = await anon_client.get("/api/auth/providers")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["google"] is False
+    assert data["github"] is False
+
+
+@pytest.mark.anyio
+async def test_oauth_creates_new_user(client, db):
+    """OAuth login with new email creates a new user."""
+    from app.routers.auth import _oauth_create_or_link
+    from app.config import Settings
+
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        jwt_secret="test",
+        redis_url="redis://localhost:6379/0",
+    )
+
+    user = await _oauth_create_or_link(db, {
+        "email": "oauth@example.com",
+        "name": "OAuth User",
+        "oauth_id": "google-123",
+        "provider": "google",
+    }, settings)
+
+    assert user.email == "oauth@example.com"
+    assert user.name == "OAuth User"
+    assert user.oauth_provider == "google"
+    assert user.oauth_id == "google-123"
+    assert user.password_hash == ""
+
+
+@pytest.mark.anyio
+async def test_oauth_links_existing_user(client, db):
+    """OAuth login with existing email links to existing account."""
+    from app.routers.auth import _oauth_create_or_link
+    from app.config import Settings
+
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        jwt_secret="test",
+        redis_url="redis://localhost:6379/0",
+    )
+
+    # The test fixture already created test@example.com
+    user = await _oauth_create_or_link(db, {
+        "email": "test@example.com",
+        "name": "Test User",
+        "oauth_id": "github-456",
+        "provider": "github",
+    }, settings)
+
+    assert user.email == "test@example.com"
+    assert user.oauth_provider == "github"
+    assert user.oauth_id == "github-456"
+    assert user.password_hash != ""

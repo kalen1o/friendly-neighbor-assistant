@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { test } from "@playwright/test";
 
 const API = "http://localhost:8000";

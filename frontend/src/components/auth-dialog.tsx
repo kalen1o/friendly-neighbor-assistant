@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { OAuthButtons } from "@/components/oauth-buttons";
 
 // ── Form schemas ──
 
@@ -258,6 +259,8 @@ export function AuthDialog({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+
+          <OAuthButtons />
 
           {mode === "login" ? (
             <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">

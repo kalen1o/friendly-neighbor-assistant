@@ -802,6 +802,73 @@ async def _llm_background_task(
                         "content": user_msg_content_resolved + extra_instructions,
                     }
 
+            # Auto-inject knowledge base context when user has documents
+            # Uses a separate DB session to avoid poisoning the main transaction
+            kb_sources = []
+            try:
+                from app.rag.retrieval import search_knowledge_base as _kb_search
+                from app.models.document import Document as _Doc
+
+                doc_count = await db.scalar(
+                    select(func.count(_Doc.id)).where(
+                        _Doc.status == "ready",
+                        or_(_Doc.user_id == user_id, _Doc.user_id == None),  # noqa: E711
+                    )
+                )
+                if doc_count and doc_count > 0:
+                    await queue.put({"event": "action", "data": "Searching knowledge base..."})
+                    logger.info("Auto-KB: searching %d docs, query=%s", doc_count, user_msg_content_resolved[:80])
+                    kb_session_factory = get_session_factory()
+                    async with kb_session_factory() as kb_db:
+                        kb_results = await _kb_search(
+                            user_msg_content_resolved, kb_db, settings
+                        )
+                    logger.info("Auto-KB: got %d results", len(kb_results))
+                    if kb_results:
+                        # Format as numbered citations
+                        citation_parts = []
+                        for idx, r in enumerate(kb_results, 1):
+                            citation_parts.append(
+                                "[{}] [{}]: {}".format(idx, r["filename"], r["text"])
+                            )
+                            kb_sources.append({
+                                "type": "document",
+                                "filename": r["filename"],
+                                "text": r["text"],
+                                "score": round(r.get("score", 0), 3),
+                                "relevance_score": round(
+                                    r.get("relevance_score", r.get("score", 0)), 3
+                                ),
+                                "citation_index": idx,
+                                "chunk_excerpt": r["text"][:150],
+                                "chunk_index": r.get("chunk_index", 0),
+                            })
+
+                        kb_context = (
+                            "\n\n---\n"
+                            "The following sources were found in the user's knowledge base. "
+                            "Use them to answer the question if relevant. "
+                            "Cite sources using [1], [2], etc. inline.\n\n"
+                            + "\n\n".join(citation_parts)
+                        )
+                        last_msg = llm_messages[-1]
+                        if isinstance(last_msg.get("content"), list):
+                            for block in last_msg["content"]:
+                                if block.get("type") == "text":
+                                    block["text"] += kb_context
+                                    break
+                        else:
+                            llm_messages[-1] = {
+                                "role": "user",
+                                "content": llm_messages[-1]["content"] + kb_context,
+                            }
+                        logger.info(
+                            "Auto-injected %d KB results for chat %s",
+                            len(kb_results), chat_public_id,
+                        )
+            except Exception:
+                logger.exception("Auto KB injection failed, continuing without")
+
             # 4. pre_llm hooks
             hook_ctx.llm_messages = llm_messages
             hook_ctx = await hook_registry.run_hooks("pre_llm", hook_ctx)
@@ -887,16 +954,16 @@ async def _llm_background_task(
                         "data": hook_ctx.modifications["response_append"],
                     })
 
-                # Build sources: actual sources from tool results + skill labels
-                sources_data = []
-                seen_urls = set()
+                # Build sources: auto-KB + tool results + skill labels
+                sources_data = list(kb_sources)  # auto-injected KB sources first
+                seen_keys = {s.get("filename") for s in sources_data if s.get("filename")}
                 if hasattr(tool_executor, "collected_sources"):
                     for src in tool_executor.collected_sources:
                         key = src.get("url") or src.get("filename")
-                        if key and key in seen_urls:
+                        if key and key in seen_keys:
                             continue
                         if key:
-                            seen_urls.add(key)
+                            seen_keys.add(key)
                         sources_data.append(src)
                 # Add skill labels for tools that didn't return specific sources
                 sourced_tools = {s.get("tool") for s in sources_data if s.get("tool")}
@@ -910,7 +977,7 @@ async def _llm_background_task(
                 cleaned_response, found_artifacts = parse_artifacts(full_response)
 
                 # Save assistant message (with artifact tags stripped)
-                sources_json = json.dumps(sources_data) if skills_used else None
+                sources_json = json.dumps(sources_data) if sources_data else None
                 if assistant_msg:
                     # Update the progressively-saved message
                     assistant_msg.content = cleaned_response

@@ -30,11 +30,58 @@ An AI-powered chatbot agent that connects to any LLM provider, searches the web 
 
 ### RAG Knowledge Base
 - **Document upload** — PDF, DOCX, TXT, Markdown, HTML, CSV
-- **Paragraph-based chunking** — Sliding window with smart merge/split
+- **Semantic chunking** — Header-aware splitting with configurable chunk size and overlap
 - **Vector embeddings** — OpenAI `text-embedding-3-small`, stored in pgvector
-- **Semantic search** — Cosine similarity with HNSW indexing
+- **Hybrid search** — Combines vector similarity with PostgreSQL full-text search via Reciprocal Rank Fusion (RRF)
+- **Cohere reranking** — Optional two-stage retrieval using Cohere Rerank API for higher precision
+- **Inline citations** — Numbered `[1]`, `[2]` markers in responses with clickable source excerpts
 - **Background processing** — Upload returns immediately, processing runs async
-- **Source attribution** — Collapsible sources section shows which documents informed the answer
+
+### RAG Pipeline Details
+
+The retrieval pipeline processes queries through multiple stages, each independently toggleable:
+
+```
+Query → Hybrid Search (vector + FTS → RRF fusion) → Reranking (Cohere) → Citation Formatting → LLM
+```
+
+**Hybrid Search** combines two retrieval methods for better recall:
+- **Vector search** uses cosine similarity on pgvector embeddings to find semantically similar chunks
+- **Full-text search** uses PostgreSQL `tsvector`/`tsquery` for keyword matching (exact terms, acronyms, names)
+- Results are fused via **Reciprocal Rank Fusion (RRF)**, a proven method that combines ranked lists without needing score normalization
+
+**Cohere Reranking** adds a second-stage relevance filter:
+- First stage retrieves top-20 candidates via hybrid search
+- Cohere's cross-encoder (`rerank-v3.5`) scores each (query, chunk) pair for precise relevance
+- Returns the top-5 most relevant chunks — significantly more accurate than similarity alone
+
+**Citation Highlighting** provides source transparency:
+- Each retrieved chunk gets a numbered label `[1]`, `[2]` in the LLM context
+- The LLM is instructed to cite sources inline when drawing from them
+- Frontend renders citations as clickable superscript badges that link to source excerpts
+
+**Semantic Chunking** splits documents at natural boundaries:
+- Detects markdown headers (`#`, `##`) and HTML headings as section boundaries
+- Groups content under the same header into a single chunk when it fits
+- Falls back to paragraph-based splitting for headerless text
+- Populates chunk metadata (header title, position) for future filtering
+
+#### RAG Configuration
+
+All RAG settings are configurable via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RAG_HYBRID_SEARCH_ENABLED` | `true` | Enable hybrid (vector + full-text) search |
+| `RAG_FULLTEXT_WEIGHT` | `0.4` | Weight of full-text search in RRF fusion (vector gets 1 - this) |
+| `RAG_RERANK_ENABLED` | `false` | Enable Cohere reranking (requires API key) |
+| `COHERE_API_KEY` | `""` | Cohere API key for reranking |
+| `RAG_TOP_K` | `5` | Number of results returned to the LLM |
+| `RAG_MIN_SCORE` | `0.65` | Minimum vector similarity score |
+| `RAG_RERANK_TOP_N` | `20` | Number of candidates fetched before reranking |
+| `RAG_CHUNK_SIZE` | `500` | Target tokens per chunk |
+| `RAG_CHUNK_OVERLAP` | `50` | Overlap tokens between consecutive chunks |
+| `RAG_CHUNK_STRATEGY` | `semantic` | Chunking strategy: `semantic` (header-aware) or `fixed` (paragraph window) |
 
 ### Smart Agent with Skills
 The agent uses an LLM to select which skills to run for each message:
@@ -229,7 +276,7 @@ User <-> Next.js UI <-> FastAPI Backend
 - [x] Basic chat with SSE streaming and auto-titles
 - [x] Multi-conversation support
 - [x] Document upload with background processing
-- [x] Paragraph-based chunking with smart merge/split
+- [x] Semantic chunking with header-aware splitting (upgraded from paragraph-based)
 - [x] Vector embeddings + pgvector retrieval
 - [x] Web search with page content fetching
 - [x] Source attribution in UI
@@ -256,10 +303,11 @@ User <-> Next.js UI <-> FastAPI Backend
 - [ ] Parallelization — sectioning/voting across multiple LLM calls
 - [ ] Agent-computer interface — systematic tool design for better LLM interaction
 - [ ] OAuth/SSO login (Google, GitHub)
-- [ ] RAG enhancements — hybrid search, re-ranking, citation highlighting
+- [x] RAG enhancements — hybrid search (Postgres FTS + RRF), Cohere reranking, inline citations, semantic chunking, configurable pipeline, auto-KB injection
 - [ ] Conversation branching — fork at any message
 - [ ] Scheduled agents — recurring tasks
 - [ ] Webhook integrations (Slack, Discord)
+- [ ] Delete account — user self-service account deletion with data cleanup
 - [ ] Plugin marketplace — share/install community skills
 - [ ] CI/CD & deployment pipeline
 - [ ] Voice input/output

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test } from "@playwright/test";
 
 test("notifications: first-login prompt appears", async ({ browser }) => {

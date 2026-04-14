@@ -20,6 +20,25 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_api_key: str = ""
     embedding_base_url: str = ""
+
+    # RAG — hybrid search
+    rag_hybrid_search_enabled: bool = True
+    rag_fulltext_weight: float = 0.4
+
+    # RAG — reranking
+    rag_rerank_enabled: bool = False
+    cohere_api_key: str = ""
+
+    # RAG — retrieval
+    rag_top_k: int = 5
+    rag_min_score: float = 0.5
+    rag_rerank_top_n: int = 20  # candidates fetched before reranking
+
+    # RAG — chunking
+    rag_chunk_size: int = 500
+    rag_chunk_overlap: int = 50
+    rag_chunk_strategy: str = "semantic"  # "semantic" or "fixed"
+
     max_tool_rounds: int = 5
 
     # Auth — JWT

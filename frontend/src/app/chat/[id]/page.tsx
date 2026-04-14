@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { Share2, Search, Download } from "lucide-react";
@@ -17,12 +17,12 @@ import { useAuth } from "@/components/auth-guard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMessageStream } from "@/hooks/use-message-stream";
 
+const subscribe = () => () => {};
+const getModKey = () => (/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl");
+const getServerModKey = () => "Ctrl";
+
 function KbdShortcut() {
-  const [mod, setMod] = useState<string | null>(null);
-  useEffect(() => {
-    setMod(/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl");
-  }, []);
-  if (!mod) return <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium invisible">⌘ + K</kbd>;
+  const mod = useSyncExternalStore(subscribe, getModKey, getServerModKey);
   return <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{mod} + K</kbd>;
 }
 

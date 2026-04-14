@@ -4,7 +4,7 @@
  * The backend saves progressively, so responses survive navigation.
  */
 
-import { sendMessage, type ChatMode } from "@/lib/api";
+import { sendMessage, type ChatMode, type Source, type MessageMetrics, type ArtifactData } from "@/lib/api";
 import { toast } from "sonner";
 
 interface ActiveStream {
@@ -15,8 +15,23 @@ interface ActiveStream {
   title: string;
 }
 
+interface StreamCallbacks {
+  onAction?: (action: string) => void;
+  onMessage: (chunk: string) => void;
+  onTitle: (title: string) => void;
+  onSources?: (sources: Source[]) => void;
+  onMetrics?: (metrics: MessageMetrics) => void;
+  onArtifact?: (artifact: ArtifactData) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
+interface ActiveStreamInternal extends ActiveStream {
+  _setCallbacks: (cb: StreamCallbacks) => void;
+}
+
 // Global map of chatId → active stream
-const streams = new Map<string, ActiveStream>();
+const streams = new Map<string, ActiveStreamInternal>();
 
 /**
  * Start a new SSE stream for a chat. If one is already active, abort it first.
@@ -28,16 +43,7 @@ export function startStream(
   mode: ChatMode,
   fileIds: string[],
   chatTitle: string,
-  callbacks: {
-    onAction?: (action: string) => void;
-    onMessage: (chunk: string) => void;
-    onTitle: (title: string) => void;
-    onSources?: (sources: any[]) => void;
-    onMetrics?: (metrics: any) => void;
-    onArtifact?: (artifact: any) => void;
-    onDone: () => void;
-    onError: (error: string) => void;
-  }
+  callbacks: StreamCallbacks
 ): void {
   // Abort existing stream for this chat
   const existing = streams.get(chatId);
@@ -45,12 +51,13 @@ export function startStream(
     existing.abort();
   }
 
-  const stream: ActiveStream = {
+  const stream: ActiveStreamInternal = {
     chatId,
     abort: () => {},
     fullText: "",
     done: false,
     title: chatTitle,
+    _setCallbacks: () => {},
   };
 
   // Store a reference to the CURRENT callbacks — these may go stale on unmount
@@ -111,7 +118,7 @@ export function startStream(
   streams.set(chatId, stream);
 
   // Expose a way to update callbacks (when component re-mounts on the same chat)
-  (stream as any)._setCallbacks = (cb: typeof callbacks) => {
+  stream._setCallbacks = (cb: StreamCallbacks) => {
     currentCallbacks = cb;
   };
 }
@@ -142,22 +149,13 @@ export function getActiveStream(chatId: string): ActiveStream | undefined {
  */
 export function reattachStream(
   chatId: string,
-  callbacks: {
-    onAction?: (action: string) => void;
-    onMessage: (chunk: string) => void;
-    onTitle: (title: string) => void;
-    onSources?: (sources: any[]) => void;
-    onMetrics?: (metrics: any) => void;
-    onArtifact?: (artifact: any) => void;
-    onDone: () => void;
-    onError: (error: string) => void;
-  }
+  callbacks: StreamCallbacks
 ): string | null {
   const stream = streams.get(chatId);
   if (!stream || stream.done) return null;
 
   // Update callbacks to point to the new component's state
-  (stream as any)._setCallbacks(callbacks);
+  stream._setCallbacks(callbacks);
   return stream.fullText;
 }
 

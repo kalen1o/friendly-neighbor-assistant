@@ -1,3 +1,4 @@
+import json
 import re
 from typing import List
 
@@ -103,3 +104,109 @@ def chunk_text(text: str, paragraphs_per_chunk: int = 2) -> List[str]:
         chunks.append("\n\n".join(window))
 
     return chunks
+
+
+# Header patterns for splitting
+_MD_HEADER_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+_HTML_HEADER_RE = re.compile(r"<h([1-6])[^>]*>(.*?)</h\1>", re.IGNORECASE | re.DOTALL)
+
+
+def _extract_sections(text: str) -> List[dict]:
+    """Split text into sections based on headers (markdown or HTML)."""
+    sections: List[dict] = []
+
+    # Try markdown headers first
+    headers = list(_MD_HEADER_RE.finditer(text))
+
+    if not headers:
+        # Try HTML headers
+        headers = list(_HTML_HEADER_RE.finditer(text))
+        if headers:
+            for i, match in enumerate(headers):
+                header_text = re.sub(r"<[^>]+>", "", match.group(2)).strip()
+                start = match.end()
+                end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+                body = text[start:end].strip()
+                sections.append({"header": header_text, "body": body})
+            return sections
+
+    if headers:
+        # Handle text before first header
+        if headers[0].start() > 0:
+            pre_text = text[: headers[0].start()].strip()
+            if pre_text:
+                sections.append({"header": "", "body": pre_text})
+
+        for i, match in enumerate(headers):
+            header_text = match.group(2).strip()
+            start = match.end()
+            end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+            body = text[start:end].strip()
+            sections.append({"header": header_text, "body": body})
+        return sections
+
+    # No headers found — treat entire text as one section
+    return [{"header": "", "body": text.strip()}]
+
+
+def chunk_text_semantic(
+    text: str,
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+) -> List[dict]:
+    """Split text into chunks using header-aware semantic boundaries.
+
+    Returns list of dicts: {"text": str, "metadata": {"header": str, "position": str}}
+    """
+    if not text.strip():
+        return []
+
+    sections = _extract_sections(text)
+    chunks: List[dict] = []
+
+    for section in sections:
+        header = section["header"]
+        body = section["body"]
+        if not body.strip():
+            continue
+
+        tokens = _estimate_tokens(body)
+
+        if tokens <= chunk_size:
+            # Section fits in one chunk
+            chunk_text_content = "## {}\n\n{}".format(header, body) if header else body
+            chunks.append({
+                "text": chunk_text_content,
+                "metadata": {"header": header, "position": "full"},
+            })
+        else:
+            # Split long sections into overlapping chunks
+            paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+            current = ""
+            position_idx = 0
+
+            for para in paragraphs:
+                candidate = (current + "\n\n" + para).strip() if current else para
+                if _estimate_tokens(candidate) > chunk_size and current:
+                    chunk_text_content = "## {}\n\n{}".format(header, current) if header else current
+                    position = "start" if position_idx == 0 else "middle"
+                    chunks.append({
+                        "text": chunk_text_content,
+                        "metadata": {"header": header, "position": position},
+                    })
+                    position_idx += 1
+                    # Overlap: keep tail of current chunk
+                    overlap_chars = chunk_overlap * APPROX_CHARS_PER_TOKEN
+                    current = current[-overlap_chars:].strip() + "\n\n" + para if overlap_chars < len(current) else para
+                else:
+                    current = candidate
+
+            if current.strip():
+                chunk_text_content = "## {}\n\n{}".format(header, current) if header else current
+                position = "end" if position_idx > 0 else "full"
+                chunks.append({
+                    "text": chunk_text_content,
+                    "metadata": {"header": header, "position": position},
+                })
+
+    return chunks if chunks else [{"text": text.strip(), "metadata": {"header": "", "position": "full"}}]

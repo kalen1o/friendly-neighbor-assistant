@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { test } from "@playwright/test";
 
 test("debug: loading state during tool calls", async ({ page }) => {
