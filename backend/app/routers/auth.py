@@ -236,6 +236,58 @@ async def get_me(user: User = Depends(get_current_user)):
     return user
 
 
+@router.delete("/me", status_code=204)
+async def delete_account(
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Delete the current user's account and all associated data."""
+    from sqlalchemy import delete as sql_delete
+    from app.models.chat import Chat, Message
+    from app.models.document import Document
+    from app.models.artifact import Artifact
+    from app.models.chat_file import ChatFile
+    from app.models.shared_chat import SharedChat
+    from app.models.skill import Skill
+    from app.models.hook import Hook
+
+    user_id = user.id
+
+    # Delete user-owned data (order matters for FK constraints)
+    # Chat-related: shared_chats -> artifacts -> chat_files -> messages -> chats
+    chat_ids_result = await db.execute(select(Chat.id).where(Chat.user_id == user_id))
+    chat_ids = [r[0] for r in chat_ids_result.fetchall()]
+
+    if chat_ids:
+        await db.execute(sql_delete(SharedChat).where(SharedChat.chat_id.in_(chat_ids)))
+        await db.execute(sql_delete(Artifact).where(Artifact.chat_id.in_(chat_ids)))
+        await db.execute(sql_delete(ChatFile).where(ChatFile.chat_id.in_(chat_ids)))
+        await db.execute(sql_delete(Message).where(Message.chat_id.in_(chat_ids)))
+        await db.execute(sql_delete(Chat).where(Chat.user_id == user_id))
+
+    # Documents (chunks cascade via FK)
+    await db.execute(sql_delete(Document).where(Document.user_id == user_id))
+
+    # User config: skills, hooks, MCP servers
+    await db.execute(sql_delete(Skill).where(Skill.user_id == user_id))
+    await db.execute(sql_delete(Hook).where(Hook.user_id == user_id))
+
+    try:
+        from app.models.mcp_server import MCPServer
+        await db.execute(sql_delete(MCPServer).where(MCPServer.user_id == user_id))
+    except Exception:
+        pass
+
+    # User record itself (refresh_tokens, user_quotas, user_models, folders cascade via FK)
+    await db.execute(sql_delete(User).where(User.id == user_id))
+    await db.commit()
+
+    # Clear auth cookies
+    clear_auth_cookies(response, settings)
+
+
 @router.get("/usage")
 async def get_my_usage(user: User = Depends(get_current_user)):
     from app.usage import get_usage

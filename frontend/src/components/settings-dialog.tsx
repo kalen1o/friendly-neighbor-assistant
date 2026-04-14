@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Trash2, AlertTriangle, Sun, Moon, Monitor, MessageSquare, Zap, Wrench } from "lucide-react";
+import { Trash2, AlertTriangle, Sun, Moon, Monitor, MessageSquare, Zap, Wrench, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { deleteAllChats, getUsage, type UsageStats } from "@/lib/api";
+import { deleteAllChats, deleteAccount, getUsage, type UsageStats } from "@/lib/api";
 import { toast } from "sonner";
 import { ModelSettings } from "@/components/model-settings";
 
@@ -97,6 +97,22 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
   const [tab, setTab] = useState<"general" | "models">("general");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await deleteAccount();
+      toast.success("Account deleted");
+      onOpenChange(false);
+      router.push("/login");
+    } catch {
+      toast.error("Failed to delete account");
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
 
   const handleDeleteAllChats = async () => {
     setDeleting(true);
@@ -115,7 +131,7 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setConfirmDelete(false); }}>
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setConfirmDelete(false); setConfirmDeleteAccount(false); } }}>
       <DialogContent className="h-full max-h-screen w-full sm:h-auto sm:max-w-lg p-0 gap-0 overflow-hidden">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <p className="text-sm font-semibold">Settings</p>
@@ -208,6 +224,64 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
           </div>
 
           {open && <UsageSection />}
+
+          <div className="mt-6">
+            <h2 className="text-lg font-semibold">Account</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Permanently delete your account and all data.
+            </p>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                  <UserX className="h-4 w-4 text-destructive" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Delete account</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Permanently delete your account, all chats, documents, and settings. This cannot be undone.
+                  </p>
+                  {!confirmDeleteAccount ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setConfirmDeleteAccount(true)}
+                    >
+                      <UserX className="mr-1.5 h-3.5 w-3.5" />
+                      Delete account
+                    </Button>
+                  ) : (
+                    <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        This is permanent
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Your account, all conversations, uploaded documents, custom skills, and settings will be permanently deleted.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={deletingAccount}
+                          onClick={handleDeleteAccount}
+                        >
+                          {deletingAccount ? "Deleting..." : "Yes, delete my account"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmDeleteAccount(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
             </>
           ) : (
             <ModelSettings />

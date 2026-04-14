@@ -1197,3 +1197,11 @@ export async function getAuthProviders(): Promise<AuthProviders> {
   }
 }
 
+// ── Account Deletion ──
+
+export async function deleteAccount(): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/auth/me`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete account");
+}

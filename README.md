@@ -304,10 +304,9 @@ User <-> Next.js UI <-> FastAPI Backend
 - [ ] Agent-computer interface — systematic tool design for better LLM interaction
 - [x] OAuth/SSO login (Google, GitHub) — OAuth2 authorization code flow with account linking by email
 - [x] RAG enhancements — hybrid search (Postgres FTS + RRF), Cohere reranking, inline citations, semantic chunking, configurable pipeline, auto-KB injection
-- [ ] Conversation branching — fork at any message
 - [ ] Scheduled agents — recurring tasks
 - [ ] Webhook integrations (Slack, Discord)
-- [ ] Delete account — user self-service account deletion with data cleanup
+- [x] Delete account — user self-service account deletion with full data cleanup
 - [ ] Plugin marketplace — share/install community skills
 - [ ] CI/CD & deployment pipeline
 - [ ] Voice input/output
