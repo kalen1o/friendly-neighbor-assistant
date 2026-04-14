@@ -19,6 +19,8 @@ import {
   updateModel,
   deleteModel,
   testModel,
+  getMe,
+  updateMe,
   type ModelOut,
 } from "@/lib/api";
 
@@ -40,6 +42,7 @@ export function ModelSettings() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [preferredModel, setPreferredModel] = useState<string | null>(null);
 
   const [formName, setFormName] = useState("");
   const [formProvider, setFormProvider] = useState("openai");
@@ -57,6 +60,22 @@ export function ModelSettings() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    getMe().then((u) => setPreferredModel(u.preferred_model)).catch(() => {});
+  }, []);
+
+  const handlePreferredChange = async (modelId: string | null) => {
+    if (!modelId) return;
+    const value = modelId === "__default__" ? null : modelId;
+    setPreferredModel(value);
+    try {
+      await updateMe({ preferred_model: value });
+      toast.success("Default model updated");
+    } catch {
+      toast.error("Failed to update default model");
+    }
+  };
 
   useEffect(() => {
     fetchModels();
@@ -140,20 +159,24 @@ export function ModelSettings() {
         Add your own LLM models with API keys.
       </p>
 
-      {projectDefault && (
-        <div className="mb-4 rounded-lg border bg-muted/20 p-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            Project Default
-          </p>
-          <div className="mt-1 flex items-center gap-2">
-            <span>{PROVIDER_ICONS[projectDefault.provider] || "⚪"}</span>
-            <span className="font-medium">{projectDefault.model_id}</span>
-            <span className="text-xs text-muted-foreground">
-              ({projectDefault.provider})
-            </span>
-          </div>
-        </div>
-      )}
+      <div className="mb-4">
+        <Label className="text-xs">Default model for new chats</Label>
+        <Select
+          value={preferredModel || "__default__"}
+          onValueChange={handlePreferredChange}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {models.map((m) => (
+              <SelectItem key={m.id} value={m.builtin ? `${m.provider}:${m.model_id}` : `user:${m.id}`}>
+                {PROVIDER_ICONS[m.provider] || "⚪"} {m.model_id}{m.builtin && m === projectDefault ? " (project default)" : ""}{!m.builtin ? ` (${m.name})` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-4">

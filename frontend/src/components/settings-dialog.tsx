@@ -151,7 +151,7 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setConfirmDelete(false); setConfirmDeleteAccount(false); } }}>
-      <DialogContent className="h-full max-h-screen w-full sm:h-auto sm:max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="h-full max-h-screen w-full sm:h-auto sm:max-h-[85vh] sm:max-w-lg p-0 gap-0 overflow-hidden">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <p className="text-sm font-semibold">Settings</p>
           <ThemeIcons />
@@ -193,7 +193,7 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto p-5 sm:max-h-none">
+        <div className="flex-1 overflow-y-auto p-5">
           {tab === "general" ? (
             <>
           <h2 className="text-lg font-semibold">Memory</h2>

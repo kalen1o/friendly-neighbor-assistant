@@ -310,8 +310,7 @@ User <-> Next.js UI <-> FastAPI Backend
 - [ ] Orchestrator-workers — central orchestrator decomposes complex requests into subtasks, delegates to specialist workers (parallel where possible), synthesizes final output
 
 **Additional Features**:
-- [ ] Prompt chaining — sequential multi-step LLM pipelines
-- [ ] Parallelization — sectioning/voting across multiple LLM calls
+- [x] Prompt chaining + Parallelization — workflow engine with sequential chaining, parallel execution, per-step model override, retry-then-stop error handling
 - [x] Agent-computer interface — per-tool typed parameter schemas with validation and multi-parameter support
 - [ ] Scheduled agents — recurring tasks
 - [ ] CI/CD & deployment pipeline

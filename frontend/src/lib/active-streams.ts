@@ -22,6 +22,8 @@ interface StreamCallbacks {
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
   onArtifact?: (artifact: ArtifactData) => void;
+  onWorkflow?: (steps: Array<{ name: string; status: string; parallel?: boolean }>) => void;
+  onWorkflowStep?: (step: { name: string; status: string }) => void;
   onDone: () => void;
   onError: (error: string) => void;
 }
@@ -91,6 +93,8 @@ export function startStream(
       onSources: (sources) => currentCallbacks.onSources?.(sources),
       onMetrics: (metrics) => currentCallbacks.onMetrics?.(metrics),
       onArtifact: (artifact) => currentCallbacks.onArtifact?.(artifact),
+      onWorkflow: (steps) => currentCallbacks.onWorkflow?.(steps),
+      onWorkflowStep: (step) => currentCallbacks.onWorkflowStep?.(step),
       onDone: () => {
         console.log(`[ACTIVE-STREAM] Done! ${stream.fullText.length} chars for chat ${chatId}`);
         stream.done = true;

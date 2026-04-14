@@ -60,6 +60,7 @@ export interface UserInfo {
   name: string;
   role: string;
   memory_enabled: boolean;
+  preferred_model: string | null;
   created_at: string;
 }
 
@@ -402,6 +403,12 @@ export async function testModel(modelId: string): Promise<ModelTestResult> {
 
 // ── Streaming messages ──
 
+export interface WorkflowStep {
+  name: string;
+  status: string;
+  parallel?: boolean;
+}
+
 export interface SSECallbacks {
   onAction?: (action: string) => void;
   onMessage: (chunk: string) => void;
@@ -409,6 +416,8 @@ export interface SSECallbacks {
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
   onArtifact?: (artifact: ArtifactData) => void;
+  onWorkflow?: (steps: WorkflowStep[]) => void;
+  onWorkflowStep?: (step: WorkflowStep) => void;
   onDone: () => void;
   onError: (error: string) => void;
 }
@@ -495,6 +504,17 @@ export function sendMessage(
             case "artifact":
               try {
                 callbacks.onArtifact?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "workflow":
+              try {
+                const wf = JSON.parse(data);
+                callbacks.onWorkflow?.(wf.steps);
+              } catch {}
+              break;
+            case "workflow_step":
+              try {
+                callbacks.onWorkflowStep?.(JSON.parse(data));
               } catch {}
               break;
             case "done":
@@ -1200,7 +1220,7 @@ export async function getAuthProviders(): Promise<AuthProviders> {
 
 // ── Account Deletion ──
 
-export async function updateMe(data: { memory_enabled?: boolean }): Promise<UserInfo> {
+export async function updateMe(data: { memory_enabled?: boolean; preferred_model?: string | null }): Promise<UserInfo> {
   const res = await authFetch(`${API_BASE}/api/auth/me`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

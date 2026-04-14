@@ -23,6 +23,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="user", server_default="user")
     memory_enabled: Mapped[bool] = mapped_column(default=True)
     memories: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    preferred_model: Mapped[Optional[str]] = mapped_column(String(100), default=None, nullable=True)
     oauth_provider: Mapped[Optional[str]] = mapped_column(String(20), default=None, nullable=True)
     oauth_id: Mapped[Optional[str]] = mapped_column(String(255), default=None, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

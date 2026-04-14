@@ -180,7 +180,7 @@ def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:
     """Convert enabled skills into OpenAI function calling format."""
     tools = []
     for skill in registry.get_enabled_skills():
-        if skill.skill_type != "tool":
+        if skill.skill_type not in ("tool", "workflow"):
             continue
 
         parameters = TOOL_PARAMETERS.get(skill.name, _DEFAULT_PARAMETERS)
@@ -227,11 +227,13 @@ async def create_tool_executor(
     registry: SkillRegistry,
     db: AsyncSession,
     settings: Settings,
+    on_action: Optional[Callable] = None,
 ) -> Callable:
     """Create a tool executor function that the LLM provider can call.
 
     The executor collects sources from each tool call into
     executor.collected_sources (list of dicts).
+    on_action: optional async fn(message: str) for workflow progress updates.
     """
 
     collected_sources: List[Dict[str, Any]] = []
@@ -241,9 +243,15 @@ async def create_tool_executor(
         if not skill_executor:
             return "Tool '{}' not found".format(tool_name)
 
+        # Inject on_progress for workflow executors
+        extra_kwargs = {}
+        skill = registry.get_skill(tool_name)
+        if skill and skill.skill_type == "workflow" and on_action:
+            extra_kwargs["on_progress"] = on_action
+
         try:
             # Pass all arguments + db/settings to the executor
-            result = await skill_executor(**arguments, db=db, settings=settings)
+            result = await skill_executor(**arguments, **extra_kwargs, db=db, settings=settings)
             if isinstance(result, dict):
                 if result.get("sources"):
                     collected_sources.extend(result["sources"])

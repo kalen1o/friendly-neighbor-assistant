@@ -26,6 +26,7 @@ class UserOut(BaseModel):
     name: str
     role: str
     memory_enabled: bool
+    preferred_model: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
@@ -33,6 +34,7 @@ class UserOut(BaseModel):
 
 class UserUpdate(BaseModel):
     memory_enabled: Optional[bool] = None
+    preferred_model: Optional[str] = None
 
 
 class ProvidersResponse(BaseModel):

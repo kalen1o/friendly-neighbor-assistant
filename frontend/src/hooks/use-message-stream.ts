@@ -31,6 +31,7 @@ export function useMessageStream(chatId: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [actionText, setActionText] = useState<string | null>(null);
   const [activeSkills, setActiveSkills] = useState<SkillUsage[]>([]);
+  const [workflowSteps, setWorkflowSteps] = useState<Array<{ name: string; status: string; parallel?: boolean }>>([]);
   const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
   const [chatModelId, setChatModelId] = useState<string | null>(null);
@@ -193,10 +194,17 @@ export function useMessageStream(chatId: string) {
           setArtifacts((prev) => [...prev, artifact]);
           setActiveArtifact(artifact);
         },
+        onWorkflow: (steps) => { setWorkflowSteps(steps); },
+        onWorkflowStep: (step) => {
+          setWorkflowSteps((prev) =>
+            prev.map((s) => s.name === step.name ? { ...s, status: step.status } : s)
+          );
+        },
         onDone: () => {
           doneRef.current = true;
           setIsLoading(false);
           setActionText(null);
+          setWorkflowSteps([]);
           if (!intervalRef.current) finalizeMessage();
         },
         onError: (err) => {
@@ -377,6 +385,7 @@ export function useMessageStream(chatId: string) {
       metricsRef.current = null;
       skillsUsedRef.current = [];
       setActiveSkills([]);
+      setWorkflowSteps([]);
       setIsStreaming(true);
       setIsLoading(true);
       setActionText(null);
@@ -394,8 +403,9 @@ export function useMessageStream(chatId: string) {
             const match = action.match(/^Using (\w+)/);
             if (match) {
               const skillName = match[1];
+              const params = action.includes("query=") ? { query: action.split("query=")[1] } : undefined;
               if (!skillsUsedRef.current.some((s) => s.name === skillName)) {
-                skillsUsedRef.current.push({ name: skillName });
+                skillsUsedRef.current.push({ name: skillName, params });
                 setActiveSkills([...skillsUsedRef.current]);
               }
             }
@@ -409,6 +419,14 @@ export function useMessageStream(chatId: string) {
           onArtifact: (artifact) => {
             setArtifacts((prev) => [...prev, artifact]);
             setActiveArtifact(artifact);
+          },
+          onWorkflow: (steps) => {
+            setWorkflowSteps(steps);
+          },
+          onWorkflowStep: (step) => {
+            setWorkflowSteps((prev) =>
+              prev.map((s) => s.name === step.name ? { ...s, status: step.status } : s)
+            );
           },
           onMessage: (chunk) => {
             setIsLoading(false);
@@ -473,6 +491,7 @@ export function useMessageStream(chatId: string) {
     isLoading,
     actionText,
     activeSkills,
+    workflowSteps,
     artifacts,
     setArtifacts,
     activeArtifact,

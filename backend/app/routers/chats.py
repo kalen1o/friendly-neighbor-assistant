@@ -669,7 +669,16 @@ async def _llm_background_task(
             tool_defs, knowledge_prompts, registry = await build_agent_context(
                 db, settings, user_id=user_id
             )
-            tool_executor = await create_tool_executor(registry, db, settings)
+            async def _workflow_progress(msg: str) -> None:
+                # Send workflow events directly to SSE queue
+                if msg.startswith("__workflow__"):
+                    await queue.put({"event": "workflow", "data": msg[12:]})
+                elif msg.startswith("__step__"):
+                    await queue.put({"event": "workflow_step", "data": msg[8:]})
+                else:
+                    await queue.put({"event": "action", "data": msg})
+
+            tool_executor = await create_tool_executor(registry, db, settings, on_action=_workflow_progress)
 
             # Check if any enabled knowledge skill specifies a model override
             enabled_names = [s.name for s in registry.get_enabled_skills()]

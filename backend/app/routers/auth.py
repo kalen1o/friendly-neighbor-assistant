@@ -244,6 +244,8 @@ async def update_me(
 ):
     if body.memory_enabled is not None:
         user.memory_enabled = body.memory_enabled
+    if body.preferred_model is not None:
+        user.preferred_model = body.preferred_model
     await db.commit()
     await db.refresh(user)
     return user

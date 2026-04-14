@@ -52,6 +52,7 @@ export default function ChatPage() {
     isLoading,
     actionText,
     activeSkills,
+    workflowSteps,
     artifacts,
     setArtifacts,
     activeArtifact,
@@ -184,6 +185,7 @@ export default function ChatPage() {
             isLoading={isLoading}
             actionText={actionText}
             activeSkills={activeSkills}
+            workflowSteps={workflowSteps}
             onEditMessage={(index, newContent) => {
               setMessages((prev) => prev.slice(0, index));
               handleSend(newContent);

@@ -18,6 +18,12 @@ interface AttachedFile {
   type: string;
 }
 
+interface WorkflowStepInfo {
+  name: string;
+  status: string;
+  parallel?: boolean;
+}
+
 interface MessageBubbleProps {
   role: "user" | "assistant";
   content: string;
@@ -27,6 +33,7 @@ interface MessageBubbleProps {
   onEdit?: (newContent: string) => void;
   files?: AttachedFile[];
   messageId?: string;
+  workflowSteps?: WorkflowStepInfo[];
 }
 
 function processCitations(content: string, messageId?: string): string {
@@ -158,7 +165,7 @@ const mdComponents: Components = {
   },
 };
 
-export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit, files, messageId }: MessageBubbleProps) {
+export function MessageBubble({ role, content, isStreaming, sources, metrics, onEdit, files, messageId, workflowSteps = [] }: MessageBubbleProps) {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -278,6 +285,37 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
           ) : isStreaming ? (
             <div className="max-w-none overflow-hidden text-sm leading-relaxed">
               <p className="whitespace-pre-wrap">{enrichText(content)}<span className="streaming-cursor" /></p>
+              {workflowSteps.length > 0 && !workflowSteps.every((s) => s.status === "completed") && (
+                <div className="mt-2 space-y-0.5 border-t border-border/30 pt-2">
+                  {workflowSteps.map((step) => (
+                    <div key={step.name} className="flex items-center gap-2 text-xs">
+                      {step.status === "completed" ? (
+                        <svg className="h-3.5 w-3.5 shrink-0 text-green-500" viewBox="0 0 16 16" fill="currentColor">
+                          <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-8.646a.5.5 0 00-.708-.708L7 9.293 5.354 7.646a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" />
+                        </svg>
+                      ) : step.status === "running" ? (
+                        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                          <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                        </span>
+                      ) : step.status === "failed" ? (
+                        <svg className="h-3.5 w-3.5 shrink-0 text-destructive" viewBox="0 0 16 16" fill="currentColor">
+                          <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm2.354-9.646a.5.5 0 010 .708L8.707 8l1.647 1.646a.5.5 0 01-.708.708L8 8.707l-1.646 1.647a.5.5 0 01-.708-.708L7.293 8 5.646 6.354a.5.5 0 01.708-.708L8 7.293l1.646-1.647a.5.5 0 01.708 0z" />
+                        </svg>
+                      ) : (
+                        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                          <span className="h-2 w-2 rounded-full border border-muted-foreground/30" />
+                        </span>
+                      )}
+                      <span className={step.status === "running" ? "text-primary font-medium" : step.status === "completed" ? "text-muted-foreground line-through" : step.status === "failed" ? "text-destructive" : "text-muted-foreground/50"}>
+                        {step.name.replace(/_/g, " ")}
+                      </span>
+                      {step.parallel && step.status === "running" && (
+                        <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary/70">parallel</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="max-w-none overflow-hidden text-sm leading-relaxed">

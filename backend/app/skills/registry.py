@@ -56,6 +56,7 @@ class SkillDefinition:
         file_path: Optional[str] = None,
         model: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        steps: Optional[List[Dict[str, Any]]] = None,
     ):
         self.name = name
         self.description = description
@@ -66,6 +67,7 @@ class SkillDefinition:
         self.file_path = file_path  # for lazy content loading
         self.model = model  # e.g. "anthropic:claude-sonnet-4-20250514"
         self.parameters = parameters  # OpenAI function parameters schema
+        self.steps = steps  # workflow steps definition (list of dicts)
 
     @property
     def content(self) -> str:
@@ -79,6 +81,24 @@ class SkillDefinition:
                 logger.error(f"Failed to load content for {self.name}: {e}")
                 self._content = ""
         return self._content
+
+    def get_workflow_steps(self) -> Optional[List[Dict[str, Any]]]:
+        """Extract workflow steps from content JSON block."""
+        if self.steps:
+            return self.steps
+        if self.skill_type != "workflow":
+            return None
+        import json
+        import re
+        # Look for ```json ... ``` block in content
+        match = re.search(r'```json\s*\n(.*?)\n```', self.content, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                return data.get("steps", [])
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        return None
 
     def to_index_entry(self) -> str:
         """One-line entry for the skill index (~10 tokens)."""

@@ -160,4 +160,24 @@ def register_all_executors(registry) -> None:
     registry.register_executor("summarize", execute_summarize)
     # Knowledge skills (coding_assistant, writing_assistant) don't need executors
     # -- they modify the system prompt, not run code
-    # Workflow skills (summarize_all_docs) use a combination of other executors
+
+    # Register workflow executors for any workflow-type skills
+    for skill in registry.all_skills():
+        if skill.skill_type == "workflow":
+            steps = skill.get_workflow_steps()
+            if steps:
+                async def _workflow_exec(
+                    query: str, db=None, settings: Settings = None,
+                    _steps=steps, on_progress=None, **kwargs
+                ) -> Dict[str, Any]:
+                    from app.workflows.engine import execute_workflow
+                    result = await execute_workflow(_steps, query, settings, on_progress=on_progress)
+                    step_summary = "\n".join(
+                        "- {}: {}".format(s["name"], s["status"]) for s in result["steps"]
+                    )
+                    output = result["output"]
+                    if result["status"] == "failed":
+                        output = "Workflow failed:\n{}\n\n{}".format(step_summary, output)
+                    return {"content": output, "sources": []}
+
+                registry.register_executor(skill.name, _workflow_exec)
