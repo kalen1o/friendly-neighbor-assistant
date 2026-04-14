@@ -29,6 +29,10 @@ _test_settings = Settings(
     database_url=TEST_DATABASE_URL,
     jwt_secret="test-secret",
     redis_url="redis://localhost:6379/0",
+    google_client_id="",
+    google_client_secret="",
+    github_client_id="",
+    github_client_secret="",
 )
 
 

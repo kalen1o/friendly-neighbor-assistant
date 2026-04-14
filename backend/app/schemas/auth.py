@@ -27,3 +27,8 @@ class UserOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class ProvidersResponse(BaseModel):
+    google: bool
+    github: bool

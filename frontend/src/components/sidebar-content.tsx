@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
+import { getViewingChat } from "@/lib/active-streams";
 
 export { ThemeToggle } from "./theme-toggle";
 export { UserMenu } from "./user-menu";
@@ -127,6 +128,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
   // Track which chats had notifications last poll (to detect new ones)
   const prevNotifIdsRef = useRef<Set<string>>(new Set());
   const prevGeneratingIdsRef = useRef<Set<string>>(new Set());
+  const isFirstFetchRef = useRef(true);
 
   const fetchChats = useCallback(async () => {
     if (!isAuthenticated) {
@@ -140,45 +142,52 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
       cursorRef.current = data.next_cursor;
       hasMoreRef.current = data.has_more;
 
-      // Detect NEW notifications (not previously seen, not still generating)
-      const newNotifChats = data.chats.filter(
-        (c) => c.has_notification && !c.is_generating && !prevNotifIdsRef.current.has(c.id)
-      );
+      // On first fetch after page load, just seed the tracking refs — don't show toasts.
+      // The sidebar already shows notification indicators for existing completions.
+      if (isFirstFetchRef.current) {
+        isFirstFetchRef.current = false;
+      } else {
+        // Detect NEW notifications (not previously seen, not still generating)
+        const newNotifChats = data.chats.filter(
+          (c) => c.has_notification && !c.is_generating && !prevNotifIdsRef.current.has(c.id)
+        );
 
-      // Detect generating→completed transitions (for post-reload toasts)
-      const justFinished = data.chats.filter(
-        (c) => !c.is_generating && prevGeneratingIdsRef.current.has(c.id)
-      );
+        // Detect generating→completed transitions
+        const justFinished = data.chats.filter(
+          (c) => !c.is_generating && prevGeneratingIdsRef.current.has(c.id)
+        );
 
-      // Show toast for newly finished chats (avoid duplicating with newNotifChats)
-      const newNotifIds = new Set(newNotifChats.map((c) => c.id));
-      for (const chat of justFinished) {
-        if (!newNotifIds.has(chat.id) && pathname !== `/chat/${chat.id}`) {
-          toast.success(`Response ready: ${chat.title || "New Chat"}`, {
-            action: {
-              label: "View",
-              onClick: () => {
-                window.dispatchEvent(
-                  new CustomEvent("notification-navigate", { detail: { chatId: chat.id } })
-                );
+        // Show toast for newly finished chats (avoid duplicating with newNotifChats)
+        const viewingChat = getViewingChat();
+        const newNotifIds = new Set(newNotifChats.map((c) => c.id));
+        for (const chat of justFinished) {
+          if (!newNotifIds.has(chat.id) && viewingChat !== chat.id) {
+            toast.success(`Response ready: ${chat.title || "New Chat"}`, {
+              action: {
+                label: "View",
+                onClick: () => {
+                  window.dispatchEvent(
+                    new CustomEvent("notification-navigate", { detail: { chatId: chat.id } })
+                  );
+                },
               },
-            },
-          });
+            });
+          }
         }
-      }
 
-      for (const chat of newNotifChats) {
-        if (pathname !== `/chat/${chat.id}`) {
-          toast.success(`Response ready: ${chat.title || "New Chat"}`, {
-            action: {
-              label: "View",
-              onClick: () => {
-                window.dispatchEvent(
-                  new CustomEvent("notification-navigate", { detail: { chatId: chat.id } })
-                );
+        for (const chat of newNotifChats) {
+          if (viewingChat !== chat.id) {
+            toast.success(`Response ready: ${chat.title || "New Chat"}`, {
+              action: {
+                label: "View",
+                onClick: () => {
+                  window.dispatchEvent(
+                    new CustomEvent("notification-navigate", { detail: { chatId: chat.id } })
+                  );
+                },
               },
-            },
-          });
+            });
+          }
         }
       }
 

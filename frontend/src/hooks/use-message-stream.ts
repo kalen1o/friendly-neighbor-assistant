@@ -14,7 +14,7 @@ import {
   type MessageOut,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { startStream, reattachStream, hasActiveStream } from "@/lib/active-streams";
+import { startStream, reattachStream, hasActiveStream, setViewingChat } from "@/lib/active-streams";
 
 export function useMessageStream(chatId: string) {
   const router = useRouter();
@@ -127,6 +127,12 @@ export function useMessageStream(chatId: string) {
       }
     }, 30);
   }, [finalizeMessage]);
+
+  // Track which chat the user is viewing (suppresses toast for active chat)
+  useEffect(() => {
+    setViewingChat(chatId);
+    return () => setViewingChat(null);
+  }, [chatId]);
 
   // Clean up interval on unmount
   useEffect(() => {

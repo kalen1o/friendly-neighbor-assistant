@@ -12,7 +12,7 @@ def test_rag_settings_defaults():
     assert s.rag_rerank_enabled is False
     assert s.cohere_api_key == ""
     assert s.rag_top_k == 5
-    assert s.rag_min_score == 0.65
+    assert s.rag_min_score == 0.5
     assert s.rag_rerank_top_n == 20
     assert s.rag_chunk_size == 500
     assert s.rag_chunk_overlap == 50

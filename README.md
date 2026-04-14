@@ -302,7 +302,7 @@ User <-> Next.js UI <-> FastAPI Backend
 - [ ] Evaluator-optimizer — self-evaluation feedback loop for higher quality responses
 - [ ] Parallelization — sectioning/voting across multiple LLM calls
 - [ ] Agent-computer interface — systematic tool design for better LLM interaction
-- [ ] OAuth/SSO login (Google, GitHub)
+- [x] OAuth/SSO login (Google, GitHub) — OAuth2 authorization code flow with account linking by email
 - [x] RAG enhancements — hybrid search (Postgres FTS + RRF), Cohere reranking, inline citations, semantic chunking, configurable pipeline, auto-KB injection
 - [ ] Conversation branching — fork at any message
 - [ ] Scheduled agents — recurring tasks

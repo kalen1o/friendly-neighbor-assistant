@@ -33,6 +33,15 @@ interface ActiveStreamInternal extends ActiveStream {
 // Global map of chatId → active stream
 const streams = new Map<string, ActiveStreamInternal>();
 
+// Track which chat the user is currently viewing (set by the chat page)
+let currentViewingChatId: string | null = null;
+export function setViewingChat(chatId: string | null) {
+  currentViewingChatId = chatId;
+}
+export function getViewingChat(): string | null {
+  return currentViewingChatId;
+}
+
 /**
  * Start a new SSE stream for a chat. If one is already active, abort it first.
  * The stream runs globally — survives React component unmounts.
@@ -86,9 +95,9 @@ export function startStream(
         console.log(`[ACTIVE-STREAM] Done! ${stream.fullText.length} chars for chat ${chatId}`);
         stream.done = true;
         currentCallbacks.onDone();
-        // Only show toast if user is NOT on this chat
-        const isOnThisChat = window.location.pathname === `/chat/${chatId}`;
-        if (!isOnThisChat) {
+        // Only show toast if user is definitely on a different chat
+        // (null means no chat page has registered yet, e.g. during page load)
+        if (currentViewingChatId !== null && currentViewingChatId !== chatId) {
           toast.success(`Response ready: ${stream.title || "New Chat"}`, {
             action: {
               label: "View",

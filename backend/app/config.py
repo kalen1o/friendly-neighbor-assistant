@@ -85,6 +85,15 @@ class Settings(BaseSettings):
     # Admin — emails that get admin role on registration
     admin_emails: str = ""  # comma-separated
 
+    # OAuth providers (all optional — buttons hidden if not configured)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+
+    # Frontend URL for OAuth redirect after login
+    frontend_url: str = "http://localhost:3000"
+
 
 def get_settings() -> Settings:
     settings = Settings()

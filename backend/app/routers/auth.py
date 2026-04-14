@@ -1,7 +1,9 @@
 import re
+import secrets
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,12 @@ from app.auth.jwt import (
     hash_refresh_token,
     set_auth_cookies,
 )
+from app.auth.oauth import (
+    get_google_user,
+    get_github_user,
+    build_google_authorize_url,
+    build_github_authorize_url,
+)
 from app.auth.password import hash_password, verify_password
 from app.auth.admin import get_client_ip, log_audit
 from app.auth.rate_limit import rate_limit_login, rate_limit_register
@@ -20,7 +28,7 @@ from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import LoginRequest, ProvidersResponse, RegisterRequest, TokenResponse, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -233,3 +241,149 @@ async def get_my_usage(user: User = Depends(get_current_user)):
     from app.usage import get_usage
 
     return await get_usage(user.id)
+
+
+# ---------------------------------------------------------------------------
+# OAuth / SSO
+# ---------------------------------------------------------------------------
+
+
+async def _oauth_create_or_link(
+    db: AsyncSession,
+    user_info: dict,
+    settings: Settings,
+) -> User:
+    """Create or link user account from OAuth provider info. Returns the User."""
+    email = user_info["email"]
+    provider = user_info["provider"]
+    oauth_id = user_info["oauth_id"]
+    name = user_info["name"]
+
+    # Check existing user by email
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        # Link OAuth if not already set
+        if not user.oauth_provider:
+            user.oauth_provider = provider
+            user.oauth_id = oauth_id
+    else:
+        # Create new user (no password — OAuth only)
+        user = User(
+            email=email,
+            name=name,
+            password_hash="",
+            oauth_provider=provider,
+            oauth_id=oauth_id,
+        )
+        db.add(user)
+
+    # Admin auto-promotion
+    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    if email.lower() in admin_list:
+        user.role = "admin"
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def _oauth_login_redirect(
+    user_info: dict,
+    db: AsyncSession,
+    settings: Settings,
+) -> RedirectResponse:
+    """Create/link user, set JWT cookies, redirect to frontend."""
+    user = await _oauth_create_or_link(db, user_info, settings)
+
+    # Create JWT tokens
+    access_token = create_access_token(user.public_id, settings)
+    raw_refresh = generate_refresh_token()
+
+    # Save hashed refresh token
+    rt = RefreshToken(
+        token_hash=hash_refresh_token(raw_refresh),
+        user_id=user.id,
+        expires_at=datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days),
+    )
+    db.add(rt)
+    await db.commit()
+
+    # Redirect to frontend with cookies set
+    response = RedirectResponse(url=settings.frontend_url, status_code=302)
+    set_auth_cookies(response, access_token, raw_refresh, settings)
+    # Clear the OAuth state cookie
+    response.delete_cookie("oauth_state")
+    return response
+
+
+@router.get("/providers", response_model=ProvidersResponse)
+async def get_providers(settings: Settings = Depends(get_settings)):
+    """Return which OAuth providers are configured."""
+    return ProvidersResponse(
+        google=bool(settings.google_client_id and settings.google_client_secret),
+        github=bool(settings.github_client_id and settings.github_client_secret),
+    )
+
+
+@router.get("/google")
+async def google_login(request: Request, settings: Settings = Depends(get_settings)):
+    """Redirect to Google consent screen."""
+    if not settings.google_client_id:
+        raise HTTPException(status_code=404, detail="Google OAuth not configured")
+    state = secrets.token_urlsafe(32)
+    redirect_uri = str(request.base_url) + "api/auth/google/callback"
+    url = build_google_authorize_url(redirect_uri, settings, state)
+    response = RedirectResponse(url)
+    response.set_cookie("oauth_state", state, max_age=300, httponly=True, samesite="lax")
+    return response
+
+
+@router.get("/google/callback")
+async def google_callback(
+    request: Request,
+    code: str,
+    state: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Handle Google OAuth callback."""
+    saved_state = request.cookies.get("oauth_state")
+    if not saved_state or saved_state != state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    redirect_uri = str(request.base_url) + "api/auth/google/callback"
+    user_info = await get_google_user(code, redirect_uri, settings)
+    return await _oauth_login_redirect(user_info, db, settings)
+
+
+@router.get("/github")
+async def github_login(request: Request, settings: Settings = Depends(get_settings)):
+    """Redirect to GitHub consent screen."""
+    if not settings.github_client_id:
+        raise HTTPException(status_code=404, detail="GitHub OAuth not configured")
+    state = secrets.token_urlsafe(32)
+    redirect_uri = str(request.base_url) + "api/auth/github/callback"
+    url = build_github_authorize_url(redirect_uri, settings, state)
+    response = RedirectResponse(url)
+    response.set_cookie("oauth_state", state, max_age=300, httponly=True, samesite="lax")
+    return response
+
+
+@router.get("/github/callback")
+async def github_callback(
+    request: Request,
+    code: str,
+    state: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Handle GitHub OAuth callback."""
+    saved_state = request.cookies.get("oauth_state")
+    if not saved_state or saved_state != state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    redirect_uri = str(request.base_url) + "api/auth/github/callback"
+    user_info = await get_github_user(code, redirect_uri, settings)
+    return await _oauth_login_redirect(user_info, db, settings)
