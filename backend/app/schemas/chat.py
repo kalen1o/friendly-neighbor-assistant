@@ -18,6 +18,7 @@ class MessageCreate(BaseModel):
     content: str
     mode: str = "balanced"  # "fast", "balanced", "thinking"
     file_ids: List[str] = []
+    artifact_context: Optional[dict] = None
 
 
 class MessageMetrics(BaseModel):

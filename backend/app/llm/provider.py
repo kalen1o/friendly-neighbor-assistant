@@ -61,23 +61,27 @@ SYSTEM_PROMPT = (
     '{\n'
     '  "files": {\n'
     '    "/App.js": "import Counter from \'./Counter\';\\nexport default function App() { return <Counter />; }",\n'
-    '    "/Counter.js": "export default function Counter() { ... }"\n'
+    '    "/Counter.js": "export default function Counter() { ... }",\n'
+    '    "/styles.css": "body { font-family: sans-serif; }"\n'
     '  },\n'
     '  "dependencies": {\n'
     '    "uuid": "latest"\n'
     '  }\n'
     '}\n'
     "</artifact>\n\n"
-    "Rules for artifacts:\n"
+    "STRICT rules for artifacts:\n"
     "- Always use type=\"project\" with a JSON manifest.\n"
-    "- template is \"react\" (default) or \"vanilla\" (plain HTML/JS).\n"
-    "- React projects must include /App.js as the entry point.\n"
-    "- Vanilla projects must include /index.html as the entry point.\n"
+    "- template: \"react\" (JS/JSX files, entry /App.js), \"react-ts\" (TS/TSX files, entry /App.tsx), or \"vanilla\" (plain HTML/JS, entry /index.html).\n"
+    "- If using TypeScript or type annotations, use template=\"react-ts\" with .tsx/.ts files and /App.tsx entry point.\n"
+    "- If using plain JavaScript, use template=\"react\" with .js/.jsx files and /App.js entry point.\n"
+    "- CSS files use .css extension. Import them as './styles.css' in JS/TSX files.\n"
     "- The files object has file paths as keys (starting with /) and code strings as values.\n"
     "- The dependencies object maps npm package names to version strings. Use {} if none.\n"
     "- Even simple single-component UIs use this format (one file is fine).\n"
     "- Always include the artifact tag when generating UI code.\n"
-    "- You can still include explanation text outside the artifact tag."
+    "- Keep artifacts concise — prefer inline styles or a single CSS file over many small files.\n"
+    "- You can still include explanation text outside the artifact tag.\n"
+    "- The JSON must be valid. Escape all special characters in strings properly (newlines as \\n, quotes as \\\", backslashes as \\\\)."
 )
 
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
@@ -118,7 +122,7 @@ async def _anthropic_response(
     client = anthropic.AsyncAnthropic(api_key=api_key)
     response = await client.messages.create(
         model=model,
-        max_tokens=4096,
+        max_tokens=16384,
         system=SYSTEM_PROMPT,
         messages=messages,
     )
@@ -224,7 +228,7 @@ async def _anthropic_stream(
     converted = _convert_to_anthropic_format(messages)
     async with client.messages.stream(
         model=model,
-        max_tokens=4096,
+        max_tokens=16384,
         system=SYSTEM_PROMPT,
         messages=converted,
     ) as stream:

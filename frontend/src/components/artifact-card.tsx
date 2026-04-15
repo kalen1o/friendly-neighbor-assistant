@@ -4,6 +4,7 @@ import { Layers, Download } from "lucide-react";
 import type { ArtifactData } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 function downloadProject(artifact: ArtifactData) {
   const content = Object.entries(artifact.files)
@@ -22,34 +23,44 @@ function downloadProject(artifact: ArtifactData) {
 
 export function ArtifactCard({
   artifact,
+  isActive,
   onClick,
 }: {
   artifact: ArtifactData;
+  isActive?: boolean;
   onClick: () => void;
 }) {
   const fileCount = Object.keys(artifact.files).length;
 
   return (
-    <div className="mt-2 flex w-full items-center gap-3 rounded-lg border bg-muted/30 p-3 transition-colors hover:bg-muted/50">
-      <button
-        onClick={onClick}
-        className="flex flex-1 items-center gap-3 text-left min-w-0"
-      >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Layers className="h-5 w-5" />
+    <Card
+      size="sm"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick();
+      }}
+      className={`mt-2 cursor-pointer flex-row items-center gap-3 p-3 transition-colors ${
+        isActive
+          ? "ring-2 ring-primary bg-primary/10"
+          : "hover:bg-muted/50"
+      }`}
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Layers className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium">
+            {artifact.title}
+          </span>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">
+            {fileCount} {fileCount === 1 ? "file" : "files"}
+          </Badge>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">
-              {artifact.title}
-            </span>
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
-              {fileCount} {fileCount === 1 ? "file" : "files"}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">Click to open</p>
-        </div>
-      </button>
+        <p className="text-xs text-muted-foreground">Click to open</p>
+      </div>
       <Button
         variant="ghost"
         size="icon"
@@ -62,6 +73,6 @@ export function ArtifactCard({
       >
         <Download className="h-4 w-4" />
       </Button>
-    </div>
+    </Card>
   );
 }

@@ -61,6 +61,7 @@ export default function ChatPage() {
     setChatModelId,
     loadOlderMessages,
     doSend,
+    fixArtifactError,
   } = useMessageStream(chatId);
 
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -202,7 +203,10 @@ export default function ChatPage() {
               <ArtifactCard
                 key={a.id}
                 artifact={a}
-                onClick={() => setActiveArtifact(a)}
+                isActive={activeArtifact?.id === a.id}
+                onClick={() => {
+                  setActiveArtifact(activeArtifact?.id === a.id ? null : a);
+                }}
               />
             ))}
           </div>
@@ -263,6 +267,7 @@ export default function ChatPage() {
           <ArtifactPanel
             artifact={activeArtifact}
             onClose={() => setActiveArtifact(null)}
+            onFixError={(error) => fixArtifactError(error)}
           />
         )}
       </div>

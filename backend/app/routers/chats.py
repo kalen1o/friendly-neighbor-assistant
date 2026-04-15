@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
 from app.agent.artifact_parser import parse_artifacts
+from app.agent.artifact_stream_parser import ArtifactStreamParser
 from app.auth.dependencies import get_current_user
 from app.cache.per_user import PerUserCache
 from app.config import Settings, get_settings
@@ -499,6 +500,7 @@ async def send_message(
         user_memory_enabled=user.memory_enabled,
         settings=settings,
         queue=queue,
+        artifact_context=body.artifact_context,
     ))
 
     async def event_generator():
@@ -522,6 +524,7 @@ async def _llm_background_task(
     user_memory_enabled: bool,
     settings: Settings,
     queue: asyncio.Queue,
+    artifact_context: dict = None,
 ):
     """Runs the full LLM pipeline with its own DB session. Writes SSE events to queue."""
     async with get_session_factory()() as db:
@@ -878,6 +881,21 @@ async def _llm_background_task(
             except Exception:
                 logger.exception("Auto KB injection failed, continuing without")
 
+            # Inject active artifact context if provided
+            if artifact_context and artifact_context.get("files"):
+                art_ctx = artifact_context
+                ctx_lines = ["\n\n[Active artifact context — the user is viewing this project:]\n"]
+                ctx_lines.append(f"Title: {art_ctx.get('title', 'Untitled')}")
+                ctx_lines.append(f"Template: {art_ctx.get('template', 'react')}")
+                ctx_lines.append("Current files:")
+                for path, code in art_ctx["files"].items():
+                    ctx_lines.append(f"\n--- {path} ---\n{code}")
+                ctx_str = "\n".join(ctx_lines)
+                llm_messages[-1] = {
+                    "role": "user",
+                    "content": llm_messages[-1]["content"] + ctx_str,
+                }
+
             # 4. pre_llm hooks
             hook_ctx.llm_messages = llm_messages
             hook_ctx = await hook_registry.run_hooks("pre_llm", hook_ctx)
@@ -915,6 +933,7 @@ async def _llm_background_task(
             assistant_msg = None
             assistant_saved = False
             last_save_len = 0
+            art_stream = ArtifactStreamParser()
             try:
                 async for chunk in stream_with_tools(
                     llm_messages,
@@ -932,6 +951,13 @@ async def _llm_background_task(
                         await queue.put({"event": "action", "data": action})
                     full_response += chunk
                     await queue.put({"event": "message", "data": chunk})
+
+                    # Stream artifact files as they complete
+                    for art_event in art_stream.feed(chunk):
+                        await queue.put({
+                            "event": art_event["event"],
+                            "data": json.dumps(art_event["data"]),
+                        })
 
                     # Create assistant message on first text chunk
                     if assistant_msg is None and full_response:
@@ -1035,6 +1061,21 @@ async def _llm_background_task(
 
                 # Save and emit artifacts
                 for art_data in found_artifacts:
+                    # Auto-detect missing dependencies
+                    from app.agent.artifact_parser import detect_dependencies
+                    art_files = art_data.get("files", {})
+                    art_deps = art_data.get("dependencies", {})
+                    missing_deps = detect_dependencies(art_files, art_deps)
+                    if missing_deps:
+                        art_deps = {**art_deps, **missing_deps}
+                        art_data["dependencies"] = art_deps
+
+                    # Auto-detect template from file extensions
+                    from app.agent.artifact_parser import detect_template
+                    detected_template = detect_template(art_files)
+                    if detected_template != art_data.get("template", "react"):
+                        art_data["template"] = detected_template
+
                     artifact = Artifact(
                         message_id=assistant_msg.id,
                         chat_id=chat.id,

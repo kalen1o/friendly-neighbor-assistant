@@ -118,3 +118,68 @@ def test_malformed_no_closing_tag():
     cleaned, artifacts = parse_artifacts(text)
     assert artifacts == []
     assert "some code" in cleaned
+
+
+from app.agent.artifact_parser import detect_dependencies
+
+
+def test_detect_missing_npm_deps():
+    files = {
+        "/App.js": "import { motion } from 'framer-motion';\nimport axios from 'axios';",
+        "/utils.js": "import { v4 } from 'uuid';\nimport React from 'react';",
+    }
+    declared = {}
+    missing = detect_dependencies(files, declared)
+    assert "framer-motion" in missing
+    assert "axios" in missing
+    assert "uuid" in missing
+    assert "react" not in missing
+
+
+def test_detect_skips_relative_imports():
+    files = {
+        "/App.js": "import Foo from './Foo';\nimport Bar from '../Bar';",
+    }
+    missing = detect_dependencies(files, {})
+    assert missing == {}
+
+
+def test_detect_skips_already_declared():
+    files = {
+        "/App.js": "import axios from 'axios';",
+    }
+    declared = {"axios": "^1.0.0"}
+    missing = detect_dependencies(files, declared)
+    assert missing == {}
+
+
+def test_detect_scoped_packages():
+    files = {
+        "/App.js": "import { Button } from '@radix-ui/react-button';\nimport styled from '@emotion/styled';",
+    }
+    missing = detect_dependencies(files, {})
+    assert "@radix-ui/react-button" in missing
+    assert "@emotion/styled" in missing
+
+
+from app.agent.artifact_parser import detect_template
+
+
+def test_detect_react_ts_from_tsx_files():
+    files = {"/App.tsx": "code", "/utils.ts": "code"}
+    assert detect_template(files) == "react-ts"
+
+
+def test_detect_react_from_js_files():
+    files = {"/App.js": "code", "/utils.js": "code"}
+    assert detect_template(files) == "react"
+
+
+def test_detect_vanilla_from_html_entry():
+    files = {"/index.html": "<html>", "/script.js": "code"}
+    assert detect_template(files) == "vanilla"
+
+
+def test_detect_mixed_prefers_ts():
+    files = {"/App.tsx": "code", "/helpers.js": "code"}
+    assert detect_template(files) == "react-ts"

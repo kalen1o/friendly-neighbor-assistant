@@ -22,6 +22,9 @@ interface StreamCallbacks {
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
   onArtifact?: (artifact: ArtifactData) => void;
+  onArtifactStart?: (data: { title: string; template: string }) => void;
+  onArtifactFile?: (data: { path: string; code: string }) => void;
+  onArtifactEnd?: (data: { files: Record<string, string>; dependencies: Record<string, string> }) => void;
   onWorkflow?: (steps: Array<{ name: string; status: string; parallel?: boolean }>) => void;
   onWorkflowStep?: (step: { name: string; status: string }) => void;
   onDone: () => void;
@@ -54,7 +57,8 @@ export function startStream(
   mode: ChatMode,
   fileIds: string[],
   chatTitle: string,
-  callbacks: StreamCallbacks
+  callbacks: StreamCallbacks,
+  artifactContext?: { files: Record<string, string>; template: string; title: string } | null
 ): void {
   // Abort existing stream for this chat
   const existing = streams.get(chatId);
@@ -93,6 +97,9 @@ export function startStream(
       onSources: (sources) => currentCallbacks.onSources?.(sources),
       onMetrics: (metrics) => currentCallbacks.onMetrics?.(metrics),
       onArtifact: (artifact) => currentCallbacks.onArtifact?.(artifact),
+      onArtifactStart: (data) => currentCallbacks.onArtifactStart?.(data),
+      onArtifactFile: (data) => currentCallbacks.onArtifactFile?.(data),
+      onArtifactEnd: (data) => currentCallbacks.onArtifactEnd?.(data),
       onWorkflow: (steps) => currentCallbacks.onWorkflow?.(steps),
       onWorkflowStep: (step) => currentCallbacks.onWorkflowStep?.(step),
       onDone: () => {
@@ -124,7 +131,8 @@ export function startStream(
       },
     },
     mode,
-    fileIds
+    fileIds,
+    artifactContext
   );
 
   stream.abort = abort;

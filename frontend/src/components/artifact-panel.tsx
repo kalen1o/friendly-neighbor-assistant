@@ -17,6 +17,7 @@ import { toast } from "sonner";
 interface ArtifactPanelProps {
   artifact: ArtifactData;
   onClose: () => void;
+  onFixError?: (error: string) => void;
 }
 
 /* ── Sandpack save bridge — watches file changes and auto-saves ── */
@@ -28,8 +29,8 @@ function SandpackSaveBridge({ artifactId }: { artifactId: string }) {
 
   const filesSnapshot = JSON.stringify(
     Object.fromEntries(
-      Object.entries(sandpack.files).map(([p, f]) => [p, f.code])
-    )
+      Object.entries(sandpack.files).map(([p, f]) => [p, f.code]),
+    ),
   );
 
   useEffect(() => {
@@ -79,14 +80,52 @@ function CopyActiveFile() {
   );
 }
 
+/* ── Error overlay with Fix button ── */
+
+function SandpackErrorOverlay({ onFix }: { onFix: (error: string) => void }) {
+  const { sandpack } = useSandpack();
+
+  const error =
+    sandpack.status === "idle" && sandpack.error
+      ? sandpack.error.message
+      : null;
+
+  if (!error) return null;
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/90 p-6">
+      <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <p className="mb-3 text-sm font-medium text-destructive">
+          Runtime Error
+        </p>
+        <pre className="mb-4 max-h-[200px] overflow-auto rounded bg-muted p-3 text-xs text-muted-foreground">
+          {error}
+        </pre>
+        <Button size="sm" variant="destructive" onClick={() => onFix(error)}>
+          Fix this
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Inner panel content (inside SandpackProvider) ── */
 
 function SandpackContent({
   artifact,
   onClose,
+  onFixError,
 }: ArtifactPanelProps) {
-  const [tab, setTab] = useState<"code" | "preview">("code");
+  const { sandpack } = useSandpack();
+  const [tab, setTab] = useState<"code" | "preview">("preview");
   const fileCount = Object.keys(artifact.files).length;
+  const [prevFile, setPrevFile] = useState(sandpack.activeFile);
+
+  // Switch to code tab when user clicks a file in the explorer
+  if (sandpack.activeFile !== prevFile) {
+    setPrevFile(sandpack.activeFile);
+    setTab("code");
+  }
 
   return (
     <div className="flex h-full flex-col border-l bg-background">
@@ -139,48 +178,89 @@ function SandpackContent({
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
+        {onFixError && <SandpackErrorOverlay onFix={onFixError} />}
         {/* File explorer */}
         <div className="w-[150px] shrink-0 overflow-y-auto border-r">
           <SandpackFileExplorer />
         </div>
-        {/* Editor or Preview */}
-        <div className="flex-1 overflow-hidden">
-          {tab === "code" ? (
+        {/* Editor and Preview — both always mounted, toggle visibility */}
+        <div className="relative flex-1 overflow-hidden">
+          <div className={tab === "code" ? "h-full" : "hidden"}>
             <SandpackCodeEditor
               showLineNumbers
               showTabs={false}
               style={{ height: "100%" }}
             />
-          ) : (
+          </div>
+          <div className={tab === "preview" ? "h-full" : "hidden"}>
             <SandpackPreview
               showNavigator={false}
               showRefreshButton
-              style={{ height: "100%" }}
+              showOpenInCodeSandbox={false}
+              style={{ height: "100%", width: "100%" }}
             />
-          )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+/* ── Ensure Sandpack entry files exist ── */
+
+const ENTRY_FILES: Record<string, Record<string, string>> = {
+  react: {
+    "/index.js":
+      'import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\n\nReactDOM.createRoot(document.getElementById("root")).render(<App />);',
+  },
+  "react-ts": {
+    "/index.tsx":
+      'import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\n\nReactDOM.createRoot(document.getElementById("root")!).render(<App />);',
+  },
+};
+
+function ensureEntryFiles(
+  files: Record<string, string>,
+  template: string,
+): Record<string, string> {
+  const entries = ENTRY_FILES[template];
+  if (!entries) return files;
+
+  const missing: Record<string, string> = {};
+  for (const [path, code] of Object.entries(entries)) {
+    if (!(path in files)) {
+      missing[path] = code;
+    }
+  }
+
+  if (Object.keys(missing).length === 0) return files;
+  return { ...files, ...missing };
+}
+
 /* ── Main export ── */
 
 export function ArtifactPanel(props: ArtifactPanelProps) {
+  const TEMPLATES = {
+    react: "react",
+    "react-ts": "react-ts",
+    vanilla: "vanilla",
+  } as const;
   const template =
-    props.artifact.template === "vanilla" ? "vanilla" : "react";
+    TEMPLATES[props.artifact.template as keyof typeof TEMPLATES] ?? "react";
+  const files = ensureEntryFiles(props.artifact.files, template);
 
   return (
     <SandpackProvider
       template={template}
-      files={props.artifact.files}
+      files={files}
       customSetup={{
         dependencies: props.artifact.dependencies ?? {},
       }}
       theme="dark"
       options={{
         activeFile: Object.keys(props.artifact.files)[0] ?? "/App.js",
+        bundlerURL: "https://sandpack-bundler.codesandbox.io",
       }}
       style={{ height: "100%", display: "flex", flexDirection: "column" }}
     >

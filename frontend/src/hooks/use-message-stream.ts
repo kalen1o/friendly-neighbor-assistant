@@ -51,6 +51,11 @@ export function useMessageStream(chatId: string) {
   // Skills used during the current response
   const skillsUsedRef = useRef<SkillUsage[]>([]);
   const sendingRef = useRef(false);
+  const streamingArtifactRef = useRef<{
+    title: string;
+    template: string;
+    files: Record<string, string>;
+  } | null>(null);
   const chatTitleRef = useRef<string>("");
   const bgPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -191,8 +196,38 @@ export function useMessageStream(chatId: string) {
         onSources: (sources) => { sourcesRef.current = sources; },
         onMetrics: (metrics) => { metricsRef.current = metrics; },
         onArtifact: (artifact) => {
-          setArtifacts((prev) => [...prev, artifact]);
+          setArtifacts([artifact]);
           setActiveArtifact(artifact);
+        },
+        onArtifactStart: (data) => {
+          streamingArtifactRef.current = {
+            title: data.title,
+            template: data.template,
+            files: {},
+          };
+          const placeholder: ArtifactData = {
+            id: `streaming-${Date.now()}`,
+            type: "project",
+            title: data.title,
+            template: data.template,
+            files: {},
+            dependencies: {},
+          };
+          setActiveArtifact(placeholder);
+        },
+        onArtifactFile: (data) => {
+          if (!streamingArtifactRef.current) return;
+          streamingArtifactRef.current.files[data.path] = data.code;
+          setActiveArtifact((prev) => {
+            if (!prev || !prev.id.startsWith("streaming-")) return prev;
+            return {
+              ...prev,
+              files: { ...streamingArtifactRef.current!.files },
+            };
+          });
+        },
+        onArtifactEnd: () => {
+          streamingArtifactRef.current = null;
         },
         onWorkflow: (steps) => { setWorkflowSteps(steps); },
         onWorkflowStep: (step) => {
@@ -303,16 +338,19 @@ export function useMessageStream(chatId: string) {
 
       listArtifacts(chatId)
         .then((arts) => {
-          setArtifacts(
-            arts.map((a) => ({
-              id: a.id,
+          if (arts.length === 0) return;
+          // Keep only the latest artifact
+          const latest = arts[arts.length - 1];
+          setArtifacts([
+            {
+              id: latest.id,
               type: "project" as const,
-              title: a.title,
-              template: a.template ?? "react",
-              files: a.files ?? {},
-              dependencies: a.dependencies ?? {},
-            }))
-          );
+              title: latest.title,
+              template: latest.template ?? "react",
+              files: latest.files ?? {},
+              dependencies: latest.dependencies ?? {},
+            },
+          ]);
         })
         .catch(() => {});
     } catch (e) {
@@ -392,6 +430,10 @@ export function useMessageStream(chatId: string) {
       setIsLoading(true);
       setActionText(null);
 
+      const artCtx = activeArtifact && !activeArtifact.id.startsWith("streaming-")
+        ? { files: activeArtifact.files, template: activeArtifact.template, title: activeArtifact.title }
+        : undefined;
+
       startStream(
         chatId,
         content,
@@ -419,8 +461,38 @@ export function useMessageStream(chatId: string) {
             sourcesRef.current = sources;
           },
           onArtifact: (artifact) => {
-            setArtifacts((prev) => [...prev, artifact]);
+            setArtifacts([artifact]);
             setActiveArtifact(artifact);
+          },
+          onArtifactStart: (data) => {
+            streamingArtifactRef.current = {
+              title: data.title,
+              template: data.template,
+              files: {},
+            };
+            const placeholder: ArtifactData = {
+              id: `streaming-${Date.now()}`,
+              type: "project",
+              title: data.title,
+              template: data.template,
+              files: {},
+              dependencies: {},
+            };
+            setActiveArtifact(placeholder);
+          },
+          onArtifactFile: (data) => {
+            if (!streamingArtifactRef.current) return;
+            streamingArtifactRef.current.files[data.path] = data.code;
+            setActiveArtifact((prev) => {
+              if (!prev || !prev.id.startsWith("streaming-")) return prev;
+              return {
+                ...prev,
+                files: { ...streamingArtifactRef.current!.files },
+              };
+            });
+          },
+          onArtifactEnd: () => {
+            streamingArtifactRef.current = null;
           },
           onWorkflow: (steps) => {
             setWorkflowSteps(steps);
@@ -460,11 +532,18 @@ export function useMessageStream(chatId: string) {
             setActionText(null);
             setIsStreaming(false);
           },
-        }
+        },
+        artCtx
       );
     },
-    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll]
+    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll, activeArtifact]
   );
+
+  const fixArtifactError = useCallback((error: string) => {
+    if (!activeArtifact || activeArtifact.id.startsWith("streaming-")) return;
+    const fixPrompt = `Fix this runtime error in the artifact "${activeArtifact.title}":\n\n\`\`\`\n${error}\n\`\`\`\n\nPlease generate a corrected version of the project.`;
+    doSend(fixPrompt, "balanced" as ChatMode, []);
+  }, [activeArtifact, doSend]);
 
   // Initial load / auto-send from URL
   useEffect(() => {
@@ -502,5 +581,6 @@ export function useMessageStream(chatId: string) {
     setChatModelId,
     loadOlderMessages,
     doSend,
+    fixArtifactError,
   };
 }

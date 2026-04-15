@@ -416,6 +416,9 @@ export interface SSECallbacks {
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
   onArtifact?: (artifact: ArtifactData) => void;
+  onArtifactStart?: (data: { title: string; template: string }) => void;
+  onArtifactFile?: (data: { path: string; code: string }) => void;
+  onArtifactEnd?: (data: { files: Record<string, string>; dependencies: Record<string, string> }) => void;
   onWorkflow?: (steps: WorkflowStep[]) => void;
   onWorkflowStep?: (step: WorkflowStep) => void;
   onDone: () => void;
@@ -429,7 +432,8 @@ export function sendMessage(
   content: string,
   callbacks: SSECallbacks,
   mode: ChatMode = "balanced",
-  fileIds: string[] = []
+  fileIds: string[] = [],
+  artifactContext?: { files: Record<string, string>; template: string; title: string } | null
 ): () => void {
   const controller = new AbortController();
 
@@ -439,7 +443,12 @@ export function sendMessage(
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, mode, file_ids: fileIds }),
+        body: JSON.stringify({
+          content,
+          mode,
+          file_ids: fileIds,
+          ...(artifactContext ? { artifact_context: artifactContext } : {}),
+        }),
         signal: controller.signal,
       });
 
@@ -504,6 +513,21 @@ export function sendMessage(
             case "artifact":
               try {
                 callbacks.onArtifact?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact_start":
+              try {
+                callbacks.onArtifactStart?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact_file":
+              try {
+                callbacks.onArtifactFile?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact_end":
+              try {
+                callbacks.onArtifactEnd?.(JSON.parse(data));
               } catch {}
               break;
             case "workflow":
