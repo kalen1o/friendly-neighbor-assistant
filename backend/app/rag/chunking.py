@@ -174,10 +174,12 @@ def chunk_text_semantic(
         if tokens <= chunk_size:
             # Section fits in one chunk
             chunk_text_content = "## {}\n\n{}".format(header, body) if header else body
-            chunks.append({
-                "text": chunk_text_content,
-                "metadata": {"header": header, "position": "full"},
-            })
+            chunks.append(
+                {
+                    "text": chunk_text_content,
+                    "metadata": {"header": header, "position": "full"},
+                }
+            )
         else:
             # Split long sections into overlapping chunks
             paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
@@ -187,25 +189,41 @@ def chunk_text_semantic(
             for para in paragraphs:
                 candidate = (current + "\n\n" + para).strip() if current else para
                 if _estimate_tokens(candidate) > chunk_size and current:
-                    chunk_text_content = "## {}\n\n{}".format(header, current) if header else current
+                    chunk_text_content = (
+                        "## {}\n\n{}".format(header, current) if header else current
+                    )
                     position = "start" if position_idx == 0 else "middle"
-                    chunks.append({
-                        "text": chunk_text_content,
-                        "metadata": {"header": header, "position": position},
-                    })
+                    chunks.append(
+                        {
+                            "text": chunk_text_content,
+                            "metadata": {"header": header, "position": position},
+                        }
+                    )
                     position_idx += 1
                     # Overlap: keep tail of current chunk
                     overlap_chars = chunk_overlap * APPROX_CHARS_PER_TOKEN
-                    current = current[-overlap_chars:].strip() + "\n\n" + para if overlap_chars < len(current) else para
+                    current = (
+                        current[-overlap_chars:].strip() + "\n\n" + para
+                        if overlap_chars < len(current)
+                        else para
+                    )
                 else:
                     current = candidate
 
             if current.strip():
-                chunk_text_content = "## {}\n\n{}".format(header, current) if header else current
+                chunk_text_content = (
+                    "## {}\n\n{}".format(header, current) if header else current
+                )
                 position = "end" if position_idx > 0 else "full"
-                chunks.append({
-                    "text": chunk_text_content,
-                    "metadata": {"header": header, "position": position},
-                })
+                chunks.append(
+                    {
+                        "text": chunk_text_content,
+                        "metadata": {"header": header, "position": position},
+                    }
+                )
 
-    return chunks if chunks else [{"text": text.strip(), "metadata": {"header": "", "position": "full"}}]
+    return (
+        chunks
+        if chunks
+        else [{"text": text.strip(), "metadata": {"header": "", "position": "full"}}]
+    )

@@ -7,6 +7,7 @@ from app.llm.encryption import decrypt_api_key
 @dataclass
 class ModelConfig:
     """Everything needed to make an LLM call to a specific model."""
+
     provider: str
     model_id: str
     api_key: str

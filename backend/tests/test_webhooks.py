@@ -7,8 +7,11 @@ from app.webhooks.inbound import parse_inbound_message
 
 def test_webhook_model_defaults():
     wh = WebhookIntegration(
-        user_id=1, name="Test", platform="slack",
-        direction="outbound", webhook_url="https://hooks.slack.com/test",
+        user_id=1,
+        name="Test",
+        platform="slack",
+        direction="outbound",
+        webhook_url="https://hooks.slack.com/test",
         enabled=True,
     )
     assert wh.platform == "slack"
@@ -16,7 +19,9 @@ def test_webhook_model_defaults():
 
 
 def test_format_payload_generic():
-    payload = _format_payload("generic", "message_completed", {"chat_id": "chat-123", "message": "Hello"})
+    payload = _format_payload(
+        "generic", "message_completed", {"chat_id": "chat-123", "message": "Hello"}
+    )
     assert payload["event"] == "message_completed"
     assert payload["data"]["chat_id"] == "chat-123"
 
@@ -38,7 +43,10 @@ def test_parse_generic_inbound():
 
 
 def test_parse_slack_inbound():
-    body = {"type": "event_callback", "event": {"type": "message", "text": "Hello", "channel": "C123"}}
+    body = {
+        "type": "event_callback",
+        "event": {"type": "message", "text": "Hello", "channel": "C123"},
+    }
     result = parse_inbound_message("slack", body)
     assert result["text"] == "Hello"
     assert result["channel"] == "C123"
@@ -71,13 +79,16 @@ async def test_list_webhooks_empty(client):
 
 @pytest.mark.anyio
 async def test_create_webhook(client):
-    response = await client.post("/api/webhooks", json={
-        "name": "My Slack",
-        "platform": "slack",
-        "direction": "outbound",
-        "webhook_url": "https://hooks.slack.com/services/test",
-        "subscribed_events": ["message_completed"],
-    })
+    response = await client.post(
+        "/api/webhooks",
+        json={
+            "name": "My Slack",
+            "platform": "slack",
+            "direction": "outbound",
+            "webhook_url": "https://hooks.slack.com/services/test",
+            "subscribed_events": ["message_completed"],
+        },
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "My Slack"
@@ -88,11 +99,14 @@ async def test_create_webhook(client):
 
 @pytest.mark.anyio
 async def test_create_inbound_webhook_generates_token(client):
-    response = await client.post("/api/webhooks", json={
-        "name": "Slack Inbound",
-        "platform": "slack",
-        "direction": "inbound",
-    })
+    response = await client.post(
+        "/api/webhooks",
+        json={
+            "name": "Slack Inbound",
+            "platform": "slack",
+            "direction": "inbound",
+        },
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["inbound_token"] is not None
@@ -101,18 +115,24 @@ async def test_create_inbound_webhook_generates_token(client):
 
 @pytest.mark.anyio
 async def test_update_webhook(client):
-    create = await client.post("/api/webhooks", json={
-        "name": "Old Name",
-        "platform": "generic",
-        "direction": "outbound",
-        "webhook_url": "https://example.com/hook",
-        "subscribed_events": ["message_completed"],
-    })
+    create = await client.post(
+        "/api/webhooks",
+        json={
+            "name": "Old Name",
+            "platform": "generic",
+            "direction": "outbound",
+            "webhook_url": "https://example.com/hook",
+            "subscribed_events": ["message_completed"],
+        },
+    )
     wh_id = create.json()["id"]
-    response = await client.put("/api/webhooks/{}".format(wh_id), json={
-        "name": "New Name",
-        "enabled": False,
-    })
+    response = await client.put(
+        "/api/webhooks/{}".format(wh_id),
+        json={
+            "name": "New Name",
+            "enabled": False,
+        },
+    )
     assert response.status_code == 200
     assert response.json()["name"] == "New Name"
     assert response.json()["enabled"] is False
@@ -120,13 +140,16 @@ async def test_update_webhook(client):
 
 @pytest.mark.anyio
 async def test_delete_webhook(client):
-    create = await client.post("/api/webhooks", json={
-        "name": "To Delete",
-        "platform": "generic",
-        "direction": "outbound",
-        "webhook_url": "https://example.com/hook",
-        "subscribed_events": [],
-    })
+    create = await client.post(
+        "/api/webhooks",
+        json={
+            "name": "To Delete",
+            "platform": "generic",
+            "direction": "outbound",
+            "webhook_url": "https://example.com/hook",
+            "subscribed_events": [],
+        },
+    )
     wh_id = create.json()["id"]
     response = await client.delete("/api/webhooks/{}".format(wh_id))
     assert response.status_code == 204

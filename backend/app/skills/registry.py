@@ -90,8 +90,9 @@ class SkillDefinition:
             return None
         import json
         import re
+
         # Look for ```json ... ``` block in content
-        match = re.search(r'```json\s*\n(.*?)\n```', self.content, re.DOTALL)
+        match = re.search(r"```json\s*\n(.*?)\n```", self.content, re.DOTALL)
         if match:
             try:
                 data = json.loads(match.group(1))

@@ -66,13 +66,18 @@ async def create_webhook(
 ):
     # Check limit
     from sqlalchemy import func
+
     count = await db.scalar(
-        select(func.count(WebhookIntegration.id)).where(WebhookIntegration.user_id == user.id)
+        select(func.count(WebhookIntegration.id)).where(
+            WebhookIntegration.user_id == user.id
+        )
     )
     if count >= settings.max_webhooks_per_user:
         raise HTTPException(
             status_code=400,
-            detail="Maximum {} webhooks per user reached".format(settings.max_webhooks_per_user),
+            detail="Maximum {} webhooks per user reached".format(
+                settings.max_webhooks_per_user
+            ),
         )
 
     inbound_token = None
@@ -204,7 +209,9 @@ async def _process_inbound_message(
         async with get_session_factory()() as session:
             # Re-fetch integration in this session
             result = await session.execute(
-                select(WebhookIntegration).where(WebhookIntegration.id == integration_id)
+                select(WebhookIntegration).where(
+                    WebhookIntegration.id == integration_id
+                )
             )
             integration = result.scalar_one_or_none()
             if not integration:

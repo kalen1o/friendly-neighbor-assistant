@@ -17,7 +17,9 @@ if TYPE_CHECKING:
 class Folder(Base):
     __tablename__ = "folders"
     __table_args__ = (
-        UniqueConstraint("user_id", "parent_id", "name", name="uq_folder_user_parent_name"),
+        UniqueConstraint(
+            "user_id", "parent_id", "name", name="uq_folder_user_parent_name"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

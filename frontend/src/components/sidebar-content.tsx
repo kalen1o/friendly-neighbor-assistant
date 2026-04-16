@@ -203,7 +203,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, authLoading, pathname]);
+  }, [isAuthenticated, authLoading]);
 
   const fetchFolders = useCallback(async () => {
     if (!isAuthenticated) return;

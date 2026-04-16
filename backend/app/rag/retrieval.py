@@ -112,7 +112,9 @@ async def search_knowledge_base(
         )
         logger.info(
             "Hybrid search: %d vector + %d FTS -> %d fused",
-            len(vector_results), len(fts_results), len(fused),
+            len(vector_results),
+            len(fts_results),
+            len(fused),
         )
     else:
         fused = vector_results

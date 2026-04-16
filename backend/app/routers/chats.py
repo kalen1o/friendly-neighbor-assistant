@@ -151,7 +151,9 @@ async def list_chats(
     folder_map = {}
     if folder_internal_ids:
         fres = await db.execute(
-            select(Folder.id, Folder.public_id).where(Folder.id.in_(folder_internal_ids))
+            select(Folder.id, Folder.public_id).where(
+                Folder.id.in_(folder_internal_ids)
+            )
         )
         folder_map = dict(fres.all())
 
@@ -160,7 +162,9 @@ async def list_chats(
     model_map = {}
     if model_internal_ids:
         mres = await db.execute(
-            select(UserModel.id, UserModel.public_id).where(UserModel.id.in_(model_internal_ids))
+            select(UserModel.id, UserModel.public_id).where(
+                UserModel.id.in_(model_internal_ids)
+            )
         )
         model_map = dict(mres.all())
 
@@ -170,7 +174,9 @@ async def list_chats(
         chat_internal_ids = [c.id for c in chats]
         gen_result = await db.execute(
             select(Message.chat_id)
-            .where(Message.chat_id.in_(chat_internal_ids), Message.status == "generating")
+            .where(
+                Message.chat_id.in_(chat_internal_ids), Message.status == "generating"
+            )
             .distinct()
         )
         generating_chat_ids = set(gen_result.scalars().all())
@@ -181,14 +187,17 @@ async def list_chats(
             "title": c.title,
             "updated_at": c.updated_at,
             "folder_id": folder_map.get(c.folder_id) if c.folder_id else None,
-            "model_id": c.selected_model_slug or (model_map.get(c.user_model_id) if c.user_model_id else None),
+            "model_id": c.selected_model_slug
+            or (model_map.get(c.user_model_id) if c.user_model_id else None),
             "has_notification": c.has_notification,
             "is_generating": c.id in generating_chat_ids,
         }
         for c in chats
     ]
 
-    return ChatListResponse(chats=chat_summaries, next_cursor=next_cursor, has_more=has_more)
+    return ChatListResponse(
+        chats=chat_summaries, next_cursor=next_cursor, has_more=has_more
+    )
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -281,6 +290,7 @@ async def get_chat(
     if chat.has_notification:
         try:
             from sqlalchemy import update
+
             await db.execute(
                 update(Chat).where(Chat.id == chat.id).values(has_notification=False)
             )
@@ -489,19 +499,21 @@ async def send_message(
     # 3. Start background task and stream via SSE
     queue: asyncio.Queue = asyncio.Queue()
 
-    asyncio.ensure_future(_llm_background_task(
-        chat_id=chat.id,
-        chat_public_id=chat_id,
-        user_id=user.id,
-        user_msg_id=user_msg.id,
-        user_msg_content=body.content,
-        mode=body.mode,
-        file_ids=body.file_ids,
-        user_memory_enabled=user.memory_enabled,
-        settings=settings,
-        queue=queue,
-        artifact_context=body.artifact_context,
-    ))
+    asyncio.ensure_future(
+        _llm_background_task(
+            chat_id=chat.id,
+            chat_public_id=chat_id,
+            user_id=user.id,
+            user_msg_id=user_msg.id,
+            user_msg_content=body.content,
+            mode=body.mode,
+            file_ids=body.file_ids,
+            user_memory_enabled=user.memory_enabled,
+            settings=settings,
+            queue=queue,
+            artifact_context=body.artifact_context,
+        )
+    )
 
     async def event_generator():
         while True:
@@ -542,9 +554,7 @@ async def _llm_background_task(
                 return
 
             # Load user fresh in this session
-            user_result = await db.execute(
-                select(User).where(User.id == user_id)
-            )
+            user_result = await db.execute(select(User).where(User.id == user_id))
             user = user_result.scalar_one_or_none()
             if not user:
                 await queue.put({"event": "error", "data": "User not found"})
@@ -575,13 +585,17 @@ async def _llm_background_task(
             resolved_model_config = None
 
             # 1. Per-chat project model slug (uses project API keys)
-            if chat.selected_model_slug and chat.selected_model_slug.startswith("project-"):
+            if chat.selected_model_slug and chat.selected_model_slug.startswith(
+                "project-"
+            ):
                 from app.routers.models import _project_defaults
                 from app.llm.model_config import ModelConfig
+
                 # Look up the project model by slug to get its base_url
                 project_models = _project_defaults(settings)
                 matched = next(
-                    (m for m in project_models if m.id == chat.selected_model_slug), None
+                    (m for m in project_models if m.id == chat.selected_model_slug),
+                    None,
                 )
                 if matched:
                     api_key = (
@@ -597,7 +611,11 @@ async def _llm_background_task(
                     )
 
             # 2. Per-chat user model (uses user's encrypted API key)
-            if resolved_model_config is None and chat.user_model_id and settings.encryption_key:
+            if (
+                resolved_model_config is None
+                and chat.user_model_id
+                and settings.encryption_key
+            ):
                 um_result = await db.execute(
                     select(UserModel).where(UserModel.id == chat.user_model_id)
                 )
@@ -636,20 +654,40 @@ async def _llm_background_task(
                     usage = await get_usage(user_id)
                     # Hard limits — block the request
                     if quota.messages_hard and usage["messages"] >= quota.messages_hard:
-                        await queue.put({"event": "error", "data": "Monthly message limit reached. Please try again next month or contact support."})
+                        await queue.put(
+                            {
+                                "event": "error",
+                                "data": "Monthly message limit reached. Please try again next month or contact support.",
+                            }
+                        )
                         await queue.put({"event": "done", "data": ""})
                         await queue.put(None)
                         return
                     if quota.tokens_hard and usage["tokens_total"] >= quota.tokens_hard:
-                        await queue.put({"event": "error", "data": "Monthly token limit reached. Please try again next month or contact support."})
+                        await queue.put(
+                            {
+                                "event": "error",
+                                "data": "Monthly token limit reached. Please try again next month or contact support.",
+                            }
+                        )
                         await queue.put({"event": "done", "data": ""})
                         await queue.put(None)
                         return
                     # Soft limits — warn but allow
                     if quota.messages_soft and usage["messages"] >= quota.messages_soft:
-                        await queue.put({"event": "action", "data": "Warning: approaching monthly message limit."})
+                        await queue.put(
+                            {
+                                "event": "action",
+                                "data": "Warning: approaching monthly message limit.",
+                            }
+                        )
                     if quota.tokens_soft and usage["tokens_total"] >= quota.tokens_soft:
-                        await queue.put({"event": "action", "data": "Warning: approaching monthly token limit."})
+                        await queue.put(
+                            {
+                                "event": "action",
+                                "data": "Warning: approaching monthly token limit.",
+                            }
+                        )
             except Exception:
                 logger.warning("Failed to check user quota for user %s", user_id)
 
@@ -661,7 +699,9 @@ async def _llm_background_task(
                 await queue.put(None)
                 return
 
-            user_msg_content_resolved = hook_ctx.modifications.get("message_replace", user_msg_content)
+            user_msg_content_resolved = hook_ctx.modifications.get(
+                "message_replace", user_msg_content
+            )
 
             # 2. pre_skills hooks
             hook_ctx = await hook_registry.run_hooks("pre_skills", hook_ctx)
@@ -672,6 +712,7 @@ async def _llm_background_task(
             tool_defs, knowledge_prompts, registry = await build_agent_context(
                 db, settings, user_id=user_id
             )
+
             async def _workflow_progress(msg: str) -> None:
                 # Send workflow events directly to SSE queue
                 if msg.startswith("__workflow__"):
@@ -681,7 +722,9 @@ async def _llm_background_task(
                 else:
                     await queue.put({"event": "action", "data": msg})
 
-            tool_executor = await create_tool_executor(registry, db, settings, on_action=_workflow_progress)
+            tool_executor = await create_tool_executor(
+                registry, db, settings, on_action=_workflow_progress
+            )
 
             # Check if any enabled knowledge skill specifies a model override
             enabled_names = [s.name for s in registry.get_enabled_skills()]
@@ -701,6 +744,7 @@ async def _llm_background_task(
                     elif settings.openai_base_url:
                         sk_base_url = settings.openai_base_url
                 from app.llm.model_config import ModelConfig as _MC
+
                 resolved_model_config = _MC(
                     provider=sk_provider,
                     model_id=sk_model_id,
@@ -760,7 +804,9 @@ async def _llm_background_task(
                         image_blocks.append(
                             {
                                 "type": "image_url",
-                                "image_url": {"url": f"data:{f.file_type};base64,{b64}"},
+                                "image_url": {
+                                    "url": f"data:{f.file_type};base64,{b64}"
+                                },
                             }
                         )
                     elif f.file_type == "application/pdf":
@@ -828,8 +874,14 @@ async def _llm_background_task(
                     )
                 )
                 if doc_count and doc_count > 0:
-                    await queue.put({"event": "action", "data": "Searching knowledge base..."})
-                    logger.info("Auto-KB: searching %d docs, query=%s", doc_count, user_msg_content_resolved[:80])
+                    await queue.put(
+                        {"event": "action", "data": "Searching knowledge base..."}
+                    )
+                    logger.info(
+                        "Auto-KB: searching %d docs, query=%s",
+                        doc_count,
+                        user_msg_content_resolved[:80],
+                    )
                     kb_session_factory = get_session_factory()
                     async with kb_session_factory() as kb_db:
                         kb_results = await _kb_search(
@@ -843,18 +895,20 @@ async def _llm_background_task(
                             citation_parts.append(
                                 "[{}] [{}]: {}".format(idx, r["filename"], r["text"])
                             )
-                            kb_sources.append({
-                                "type": "document",
-                                "filename": r["filename"],
-                                "text": r["text"],
-                                "score": round(r.get("score", 0), 3),
-                                "relevance_score": round(
-                                    r.get("relevance_score", r.get("score", 0)), 3
-                                ),
-                                "citation_index": idx,
-                                "chunk_excerpt": r["text"][:150],
-                                "chunk_index": r.get("chunk_index", 0),
-                            })
+                            kb_sources.append(
+                                {
+                                    "type": "document",
+                                    "filename": r["filename"],
+                                    "text": r["text"],
+                                    "score": round(r.get("score", 0), 3),
+                                    "relevance_score": round(
+                                        r.get("relevance_score", r.get("score", 0)), 3
+                                    ),
+                                    "citation_index": idx,
+                                    "chunk_excerpt": r["text"][:150],
+                                    "chunk_index": r.get("chunk_index", 0),
+                                }
+                            )
 
                         kb_context = (
                             "\n\n---\n"
@@ -876,7 +930,8 @@ async def _llm_background_task(
                             }
                         logger.info(
                             "Auto-injected %d KB results for chat %s",
-                            len(kb_results), chat_public_id,
+                            len(kb_results),
+                            chat_public_id,
                         )
             except Exception:
                 logger.exception("Auto KB injection failed, continuing without")
@@ -884,7 +939,9 @@ async def _llm_background_task(
             # Inject active artifact context if provided
             if artifact_context and artifact_context.get("files"):
                 art_ctx = artifact_context
-                ctx_lines = ["\n\n[Active artifact context — the user is viewing this project:]\n"]
+                ctx_lines = [
+                    "\n\n[Active artifact context — the user is viewing this project:]\n"
+                ]
                 ctx_lines.append(f"Title: {art_ctx.get('title', 'Untitled')}")
                 ctx_lines.append(f"Template: {art_ctx.get('template', 'react')}")
                 ctx_lines.append("Current files:")
@@ -953,14 +1010,21 @@ async def _llm_background_task(
 
                     # Stream artifact files as they complete
                     for art_event in art_stream.feed(chunk):
-                        await queue.put({
-                            "event": art_event["event"],
-                            "data": json.dumps(art_event["data"]),
-                        })
+                        await queue.put(
+                            {
+                                "event": art_event["event"],
+                                "data": json.dumps(art_event["data"]),
+                            }
+                        )
 
                     # Create assistant message on first text chunk
                     if assistant_msg is None and full_response:
-                        assistant_msg = Message(chat_id=chat.id, role="assistant", content=full_response, status="generating")
+                        assistant_msg = Message(
+                            chat_id=chat.id,
+                            role="assistant",
+                            content=full_response,
+                            status="generating",
+                        )
                         db.add(assistant_msg)
                         await db.commit()
                         await db.refresh(assistant_msg)
@@ -985,14 +1049,18 @@ async def _llm_background_task(
                     full_response = hook_ctx.modifications["response_replace"]
                 if "response_append" in hook_ctx.modifications:
                     full_response += hook_ctx.modifications["response_append"]
-                    await queue.put({
-                        "event": "message",
-                        "data": hook_ctx.modifications["response_append"],
-                    })
+                    await queue.put(
+                        {
+                            "event": "message",
+                            "data": hook_ctx.modifications["response_append"],
+                        }
+                    )
 
                 # Build sources: auto-KB + tool results + skill labels
                 sources_data = list(kb_sources)  # auto-injected KB sources first
-                seen_keys = {s.get("filename") for s in sources_data if s.get("filename")}
+                seen_keys = {
+                    s.get("filename") for s in sources_data if s.get("filename")
+                }
                 if hasattr(tool_executor, "collected_sources"):
                     for src in tool_executor.collected_sources:
                         key = src.get("url") or src.get("filename")
@@ -1010,7 +1078,9 @@ async def _llm_background_task(
                             entry["params"] = skills_params[s]
                         sources_data.append(entry)
                 if sources_data:
-                    await queue.put({"event": "sources", "data": json.dumps(sources_data)})
+                    await queue.put(
+                        {"event": "sources", "data": json.dumps(sources_data)}
+                    )
 
                 # Parse artifacts from response
                 cleaned_response, found_artifacts = parse_artifacts(full_response)
@@ -1040,6 +1110,7 @@ async def _llm_background_task(
                 # Emit webhook event
                 try:
                     from app.webhooks.events import emit_event
+
                     await emit_event(
                         "message_completed",
                         {
@@ -1055,12 +1126,20 @@ async def _llm_background_task(
 
                 # Audit logging
                 from app.auth.admin import log_audit as _log_audit
-                await _log_audit(db, "send_message", user_id=user_id, resource_type="chat", resource_id=chat_public_id)
+
+                await _log_audit(
+                    db,
+                    "send_message",
+                    user_id=user_id,
+                    resource_type="chat",
+                    resource_id=chat_public_id,
+                )
 
                 # Save and emit artifacts
                 for art_data in found_artifacts:
                     # Auto-detect missing dependencies
                     from app.agent.artifact_parser import detect_dependencies
+
                     art_files = art_data.get("files", {})
                     art_deps = art_data.get("dependencies", {})
                     missing_deps = detect_dependencies(art_files, art_deps)
@@ -1070,6 +1149,7 @@ async def _llm_background_task(
 
                     # Auto-detect template from file extensions
                     from app.agent.artifact_parser import detect_template
+
                     detected_template = detect_template(art_files)
                     if detected_template != art_data.get("template", "react"):
                         art_data["template"] = detected_template
@@ -1087,19 +1167,21 @@ async def _llm_background_task(
                     db.add(artifact)
                     await db.commit()
                     await db.refresh(artifact)
-                    await queue.put({
-                        "event": "artifact",
-                        "data": json.dumps(
-                            {
-                                "id": artifact.public_id,
-                                "type": "project",
-                                "title": artifact.title,
-                                "template": artifact.template,
-                                "files": artifact.files,
-                                "dependencies": artifact.dependencies,
-                            }
-                        ),
-                    })
+                    await queue.put(
+                        {
+                            "event": "artifact",
+                            "data": json.dumps(
+                                {
+                                    "id": artifact.public_id,
+                                    "type": "project",
+                                    "title": artifact.title,
+                                    "template": artifact.template,
+                                    "files": artifact.files,
+                                    "dependencies": artifact.dependencies,
+                                }
+                            ),
+                        }
+                    )
 
                 # 6. post_message hooks (latency calculated here)
                 hook_ctx.response = full_response
@@ -1136,7 +1218,9 @@ async def _llm_background_task(
 
                 # Auto-title (runs after done so the user isn't blocked)
                 if chat.title is None:
-                    title = await _generate_title(user_msg_content, full_response, settings)
+                    title = await _generate_title(
+                        user_msg_content, full_response, settings
+                    )
                     chat.title = title
                     await db.commit()
                     await queue.put({"event": "title", "data": title})
@@ -1163,7 +1247,10 @@ async def _llm_background_task(
                         if assistant_msg:
                             # Update the existing progressively-saved message
                             await db.refresh(assistant_msg)
-                            assistant_msg.content = full_response + "\n\n[Response interrupted due to an error]"
+                            assistant_msg.content = (
+                                full_response
+                                + "\n\n[Response interrupted due to an error]"
+                            )
                             assistant_msg.status = "error"
                         else:
                             partial_msg = Message(

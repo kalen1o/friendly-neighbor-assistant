@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
             if result.rowcount > 0:
                 await db.commit()
                 import logging
+
                 logging.getLogger(__name__).info(
                     f"Cleaned up {result.rowcount} stuck generating message(s)"
                 )

@@ -26,7 +26,9 @@ class UserModel(Base):
     model_id: Mapped[str] = mapped_column(String(100), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     base_url: Mapped[Optional[str]] = mapped_column(String(500), default=None)
-    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -33,9 +33,7 @@ def upgrade() -> None:
         sa.Column("model_id", sa.String(100), nullable=False),
         sa.Column("api_key_encrypted", sa.Text(), nullable=False),
         sa.Column("base_url", sa.String(500), nullable=True),
-        sa.Column(
-            "is_default", sa.Boolean(), nullable=False, server_default="false"
-        ),
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
         ),

@@ -73,7 +73,11 @@ def _project_defaults(settings: Settings) -> list[ModelOut]:
             else:
                 model_id = rest
                 # Default base_url: use OPENAI_BASE_URL for openai providers, None for anthropic
-                base_url = (settings.openai_base_url or None) if provider != "anthropic" else None
+                base_url = (
+                    (settings.openai_base_url or None)
+                    if provider != "anthropic"
+                    else None
+                )
 
             slug = f"project-{provider}-{model_id}".replace("/", "-")
             name = model_id.split("/")[-1]
@@ -164,16 +168,29 @@ async def create_model(
 ):
     enc_key = _require_encryption(settings)
     if body.provider == "openai_compatible" and not body.base_url:
-        raise HTTPException(status_code=400, detail="base_url is required for openai_compatible provider")
+        raise HTTPException(
+            status_code=400,
+            detail="base_url is required for openai_compatible provider",
+        )
 
-    config = ModelConfig(provider=body.provider, model_id=body.model_id, api_key=body.api_key, base_url=body.base_url)
+    config = ModelConfig(
+        provider=body.provider,
+        model_id=body.model_id,
+        api_key=body.api_key,
+        base_url=body.base_url,
+    )
     test_result = await _test_model_connection(config)
     if not test_result.success:
-        raise HTTPException(status_code=400, detail=f"API key validation failed: {test_result.message}")
+        raise HTTPException(
+            status_code=400, detail=f"API key validation failed: {test_result.message}"
+        )
 
     model = UserModel(
-        user_id=user.id, name=body.name, provider=body.provider,
-        model_id=body.model_id, api_key_encrypted=encrypt_api_key(body.api_key, enc_key),
+        user_id=user.id,
+        name=body.name,
+        provider=body.provider,
+        model_id=body.model_id,
+        api_key_encrypted=encrypt_api_key(body.api_key, enc_key),
         base_url=body.base_url,
     )
     db.add(model)
@@ -184,14 +201,17 @@ async def create_model(
 
 @router.patch("/{model_id}", response_model=ModelOut)
 async def update_model(
-    model_id: str, body: ModelUpdate,
+    model_id: str,
+    body: ModelUpdate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
     enc_key = _require_encryption(settings)
     result = await db.execute(
-        select(UserModel).where(UserModel.public_id == model_id, UserModel.user_id == user.id)
+        select(UserModel).where(
+            UserModel.public_id == model_id, UserModel.user_id == user.id
+        )
     )
     model = result.scalar_one_or_none()
     if not model:
@@ -204,16 +224,27 @@ async def update_model(
     if body.base_url is not None:
         model.base_url = body.base_url
     if body.api_key is not None:
-        config = ModelConfig(provider=model.provider, model_id=body.model_id or model.model_id,
-                           api_key=body.api_key, base_url=body.base_url or model.base_url)
+        config = ModelConfig(
+            provider=model.provider,
+            model_id=body.model_id or model.model_id,
+            api_key=body.api_key,
+            base_url=body.base_url or model.base_url,
+        )
         test_result = await _test_model_connection(config)
         if not test_result.success:
-            raise HTTPException(status_code=400, detail=f"API key validation failed: {test_result.message}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"API key validation failed: {test_result.message}",
+            )
         model.api_key_encrypted = encrypt_api_key(body.api_key, enc_key)
 
     if body.is_default is True:
         others = await db.execute(
-            select(UserModel).where(UserModel.user_id == user.id, UserModel.id != model.id, UserModel.is_default == True)
+            select(UserModel).where(
+                UserModel.user_id == user.id,
+                UserModel.id != model.id,
+                UserModel.is_default == True,
+            )
         )
         for other in others.scalars().all():
             other.is_default = False
@@ -235,7 +266,9 @@ async def delete_model(
 ):
     _require_encryption(settings)
     result = await db.execute(
-        select(UserModel).where(UserModel.public_id == model_id, UserModel.user_id == user.id)
+        select(UserModel).where(
+            UserModel.public_id == model_id, UserModel.user_id == user.id
+        )
     )
     model = result.scalar_one_or_none()
     if not model:
@@ -253,12 +286,19 @@ async def test_model(
 ):
     enc_key = _require_encryption(settings)
     result = await db.execute(
-        select(UserModel).where(UserModel.public_id == model_id, UserModel.user_id == user.id)
+        select(UserModel).where(
+            UserModel.public_id == model_id, UserModel.user_id == user.id
+        )
     )
     model = result.scalar_one_or_none()
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
     api_key = decrypt_api_key(model.api_key_encrypted, enc_key)
-    config = ModelConfig(provider=model.provider, model_id=model.model_id, api_key=api_key, base_url=model.base_url)
+    config = ModelConfig(
+        provider=model.provider,
+        model_id=model.model_id,
+        api_key=api_key,
+        base_url=model.base_url,
+    )
     return await _test_model_connection(config)

@@ -19,7 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column(
         "chats",
-        sa.Column("has_notification", sa.Boolean(), server_default=sa.false(), nullable=False),
+        sa.Column(
+            "has_notification", sa.Boolean(), server_default=sa.false(), nullable=False
+        ),
     )
 
 

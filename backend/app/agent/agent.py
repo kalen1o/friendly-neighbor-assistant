@@ -251,7 +251,9 @@ async def create_tool_executor(
 
         try:
             # Pass all arguments + db/settings to the executor
-            result = await skill_executor(**arguments, **extra_kwargs, db=db, settings=settings)
+            result = await skill_executor(
+                **arguments, **extra_kwargs, db=db, settings=settings
+            )
             if isinstance(result, dict):
                 if result.get("sources"):
                     collected_sources.extend(result["sources"])
@@ -259,7 +261,12 @@ async def create_tool_executor(
             return str(result)
         except TypeError:
             # Fallback: try with just query (for backward compat with simple executors)
-            query = arguments.get("query", arguments.get("expression", arguments.get("url", arguments.get("text", ""))))
+            query = arguments.get(
+                "query",
+                arguments.get(
+                    "expression", arguments.get("url", arguments.get("text", ""))
+                ),
+            )
             try:
                 result = await skill_executor(query=query, db=db, settings=settings)
                 if isinstance(result, dict):

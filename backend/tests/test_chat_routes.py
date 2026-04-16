@@ -106,7 +106,9 @@ async def test_list_chats_is_generating_true_when_message_generating(client, db)
         __import__("sqlalchemy").select(Chat).where(Chat.public_id == chat_id)
     )
     chat = result.scalar_one()
-    msg = Message(chat_id=chat.id, role="assistant", content="partial...", status="generating")
+    msg = Message(
+        chat_id=chat.id, role="assistant", content="partial...", status="generating"
+    )
     db.add(msg)
     await db.commit()
 
@@ -128,8 +130,12 @@ async def test_get_chat_message_status(client, db):
     )
     chat = result.scalar_one()
 
-    msg_completed = Message(chat_id=chat.id, role="assistant", content="done", status="completed")
-    msg_generating = Message(chat_id=chat.id, role="assistant", content="in progress...", status="generating")
+    msg_completed = Message(
+        chat_id=chat.id, role="assistant", content="done", status="completed"
+    )
+    msg_generating = Message(
+        chat_id=chat.id, role="assistant", content="in progress...", status="generating"
+    )
     db.add_all([msg_completed, msg_generating])
     await db.commit()
 

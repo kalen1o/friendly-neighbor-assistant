@@ -271,7 +271,7 @@ User <-> Next.js UI <-> FastAPI Backend
 ## Roadmap
 
 - [x] Project scaffolding, Docker, Makefile
-- [x] Database schema + Alembic migrations (31 migrations)
+- [x] Database schema + Alembic migrations (32 migrations)
 - [x] AI provider integration (Anthropic + OpenAI + any compatible API)
 - [x] Basic chat with SSE streaming and auto-titles
 - [x] Multi-conversation support

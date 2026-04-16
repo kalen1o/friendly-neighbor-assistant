@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Eye, Code, Copy, Check } from "lucide-react";
+import { X, Eye, Code, Copy, Check, Download } from "lucide-react";
 import {
   SandpackProvider,
   SandpackCodeEditor,
@@ -17,6 +17,7 @@ import { useTheme } from "next-themes";
 import { WebContainerFrame } from "@/components/webcontainer-frame";
 import { StandaloneEditor } from "@/components/standalone-editor";
 import { StandaloneFileExplorer } from "@/components/standalone-file-explorer";
+import { downloadProjectZip } from "@/components/artifact-card";
 
 interface ArtifactPanelProps {
   artifact: ArtifactData;
@@ -174,6 +175,15 @@ function SandpackContent({
         </div>
         <div className="flex-1" />
         <CopyActiveFile />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => downloadProjectZip(artifact)}
+          title="Download ZIP"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -336,6 +346,15 @@ function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
             <Copy className="h-3.5 w-3.5" />
           )}
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => downloadProjectZip(artifact)}
+          title="Download ZIP"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </Button>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close">
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -386,6 +405,11 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
 
   if (isStreaming) {
     const fileCount = Object.keys(props.artifact.files).length;
+    const totalChars = Object.values(props.artifact.files).reduce((sum, code) => sum + code.length, 0);
+    const maxChars = 65_000; // ~16K tokens * ~4 chars/token
+    const pct = Math.min((totalChars / maxChars) * 100, 100);
+    const barColor = pct >= 95 ? "bg-red-500" : pct >= 80 ? "bg-yellow-500" : "bg-green-500";
+
     return (
       <div className="flex h-full flex-col items-center justify-center border-l bg-background gap-3">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -396,6 +420,24 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
           <p className="text-xs text-muted-foreground">
             {fileCount} {fileCount === 1 ? "file" : "files"} received
           </p>
+        )}
+        {totalChars > 0 && (
+          <div className="w-48 flex flex-col items-center gap-1">
+            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {(totalChars / 1000).toFixed(1)}K / {(maxChars / 1000).toFixed(0)}K chars
+              {pct >= 80 && (
+                <span className={pct >= 95 ? " text-red-500 font-medium" : " text-yellow-500"}>
+                  {" "}— {pct >= 95 ? "may be truncated" : "approaching limit"}
+                </span>
+              )}
+            </p>
+          </div>
         )}
       </div>
     );

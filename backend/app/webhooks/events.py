@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 VALID_EVENTS = {"message_completed", "document_processed", "task_completed"}
 
 
-def _format_payload(platform: str, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def _format_payload(
+    platform: str, event_type: str, data: Dict[str, Any]
+) -> Dict[str, Any]:
     """Format event payload for the target platform."""
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -28,7 +30,9 @@ def _format_payload(platform: str, event_type: str, data: Dict[str, Any]) -> Dic
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "*{}*\n{}".format(event_type.replace("_", " ").title(), message),
+                        "text": "*{}*\n{}".format(
+                            event_type.replace("_", " ").title(), message
+                        ),
                     },
                 },
                 {
@@ -72,7 +76,9 @@ async def _dispatch_to_webhook(url: str, payload: Dict[str, Any]) -> None:
         logger.exception("Webhook dispatch failed for %s", url)
 
 
-async def emit_event(event_type: str, data: Dict[str, Any], user_id: int, db: AsyncSession) -> None:
+async def emit_event(
+    event_type: str, data: Dict[str, Any], user_id: int, db: AsyncSession
+) -> None:
     """Emit an event to all matching webhook integrations for this user."""
     if event_type not in VALID_EVENTS:
         logger.warning("Unknown event type: %s", event_type)

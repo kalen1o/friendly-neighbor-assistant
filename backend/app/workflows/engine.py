@@ -12,7 +12,9 @@ MAX_RETRIES = 1
 
 
 class StepResult:
-    def __init__(self, name: str, output: str = "", status: str = "pending", error: str = ""):
+    def __init__(
+        self, name: str, output: str = "", status: str = "pending", error: str = ""
+    ):
         self.name = name
         self.output = output
         self.status = status  # pending, running, completed, failed, skipped
@@ -113,24 +115,38 @@ async def _run_step(
             if not base_url and settings.openai_base_url:
                 base_url = settings.openai_base_url
         model_config = ModelConfig(
-            provider=provider, model_id=model_id,
-            api_key=api_key, base_url=base_url,
+            provider=provider,
+            model_id=model_id,
+            api_key=api_key,
+            base_url=base_url,
         )
 
     # Execute with retry
     last_error = ""
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await get_llm_response(messages, settings, model_config=model_config)
+            response = await get_llm_response(
+                messages, settings, model_config=model_config
+            )
             logger.info("Workflow step '%s' completed (attempt %d)", name, attempt + 1)
             return StepResult(name=name, output=response, status="completed")
         except Exception as e:
             last_error = str(e)
             if attempt < MAX_RETRIES:
-                logger.warning("Workflow step '%s' failed (attempt %d), retrying: %s", name, attempt + 1, e)
+                logger.warning(
+                    "Workflow step '%s' failed (attempt %d), retrying: %s",
+                    name,
+                    attempt + 1,
+                    e,
+                )
                 await asyncio.sleep(1)
             else:
-                logger.error("Workflow step '%s' failed after %d attempts: %s", name, MAX_RETRIES + 1, e)
+                logger.error(
+                    "Workflow step '%s' failed after %d attempts: %s",
+                    name,
+                    MAX_RETRIES + 1,
+                    e,
+                )
 
     return StepResult(name=name, status="failed", error=last_error)
 
@@ -168,6 +184,7 @@ async def execute_workflow(
 
     # Send all step names upfront so UI can render the full list
     import json as _json
+
     parallel_names = set()
     for s in steps:
         for p in s["parallel"]:
@@ -190,8 +207,18 @@ async def execute_workflow(
                 if dep_result and dep_result.status == "failed":
                     # Dependency failed — stop workflow
                     return {
-                        "output": "Workflow stopped: step '{}' failed — {}".format(dep, dep_result.error),
-                        "steps": [{"name": r.name, "status": r.status, "output": r.output, "error": r.error} for r in results.values()],
+                        "output": "Workflow stopped: step '{}' failed — {}".format(
+                            dep, dep_result.error
+                        ),
+                        "steps": [
+                            {
+                                "name": r.name,
+                                "status": r.status,
+                                "output": r.output,
+                                "error": r.error,
+                            }
+                            for r in results.values()
+                        ],
                         "status": "failed",
                     }
 
@@ -202,18 +229,32 @@ async def execute_workflow(
             await _notify("__step__" + _json.dumps({"name": name, "status": "running"}))
             result = await _run_step(step_map[name], results, user_message, settings)
             results[name] = result
-            await _notify("__step__" + _json.dumps({"name": name, "status": result.status}))
+            await _notify(
+                "__step__" + _json.dumps({"name": name, "status": result.status})
+            )
             if result.status == "failed":
                 return {
-                    "output": "Workflow stopped: step '{}' failed — {}".format(name, result.error),
-                    "steps": [{"name": r.name, "status": r.status, "output": r.output, "error": r.error} for r in results.values()],
+                    "output": "Workflow stopped: step '{}' failed — {}".format(
+                        name, result.error
+                    ),
+                    "steps": [
+                        {
+                            "name": r.name,
+                            "status": r.status,
+                            "output": r.output,
+                            "error": r.error,
+                        }
+                        for r in results.values()
+                    ],
                     "status": "failed",
                 }
         else:
             # Parallel execution
             completed_count += len(group)
             for name in group:
-                await _notify("__step__" + _json.dumps({"name": name, "status": "running"}))
+                await _notify(
+                    "__step__" + _json.dumps({"name": name, "status": "running"})
+                )
             tasks = [
                 _run_step(step_map[name], results, user_message, settings)
                 for name in group
@@ -221,11 +262,24 @@ async def execute_workflow(
             group_results = await asyncio.gather(*tasks)
             for result in group_results:
                 results[result.name] = result
-                await _notify("__step__" + _json.dumps({"name": result.name, "status": result.status}))
+                await _notify(
+                    "__step__"
+                    + _json.dumps({"name": result.name, "status": result.status})
+                )
                 if result.status == "failed":
                     return {
-                        "output": "Workflow stopped: step '{}' failed — {}".format(result.name, result.error),
-                        "steps": [{"name": r.name, "status": r.status, "output": r.output, "error": r.error} for r in results.values()],
+                        "output": "Workflow stopped: step '{}' failed — {}".format(
+                            result.name, result.error
+                        ),
+                        "steps": [
+                            {
+                                "name": r.name,
+                                "status": r.status,
+                                "output": r.output,
+                                "error": r.error,
+                            }
+                            for r in results.values()
+                        ],
                         "status": "failed",
                     }
 
@@ -235,6 +289,9 @@ async def execute_workflow(
 
     return {
         "output": final_output,
-        "steps": [{"name": r.name, "status": r.status, "output": r.output, "error": r.error} for r in results.values()],
+        "steps": [
+            {"name": r.name, "status": r.status, "output": r.output, "error": r.error}
+            for r in results.values()
+        ],
         "status": "completed",
     }

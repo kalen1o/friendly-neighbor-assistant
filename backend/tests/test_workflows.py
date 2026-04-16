@@ -5,10 +5,12 @@ from app.workflows.engine import parse_steps, _build_execution_groups, execute_w
 
 
 def test_parse_steps_basic():
-    steps = parse_steps([
-        {"name": "step1", "prompt": "Do thing 1"},
-        {"name": "step2", "prompt": "Do thing 2", "input": "step1"},
-    ])
+    steps = parse_steps(
+        [
+            {"name": "step1", "prompt": "Do thing 1"},
+            {"name": "step2", "prompt": "Do thing 2", "input": "step1"},
+        ]
+    )
     assert len(steps) == 2
     assert steps[0]["name"] == "step1"
     assert steps[0]["input"] == []
@@ -16,11 +18,13 @@ def test_parse_steps_basic():
 
 
 def test_parse_steps_normalizes_input():
-    steps = parse_steps([
-        {"name": "a", "prompt": "p"},
-        {"name": "b", "prompt": "p", "input": "a"},
-        {"name": "c", "prompt": "p", "input": ["a", "b"]},
-    ])
+    steps = parse_steps(
+        [
+            {"name": "a", "prompt": "p"},
+            {"name": "b", "prompt": "p", "input": "a"},
+            {"name": "c", "prompt": "p", "input": ["a", "b"]},
+        ]
+    )
     assert steps[1]["input"] == ["a"]
     assert steps[2]["input"] == ["a", "b"]
 
@@ -33,22 +37,26 @@ def test_parse_steps_validates():
 
 
 def test_build_execution_groups_sequential():
-    steps = parse_steps([
-        {"name": "a", "prompt": "p"},
-        {"name": "b", "prompt": "p", "input": "a"},
-        {"name": "c", "prompt": "p", "input": "b"},
-    ])
+    steps = parse_steps(
+        [
+            {"name": "a", "prompt": "p"},
+            {"name": "b", "prompt": "p", "input": "a"},
+            {"name": "c", "prompt": "p", "input": "b"},
+        ]
+    )
     groups = _build_execution_groups(steps)
     assert groups == [["a"], ["b"], ["c"]]
 
 
 def test_build_execution_groups_parallel():
-    steps = parse_steps([
-        {"name": "a", "prompt": "p"},
-        {"name": "b", "prompt": "p", "input": "a", "parallel": "c"},
-        {"name": "c", "prompt": "p", "input": "a"},
-        {"name": "d", "prompt": "p", "input": ["b", "c"]},
-    ])
+    steps = parse_steps(
+        [
+            {"name": "a", "prompt": "p"},
+            {"name": "b", "prompt": "p", "input": "a", "parallel": "c"},
+            {"name": "c", "prompt": "p", "input": "a"},
+            {"name": "d", "prompt": "p", "input": ["b", "c"]},
+        ]
+    )
     groups = _build_execution_groups(steps)
     assert groups[0] == ["a"]
     assert set(groups[1]) == {"b", "c"}
@@ -62,7 +70,9 @@ async def test_execute_workflow_sequential():
     mock_settings.openai_api_key = ""
     mock_settings.openai_base_url = ""
 
-    with patch("app.workflows.engine.get_llm_response", new_callable=AsyncMock) as mock_llm:
+    with patch(
+        "app.workflows.engine.get_llm_response", new_callable=AsyncMock
+    ) as mock_llm:
         mock_llm.side_effect = ["Key points: A, B, C", "Final report with A, B, C"]
 
         result = await execute_workflow(
@@ -85,13 +95,25 @@ async def test_execute_workflow_sequential():
 async def test_execute_workflow_parallel():
     mock_settings = MagicMock()
 
-    with patch("app.workflows.engine.get_llm_response", new_callable=AsyncMock) as mock_llm:
-        mock_llm.side_effect = ["Key points", "Vietnamese translation", "Japanese translation", "Combined report"]
+    with patch(
+        "app.workflows.engine.get_llm_response", new_callable=AsyncMock
+    ) as mock_llm:
+        mock_llm.side_effect = [
+            "Key points",
+            "Vietnamese translation",
+            "Japanese translation",
+            "Combined report",
+        ]
 
         result = await execute_workflow(
             [
                 {"name": "extract", "prompt": "Extract"},
-                {"name": "vi", "prompt": "Translate to Vietnamese", "input": "extract", "parallel": "ja"},
+                {
+                    "name": "vi",
+                    "prompt": "Translate to Vietnamese",
+                    "input": "extract",
+                    "parallel": "ja",
+                },
                 {"name": "ja", "prompt": "Translate to Japanese", "input": "extract"},
                 {"name": "combine", "prompt": "Combine", "input": ["vi", "ja"]},
             ],
@@ -109,7 +131,9 @@ async def test_execute_workflow_parallel():
 async def test_execute_workflow_retry_then_stop():
     mock_settings = MagicMock()
 
-    with patch("app.workflows.engine.get_llm_response", new_callable=AsyncMock) as mock_llm:
+    with patch(
+        "app.workflows.engine.get_llm_response", new_callable=AsyncMock
+    ) as mock_llm:
         mock_llm.side_effect = Exception("API error")
 
         result = await execute_workflow(
@@ -130,7 +154,9 @@ async def test_execute_workflow_retry_then_stop():
 async def test_execute_workflow_stops_on_dependency_failure():
     mock_settings = MagicMock()
 
-    with patch("app.workflows.engine.get_llm_response", new_callable=AsyncMock) as mock_llm:
+    with patch(
+        "app.workflows.engine.get_llm_response", new_callable=AsyncMock
+    ) as mock_llm:
         mock_llm.side_effect = [Exception("API error"), Exception("API error")]
 
         result = await execute_workflow(
@@ -148,6 +174,7 @@ async def test_execute_workflow_stops_on_dependency_failure():
 
 def test_skill_definition_get_workflow_steps():
     from app.skills.registry import SkillDefinition
+
     skill = SkillDefinition(
         name="test_wf",
         description="test",

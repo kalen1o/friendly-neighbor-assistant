@@ -40,16 +40,18 @@ class ArtifactStreamParser:
                     "template": m.group("template") or "react",
                 }
                 self._files_emitted = {}
-                events.append({
-                    "event": "artifact_start",
-                    "data": {**self._tag_meta},
-                })
-                self._buffer = self._buffer[m.end():]
+                events.append(
+                    {
+                        "event": "artifact_start",
+                        "data": {**self._tag_meta},
+                    }
+                )
+                self._buffer = self._buffer[m.end() :]
                 continue
 
             close = _CLOSE_TAG.search(self._buffer)
             if close:
-                content = self._buffer[:close.start()].strip()
+                content = self._buffer[: close.start()].strip()
                 self._inside = False
 
                 try:
@@ -63,20 +65,24 @@ class ArtifactStreamParser:
                 for path, code in all_files.items():
                     if path not in self._files_emitted:
                         self._files_emitted[path] = code
-                        events.append({
-                            "event": "artifact_file",
-                            "data": {"path": path, "code": code},
-                        })
+                        events.append(
+                            {
+                                "event": "artifact_file",
+                                "data": {"path": path, "code": code},
+                            }
+                        )
 
-                events.append({
-                    "event": "artifact_end",
-                    "data": {
-                        "files": all_files,
-                        "dependencies": deps,
-                    },
-                })
+                events.append(
+                    {
+                        "event": "artifact_end",
+                        "data": {
+                            "files": all_files,
+                            "dependencies": deps,
+                        },
+                    }
+                )
 
-                self._buffer = self._buffer[close.end():]
+                self._buffer = self._buffer[close.end() :]
                 continue
 
             events.extend(self._try_extract_files())
@@ -86,9 +92,7 @@ class ArtifactStreamParser:
 
     def _try_extract_files(self) -> List[dict]:
         events = []
-        pattern = re.compile(
-            r'"(/[^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"\s*[,}\]]'
-        )
+        pattern = re.compile(r'"(/[^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"\s*[,}\]]')
         for m in pattern.finditer(self._buffer):
             path = m.group(1)
             if path not in self._files_emitted:
@@ -97,8 +101,10 @@ class ArtifactStreamParser:
                 except (json.JSONDecodeError, ValueError):
                     code = m.group(2)
                 self._files_emitted[path] = code
-                events.append({
-                    "event": "artifact_file",
-                    "data": {"path": path, "code": code},
-                })
+                events.append(
+                    {
+                        "event": "artifact_file",
+                        "data": {"path": path, "code": code},
+                    }
+                )
         return events

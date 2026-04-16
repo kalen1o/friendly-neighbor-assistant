@@ -28,7 +28,14 @@ from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
-from app.schemas.auth import LoginRequest, ProvidersResponse, RegisterRequest, TokenResponse, UserOut, UserUpdate
+from app.schemas.auth import (
+    LoginRequest,
+    ProvidersResponse,
+    RegisterRequest,
+    TokenResponse,
+    UserOut,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -94,7 +101,9 @@ async def register(
         name=body.name,
     )
     # Check if email should get admin role
-    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    admin_list = [
+        e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()
+    ]
     if body.email.lower() in admin_list:
         user.role = "admin"
 
@@ -103,7 +112,8 @@ async def register(
     await db.refresh(user)
 
     await log_audit(
-        db, "register",
+        db,
+        "register",
         user_id=user.id,
         resource_type="user",
         resource_id=user.public_id,
@@ -135,13 +145,16 @@ async def login(
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
     # Auto-promote to admin if email is in ADMIN_EMAILS
-    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    admin_list = [
+        e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()
+    ]
     if user.email.lower() in admin_list and user.role != "admin":
         user.role = "admin"
         await db.commit()
 
     await log_audit(
-        db, "login",
+        db,
+        "login",
         user_id=user.id,
         resource_type="user",
         resource_id=user.public_id,
@@ -291,6 +304,7 @@ async def delete_account(
 
     try:
         from app.models.mcp_server import MCPServer
+
         await db.execute(sql_delete(MCPServer).where(MCPServer.user_id == user_id))
     except Exception:
         pass
@@ -347,7 +361,9 @@ async def _oauth_create_or_link(
         db.add(user)
 
     # Admin auto-promotion
-    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    admin_list = [
+        e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()
+    ]
     if email.lower() in admin_list:
         user.role = "admin"
 
@@ -403,7 +419,9 @@ async def google_login(request: Request, settings: Settings = Depends(get_settin
     redirect_uri = str(request.base_url) + "api/auth/google/callback"
     url = build_google_authorize_url(redirect_uri, settings, state)
     response = RedirectResponse(url)
-    response.set_cookie("oauth_state", state, max_age=300, httponly=True, samesite="lax")
+    response.set_cookie(
+        "oauth_state", state, max_age=300, httponly=True, samesite="lax"
+    )
     return response
 
 
@@ -434,7 +452,9 @@ async def github_login(request: Request, settings: Settings = Depends(get_settin
     redirect_uri = str(request.base_url) + "api/auth/github/callback"
     url = build_github_authorize_url(redirect_uri, settings, state)
     response = RedirectResponse(url)
-    response.set_cookie("oauth_state", state, max_age=300, httponly=True, samesite="lax")
+    response.set_cookie(
+        "oauth_state", state, max_age=300, httponly=True, samesite="lax"
+    )
     return response
 
 

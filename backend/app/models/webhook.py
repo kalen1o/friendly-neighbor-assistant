@@ -21,7 +21,9 @@ class WebhookIntegration(Base):
     platform: Mapped[str] = mapped_column(String(20))
     direction: Mapped[str] = mapped_column(String(10))
     webhook_url: Mapped[Optional[str]] = mapped_column(Text, default=None)
-    inbound_token: Mapped[Optional[str]] = mapped_column(String(64), default=None, unique=True)
+    inbound_token: Mapped[Optional[str]] = mapped_column(
+        String(64), default=None, unique=True
+    )
     subscribed_events: Mapped[Optional[str]] = mapped_column(Text, default="[]")
     config_json: Mapped[Optional[str]] = mapped_column(Text, default="{}")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)

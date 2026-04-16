@@ -21,12 +21,10 @@ test("screenshot workflow progress UI", async ({ page, context }) => {
   await textarea.press("Enter");
 
   // Wait for workflow steps to appear (poll for the workflow UI)
-  let _foundWorkflow = false;
   for (let i = 0; i < 60; i++) {
     await page.waitForTimeout(2000);
     const workflowEl = page.locator("text=Workflow").first();
     if (await workflowEl.isVisible().catch(() => false)) {
-      _foundWorkflow = true;
       await page.screenshot({ path: "tests/screenshots/workflow-running.png" });
       break;
     }

@@ -49,7 +49,6 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
         containerRef.current.appendChild(renderer.domElement);
 
         // Create particles
-        const _particles: THREE.Points[] = [];
         const positions: number[] = [];
         const colors: number[] = [];
 

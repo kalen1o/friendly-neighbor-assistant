@@ -107,7 +107,7 @@ export function useMessageStream(chatId: string) {
     skillsUsedRef.current = [];
     setIsStreaming(false);
     sendingRef.current = false;
-  }, [stopTypewriter, chatId]);
+  }, [stopTypewriter]);
 
   const startTypewriter = useCallback(() => {
     if (intervalRef.current) return;

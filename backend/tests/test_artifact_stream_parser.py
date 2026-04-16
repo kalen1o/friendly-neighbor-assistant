@@ -9,7 +9,7 @@ def test_yields_file_as_completed():
         '    "/App.js": "export default function App() { return <h1>Hi</h1>; }"',
         ',\n    "/utils.js": "export const x = 1;"',
         '\n  },\n  "dependencies": {}\n}\n',
-        '</artifact>',
+        "</artifact>",
     ]
     events = []
     for chunk in chunks:
@@ -38,11 +38,11 @@ def test_handles_no_artifact():
 def test_handles_split_across_many_chunks():
     parser = ArtifactStreamParser()
     full = (
-        'Here is your code:\n'
+        "Here is your code:\n"
         '<artifact type="project" title="Test" template="react">\n'
         '{"files": {"/App.js": "function App() {}"}, "dependencies": {}}\n'
-        '</artifact>\n'
-        'Enjoy!'
+        "</artifact>\n"
+        "Enjoy!"
     )
     events = []
     for char in full:
@@ -60,7 +60,7 @@ def test_collects_dependencies():
         '<artifact type="project" title="T" template="react">\n'
         '{"files": {"/App.js": "import {v4} from \'uuid\'; export default function App() {}"}, '
         '"dependencies": {"uuid": "latest"}}\n'
-        '</artifact>'
+        "</artifact>"
     )
     events = list(parser.feed(text))
     end_event = [e for e in events if e["event"] == "artifact_end"][0]
@@ -72,7 +72,7 @@ def test_multiple_artifacts_in_stream():
     text = (
         '<artifact type="project" title="A" template="react">\n'
         '{"files": {"/App.js": "A"}}\n</artifact>\n'
-        'some text\n'
+        "some text\n"
         '<artifact type="project" title="B" template="vanilla">\n'
         '{"files": {"/index.html": "B"}}\n</artifact>'
     )

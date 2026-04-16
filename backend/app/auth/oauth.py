@@ -45,7 +45,9 @@ async def get_github_user(code: str, redirect_uri: str, settings: Settings) -> d
         emails_resp = await client.get("https://api.github.com/user/emails")
         emails_resp.raise_for_status()
         emails = emails_resp.json()
-        primary = next((e for e in emails if e.get("primary") and e.get("verified")), None)
+        primary = next(
+            (e for e in emails if e.get("primary") and e.get("verified")), None
+        )
         if not primary:
             await client.aclose()
             raise ValueError("No verified email found on GitHub account")
@@ -60,7 +62,9 @@ async def get_github_user(code: str, redirect_uri: str, settings: Settings) -> d
     }
 
 
-def build_google_authorize_url(redirect_uri: str, settings: Settings, state: str) -> str:
+def build_google_authorize_url(
+    redirect_uri: str, settings: Settings, state: str
+) -> str:
     """Build Google OAuth2 authorization URL."""
     client = AsyncOAuth2Client(
         client_id=settings.google_client_id,
@@ -75,7 +79,9 @@ def build_google_authorize_url(redirect_uri: str, settings: Settings, state: str
     return url
 
 
-def build_github_authorize_url(redirect_uri: str, settings: Settings, state: str) -> str:
+def build_github_authorize_url(
+    redirect_uri: str, settings: Settings, state: str
+) -> str:
     """Build GitHub OAuth2 authorization URL."""
     client = AsyncOAuth2Client(
         client_id=settings.github_client_id,

@@ -70,31 +70,31 @@ SYSTEM_PROMPT = (
     "web page, or interactive application, wrap your code in an artifact tag.\n\n"
     "Always use the project format with a JSON manifest:\n\n"
     '<artifact type="project" title="Project Name" template="react">\n'
-    '{\n'
+    "{\n"
     '  "files": {\n'
     '    "/App.js": "export default function App() { return <h1>Hello</h1>; }"\n'
-    '  },\n'
+    "  },\n"
     '  "dependencies": {}\n'
-    '}\n'
+    "}\n"
     "</artifact>\n\n"
     "For multi-file projects:\n\n"
     '<artifact type="project" title="Todo App" template="react">\n'
-    '{\n'
+    "{\n"
     '  "files": {\n'
     '    "/App.js": "import Counter from \'./Counter\';\\nexport default function App() { return <Counter />; }",\n'
     '    "/Counter.js": "export default function Counter() { ... }",\n'
     '    "/styles.css": "body { font-family: sans-serif; }"\n'
-    '  },\n'
+    "  },\n"
     '  "dependencies": {\n'
     '    "uuid": "latest"\n'
-    '  }\n'
-    '}\n'
+    "  }\n"
+    "}\n"
     "</artifact>\n\n"
     "STRICT rules for artifacts:\n"
-    "- Always use type=\"project\" with a JSON manifest.\n"
-    "- template: \"react\" (JS/JSX files, entry /App.js), \"react-ts\" (TS/TSX files, entry /App.tsx), or \"vanilla\" (plain HTML/JS, entry /index.html).\n"
-    "- If using TypeScript or type annotations, use template=\"react-ts\" with .tsx/.ts files and /App.tsx entry point.\n"
-    "- If using plain JavaScript, use template=\"react\" with .js/.jsx files and /App.js entry point.\n"
+    '- Always use type="project" with a JSON manifest.\n'
+    '- template: "react" (JS/JSX files, entry /App.js), "react-ts" (TS/TSX files, entry /App.tsx), or "vanilla" (plain HTML/JS, entry /index.html).\n'
+    '- If using TypeScript or type annotations, use template="react-ts" with .tsx/.ts files and /App.tsx entry point.\n'
+    '- If using plain JavaScript, use template="react" with .js/.jsx files and /App.js entry point.\n'
     "- CSS files use .css extension. Import them as './styles.css' in JS/TSX files.\n"
     "- The files object has file paths as keys (starting with /) and code strings as values.\n"
     "- The dependencies object maps npm package names to version strings. Use {} if none.\n"
@@ -102,12 +102,12 @@ SYSTEM_PROMPT = (
     "- Always include the artifact tag when generating UI code.\n"
     "- Keep artifacts concise — prefer inline styles or a single CSS file over many small files.\n"
     "- You can still include explanation text outside the artifact tag.\n"
-    "- The JSON must be valid. Escape all special characters in strings properly (newlines as \\n, quotes as \\\", backslashes as \\\\)."
+    '- The JSON must be valid. Escape all special characters in strings properly (newlines as \\n, quotes as \\", backslashes as \\\\).'
     "\n\nFull-stack templates (use ONLY when the user explicitly asks for these frameworks or needs server-side features):\n"
-    "- template=\"nextjs\": Next.js App Router. Files: /next.config.js, /app/layout.tsx, /app/page.tsx. Include dependencies like \"next\", \"react\", \"react-dom\".\n"
-    "- template=\"node-server\": Express or Fastify API server. Entry file: /server.js or /server.ts. No browser UI needed.\n"
-    "- template=\"vite\": Vite-based frontend. Files: /vite.config.ts, /index.html, /src/main.tsx. For projects needing real npm packages that don't work in the browser bundler.\n"
-    "- PREFER template=\"react\" or \"react-ts\" for simple components — they load instantly. Only use nextjs/node-server/vite when truly needed."
+    '- template="nextjs": Next.js App Router. Files: /next.config.js, /app/layout.tsx, /app/page.tsx. Include dependencies like "next", "react", "react-dom".\n'
+    '- template="node-server": Express or Fastify API server. Entry file: /server.js or /server.ts. No browser UI needed.\n'
+    '- template="vite": Vite-based frontend. Files: /vite.config.ts, /index.html, /src/main.tsx. For projects needing real npm packages that don\'t work in the browser bundler.\n'
+    '- PREFER template="react" or "react-ts" for simple components — they load instantly. Only use nextjs/node-server/vite when truly needed.'
 )
 
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
@@ -429,7 +429,12 @@ async def stream_with_tools(
     elif provider == "anthropic":
         if tools and not vision:
             raw = _anthropic_stream_with_tools(
-                messages, settings, tools, tool_executor, on_tool_call, rounds,
+                messages,
+                settings,
+                tools,
+                tool_executor,
+                on_tool_call,
+                rounds,
                 model_config=model_config,
             )
         else:
@@ -535,7 +540,9 @@ async def _openai_stream_with_tools(
                     tc_data["arguments"][:200],
                 )
         else:
-            logger.info("Tool round %d: LLM returned text only, no tool calls", round_num + 1)
+            logger.info(
+                "Tool round %d: LLM returned text only, no tool calls", round_num + 1
+            )
 
         # If no tool calls were made, we're done
         if not tool_calls_in_progress:

@@ -184,12 +184,16 @@ async def test_oauth_creates_new_user(client, db):
         redis_url="redis://localhost:6379/0",
     )
 
-    user = await _oauth_create_or_link(db, {
-        "email": "oauth@example.com",
-        "name": "OAuth User",
-        "oauth_id": "google-123",
-        "provider": "google",
-    }, settings)
+    user = await _oauth_create_or_link(
+        db,
+        {
+            "email": "oauth@example.com",
+            "name": "OAuth User",
+            "oauth_id": "google-123",
+            "provider": "google",
+        },
+        settings,
+    )
 
     assert user.email == "oauth@example.com"
     assert user.name == "OAuth User"
@@ -211,12 +215,16 @@ async def test_oauth_links_existing_user(client, db):
     )
 
     # The test fixture already created test@example.com
-    user = await _oauth_create_or_link(db, {
-        "email": "test@example.com",
-        "name": "Test User",
-        "oauth_id": "github-456",
-        "provider": "github",
-    }, settings)
+    user = await _oauth_create_or_link(
+        db,
+        {
+            "email": "test@example.com",
+            "name": "Test User",
+            "oauth_id": "github-456",
+            "provider": "github",
+        },
+        settings,
+    )
 
     assert user.email == "test@example.com"
     assert user.oauth_provider == "github"

@@ -134,7 +134,10 @@ async def test_get_project_artifact(client, chat_with_project_artifact):
     data = response.json()
     assert data["artifact_type"] == "project"
     assert data["template"] == "react"
-    assert data["files"] == {"/App.js": "function App() {}", "/utils.js": "export const x = 1;"}
+    assert data["files"] == {
+        "/App.js": "function App() {}",
+        "/utils.js": "export const x = 1;",
+    }
     assert data["dependencies"] == {"uuid": "latest"}
     assert data["code"] is None
 

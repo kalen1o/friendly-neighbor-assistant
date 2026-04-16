@@ -1,20 +1,35 @@
 "use client";
 
 import { Layers, Download } from "lucide-react";
+import JSZip from "jszip";
 import type { ArtifactData } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-function downloadProject(artifact: ArtifactData) {
-  const content = Object.entries(artifact.files)
-    .map(([path, code]) => `// === ${path} ===\n${code}`)
-    .join("\n\n");
-  const blob = new Blob([content], { type: "text/plain" });
+export async function downloadProjectZip(artifact: ArtifactData) {
+  const zip = new JSZip();
+
+  // Add all files at their paths
+  for (const [path, code] of Object.entries(artifact.files)) {
+    zip.file(path.replace(/^\//, ""), code);
+  }
+
+  // Generate package.json from dependencies if not already in files
+  if (!artifact.files["/package.json"] && Object.keys(artifact.dependencies ?? {}).length > 0) {
+    const pkg = JSON.stringify(
+      { name: artifact.title.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase(), private: true, dependencies: artifact.dependencies },
+      null,
+      2,
+    );
+    zip.file("package.json", pkg);
+  }
+
+  const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${artifact.title.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`;
+  a.download = `${artifact.title.replace(/[^a-zA-Z0-9_-]/g, "_")}.zip`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -67,7 +82,7 @@ export function ArtifactCard({
         className="h-8 w-8 shrink-0"
         onClick={(e) => {
           e.stopPropagation();
-          downloadProject(artifact);
+          downloadProjectZip(artifact);
         }}
         title="Download"
       >

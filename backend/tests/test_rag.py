@@ -8,6 +8,7 @@ from app.rag.reranking import rerank_results
 from app.rag.chunking import chunk_text, chunk_text_semantic
 from app.skills.executors import execute_knowledge_base
 
+
 def test_rag_settings_defaults():
     """RAG settings have correct defaults."""
     s = Settings(database_url="sqlite+aiosqlite:///:memory:", jwt_secret="test")
@@ -68,19 +69,51 @@ async def test_search_fulltext_empty_query():
 async def test_hybrid_search_fuses_vector_and_fulltext():
     """Hybrid search combines vector + FTS results via RRF."""
     vector_results = [
-        {"id": 1, "text": "chunk A", "chunk_index": 0, "document_id": 10, "filename": "a.pdf", "score": 0.9},
-        {"id": 2, "text": "chunk B", "chunk_index": 1, "document_id": 10, "filename": "a.pdf", "score": 0.8},
+        {
+            "id": 1,
+            "text": "chunk A",
+            "chunk_index": 0,
+            "document_id": 10,
+            "filename": "a.pdf",
+            "score": 0.9,
+        },
+        {
+            "id": 2,
+            "text": "chunk B",
+            "chunk_index": 1,
+            "document_id": 10,
+            "filename": "a.pdf",
+            "score": 0.8,
+        },
     ]
     fts_results = [
-        {"id": 2, "text": "chunk B", "chunk_index": 1, "document_id": 10, "filename": "a.pdf", "rank": 0.7},
-        {"id": 3, "text": "chunk C", "chunk_index": 2, "document_id": 11, "filename": "b.pdf", "rank": 0.5},
+        {
+            "id": 2,
+            "text": "chunk B",
+            "chunk_index": 1,
+            "document_id": 10,
+            "filename": "a.pdf",
+            "rank": 0.7,
+        },
+        {
+            "id": 3,
+            "text": "chunk C",
+            "chunk_index": 2,
+            "document_id": 11,
+            "filename": "b.pdf",
+            "rank": 0.5,
+        },
     ]
 
     settings = Settings(database_url="sqlite+aiosqlite:///:memory:", jwt_secret="test")
     mock_db = AsyncMock()
 
-    with patch("app.rag.retrieval._search_vector", AsyncMock(return_value=vector_results)), \
-         patch("app.rag.retrieval.search_fulltext", AsyncMock(return_value=fts_results)):
+    with (
+        patch(
+            "app.rag.retrieval._search_vector", AsyncMock(return_value=vector_results)
+        ),
+        patch("app.rag.retrieval.search_fulltext", AsyncMock(return_value=fts_results)),
+    ):
         results = await search_knowledge_base("test query", mock_db, settings)
 
     # chunk B appears in both lists so should score highest
@@ -97,7 +130,14 @@ async def test_hybrid_search_fuses_vector_and_fulltext():
 async def test_hybrid_search_disabled_falls_back_to_vector():
     """When hybrid search is disabled, only vector results are returned."""
     vector_results = [
-        {"id": 1, "text": "chunk A", "chunk_index": 0, "document_id": 10, "filename": "a.pdf", "score": 0.9},
+        {
+            "id": 1,
+            "text": "chunk A",
+            "chunk_index": 0,
+            "document_id": 10,
+            "filename": "a.pdf",
+            "score": 0.9,
+        },
     ]
 
     settings = Settings(
@@ -107,8 +147,12 @@ async def test_hybrid_search_disabled_falls_back_to_vector():
     )
     mock_db = AsyncMock()
 
-    with patch("app.rag.retrieval._search_vector", AsyncMock(return_value=vector_results)), \
-         patch("app.rag.retrieval.search_fulltext", AsyncMock()) as mock_fts:
+    with (
+        patch(
+            "app.rag.retrieval._search_vector", AsyncMock(return_value=vector_results)
+        ),
+        patch("app.rag.retrieval.search_fulltext", AsyncMock()) as mock_fts,
+    ):
         results = await search_knowledge_base("test query", mock_db, settings)
 
     mock_fts.assert_not_called()
@@ -140,7 +184,9 @@ async def test_rerank_results_reorders_by_relevance():
     mock_client.rerank = MagicMock(return_value=mock_rerank_result)
 
     with patch("app.rag.reranking.cohere.ClientV2", return_value=mock_client):
-        reranked = await rerank_results("relevant query", chunks, api_key="test-key", top_k=2)
+        reranked = await rerank_results(
+            "relevant query", chunks, api_key="test-key", top_k=2
+        )
 
     assert len(reranked) == 2
     assert reranked[0]["id"] == 2
@@ -171,7 +217,14 @@ async def test_rerank_results_fallback_on_error():
 async def test_search_knowledge_base_with_reranking():
     """Reranking is called when enabled with API key."""
     vector_results = [
-        {"id": 1, "text": "chunk A", "chunk_index": 0, "document_id": 10, "filename": "a.pdf", "score": 0.9},
+        {
+            "id": 1,
+            "text": "chunk A",
+            "chunk_index": 0,
+            "document_id": 10,
+            "filename": "a.pdf",
+            "score": 0.9,
+        },
     ]
 
     settings = Settings(
@@ -185,8 +238,12 @@ async def test_search_knowledge_base_with_reranking():
 
     mock_rerank = AsyncMock(return_value=vector_results)
 
-    with patch("app.rag.retrieval._search_vector", AsyncMock(return_value=vector_results)), \
-         patch("app.rag.retrieval.rerank_results", mock_rerank):
+    with (
+        patch(
+            "app.rag.retrieval._search_vector", AsyncMock(return_value=vector_results)
+        ),
+        patch("app.rag.retrieval.rerank_results", mock_rerank),
+    ):
         results = await search_knowledge_base("test query", mock_db, settings)
 
     mock_rerank.assert_called_once()
@@ -267,12 +324,31 @@ def test_chunk_text_fixed_still_works():
 async def test_execute_knowledge_base_citation_format():
     """Knowledge base executor returns numbered citations."""
     mock_results = [
-        {"type": "document", "text": "Python is interpreted.", "filename": "guide.pdf", "score": 0.9, "chunk_index": 0, "relevance_score": 0.9},
-        {"type": "document", "text": "Python supports OOP.", "filename": "guide.pdf", "score": 0.8, "chunk_index": 2, "relevance_score": 0.8},
+        {
+            "type": "document",
+            "text": "Python is interpreted.",
+            "filename": "guide.pdf",
+            "score": 0.9,
+            "chunk_index": 0,
+            "relevance_score": 0.9,
+        },
+        {
+            "type": "document",
+            "text": "Python supports OOP.",
+            "filename": "guide.pdf",
+            "score": 0.8,
+            "chunk_index": 2,
+            "relevance_score": 0.8,
+        },
     ]
 
-    with patch("app.skills.executors.tool_search_knowledge_base", AsyncMock(return_value=mock_results)):
-        result = await execute_knowledge_base("what is python", db=AsyncMock(), settings=MagicMock())
+    with patch(
+        "app.skills.executors.tool_search_knowledge_base",
+        AsyncMock(return_value=mock_results),
+    ):
+        result = await execute_knowledge_base(
+            "what is python", db=AsyncMock(), settings=MagicMock()
+        )
 
     assert "[1]" in result["content"]
     assert "[2]" in result["content"]

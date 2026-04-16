@@ -307,9 +307,8 @@ async def list_audit(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    q = (
-        select(AuditLog, User.email, User.name)
-        .outerjoin(User, User.id == AuditLog.user_id)
+    q = select(AuditLog, User.email, User.name).outerjoin(
+        User, User.id == AuditLog.user_id
     )
 
     if action:
@@ -409,9 +408,7 @@ async def upsert_quota(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Upsert
-    q_result = await db.execute(
-        select(UserQuota).where(UserQuota.user_id == target.id)
-    )
+    q_result = await db.execute(select(UserQuota).where(UserQuota.user_id == target.id))
     quota = q_result.scalar_one_or_none()
 
     if quota:
@@ -472,9 +469,7 @@ async def delete_quota(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    deleted = await db.execute(
-        delete(UserQuota).where(UserQuota.user_id == target.id)
-    )
+    deleted = await db.execute(delete(UserQuota).where(UserQuota.user_id == target.id))
     if deleted.rowcount == 0:
         raise HTTPException(status_code=404, detail="Quota not found")
 

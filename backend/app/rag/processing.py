@@ -39,7 +39,9 @@ async def process_document(
             return
 
         # 2. Chunk text (semantic or fixed based on config)
-        logger.info(f"Chunking document {document_id} (strategy={settings.rag_chunk_strategy})")
+        logger.info(
+            f"Chunking document {document_id} (strategy={settings.rag_chunk_strategy})"
+        )
         if settings.rag_chunk_strategy == "semantic":
             chunk_results = chunk_text_semantic(
                 raw_text,
@@ -64,7 +66,9 @@ async def process_document(
 
         # 4. Store chunks with embeddings
         logger.info(f"Storing {len(chunk_texts)} chunks in database")
-        for i, (chunk, embedding, meta) in enumerate(zip(chunk_texts, embeddings, chunk_metadata)):
+        for i, (chunk, embedding, meta) in enumerate(
+            zip(chunk_texts, embeddings, chunk_metadata)
+        ):
             db_chunk = DocumentChunk(
                 document_id=document_id,
                 chunk_text=chunk,
@@ -81,10 +85,13 @@ async def process_document(
 
         # 6. Populate search_vector for full-text search (Postgres only)
         try:
-            await db.execute(text(
-                "UPDATE document_chunks SET search_vector = to_tsvector('english', chunk_text) "
-                "WHERE document_id = :doc_id AND search_vector IS NULL"
-            ), {"doc_id": document_id})
+            await db.execute(
+                text(
+                    "UPDATE document_chunks SET search_vector = to_tsvector('english', chunk_text) "
+                    "WHERE document_id = :doc_id AND search_vector IS NULL"
+                ),
+                {"doc_id": document_id},
+            )
             await db.commit()
             logger.info(f"Populated search_vector for document {document_id}")
         except Exception:
@@ -96,6 +103,7 @@ async def process_document(
         # Emit webhook event
         try:
             from app.webhooks.events import emit_event
+
             if doc.user_id:
                 await emit_event(
                     "document_processed",

@@ -16,9 +16,7 @@ router = APIRouter(prefix="/api/folders", tags=["folders"])
 MAX_DEPTH = 2
 
 
-async def _resolve_folder(
-    db: AsyncSession, public_id: str, user_id: int
-) -> Folder:
+async def _resolve_folder(db: AsyncSession, public_id: str, user_id: int) -> Folder:
     """Look up a folder by public_id, ensuring it belongs to the user."""
     result = await db.execute(
         select(Folder).where(Folder.public_id == public_id, Folder.user_id == user_id)

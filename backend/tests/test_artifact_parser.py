@@ -1,6 +1,10 @@
 import json
 
-from app.agent.artifact_parser import parse_artifacts, detect_dependencies, detect_template
+from app.agent.artifact_parser import (
+    parse_artifacts,
+    detect_dependencies,
+    detect_template,
+)
 
 
 def test_no_artifacts():
@@ -74,11 +78,11 @@ def test_multiple_project_artifacts():
     files2 = {"/index.html": "<div>hi</div>"}
     text = (
         f'<artifact type="project" title="React App" template="react">\n'
-        f'{json.dumps({"files": files1})}\n'
+        f"{json.dumps({'files': files1})}\n"
         "</artifact>\n"
         "And also:\n"
         f'<artifact type="project" title="HTML Page" template="vanilla">\n'
-        f'{json.dumps({"files": files2})}\n'
+        f"{json.dumps({'files': files2})}\n"
         "</artifact>"
     )
     cleaned, artifacts = parse_artifacts(text)
@@ -92,11 +96,7 @@ def test_multiple_project_artifacts():
 def test_template_defaults_to_react():
     files = {"/App.js": "function App() {}"}
     manifest = json.dumps({"files": files})
-    text = (
-        f'<artifact type="project" title="No Template">\n'
-        f"{manifest}\n"
-        "</artifact>"
-    )
+    text = f'<artifact type="project" title="No Template">\n{manifest}\n</artifact>'
     cleaned, artifacts = parse_artifacts(text)
     assert len(artifacts) == 1
     assert artifacts[0]["template"] == "react"
@@ -159,8 +159,6 @@ def test_detect_scoped_packages():
     assert "@emotion/styled" in missing
 
 
-
-
 def test_detect_react_ts_from_tsx_files():
     files = {"/App.tsx": "code", "/utils.ts": "code"}
     assert detect_template(files) == "react-ts"
@@ -182,17 +180,25 @@ def test_detect_mixed_prefers_ts():
 
 
 def test_detect_nextjs_from_next_config():
-    files = {"/next.config.js": "module.exports = {}", "/app/page.tsx": "export default function Home() {}"}
+    files = {
+        "/next.config.js": "module.exports = {}",
+        "/app/page.tsx": "export default function Home() {}",
+    }
     assert detect_template(files) == "nextjs"
 
 
 def test_detect_nextjs_from_app_layout():
-    files = {"/app/layout.tsx": "export default function Layout({ children }) {}", "/app/page.tsx": "code"}
+    files = {
+        "/app/layout.tsx": "export default function Layout({ children }) {}",
+        "/app/page.tsx": "code",
+    }
     assert detect_template(files) == "nextjs"
 
 
 def test_detect_node_server_from_express():
-    files = {"/server.js": "const express = require('express');\nconst app = express();"}
+    files = {
+        "/server.js": "const express = require('express');\nconst app = express();"
+    }
     assert detect_template(files) == "node-server"
 
 
@@ -203,7 +209,10 @@ def test_detect_node_server_from_fastify():
 
 def test_detect_node_server_ignores_next_with_server():
     """If next.config exists alongside server.js, it's a Next.js project, not a plain node server."""
-    files = {"/next.config.js": "{}", "/server.js": "const express = require('express');"}
+    files = {
+        "/next.config.js": "{}",
+        "/server.js": "const express = require('express');",
+    }
     assert detect_template(files) == "nextjs"
 
 

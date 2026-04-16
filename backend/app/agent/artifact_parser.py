@@ -50,19 +50,25 @@ def parse_artifacts(text: str) -> Tuple[str, List[dict]]:
 
 
 # Packages bundled with Sandpack templates — never flag as missing
-_BUILTIN_PACKAGES = frozenset({
-    "react", "react-dom", "react-scripts", "react-is",
-    "next", "vue", "svelte", "angular",
-})
+_BUILTIN_PACKAGES = frozenset(
+    {
+        "react",
+        "react-dom",
+        "react-scripts",
+        "react-is",
+        "next",
+        "vue",
+        "svelte",
+        "angular",
+    }
+)
 
 _IMPORT_PATTERN = re.compile(
     r"""(?:import\s+(?:[\w{}\s,*]+\s+from\s+)?['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\))"""
 )
 
 
-def detect_dependencies(
-    files: dict, declared: dict
-) -> dict:
+def detect_dependencies(files: dict, declared: dict) -> dict:
     """Scan files for npm imports not in declared dependencies.
 
     Returns dict of {package_name: "latest"} for missing packages.
@@ -87,7 +93,9 @@ def detect_dependencies(
     return missing
 
 
-_SERVER_FRAMEWORKS = re.compile(r"(?:require\(['\"](?:express|fastify)['\"]|from\s+['\"](?:express|fastify)['\"]|http\.createServer)")
+_SERVER_FRAMEWORKS = re.compile(
+    r"(?:require\(['\"](?:express|fastify)['\"]|from\s+['\"](?:express|fastify)['\"]|http\.createServer)"
+)
 
 
 def detect_template(files: dict) -> str:
@@ -99,7 +107,9 @@ def detect_template(files: dict) -> str:
 
     # Next.js: has next.config.* or app directory structure
     has_next_config = any(p.split("/")[-1].startswith("next.config") for p in paths)
-    has_app_dir = any(p.startswith("/app/page") or p.startswith("/app/layout") for p in paths)
+    has_app_dir = any(
+        p.startswith("/app/page") or p.startswith("/app/layout") for p in paths
+    )
     if has_next_config or has_app_dir:
         return "nextjs"
 

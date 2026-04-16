@@ -45,11 +45,13 @@ async def execute_knowledge_base(
     sources = []
     for i, r in enumerate(results, 1):
         content_parts.append("[{}] [{}]: {}".format(i, r["filename"], r["text"]))
-        sources.append({
-            **r,
-            "citation_index": i,
-            "chunk_excerpt": r["text"][:150],
-        })
+        sources.append(
+            {
+                **r,
+                "citation_index": i,
+                "chunk_excerpt": r["text"][:150],
+            }
+        )
 
     return {
         "content": "\n\n".join(content_parts),
@@ -57,7 +59,9 @@ async def execute_knowledge_base(
     }
 
 
-async def execute_web_reader(url: str = "", query: str = "", **kwargs) -> Dict[str, Any]:
+async def execute_web_reader(
+    url: str = "", query: str = "", **kwargs
+) -> Dict[str, Any]:
     """Fetch and extract content from a URL."""
     # Accept both 'url' (new) and 'query' (backward compat) parameters
     target_url = url or query
@@ -65,16 +69,26 @@ async def execute_web_reader(url: str = "", query: str = "", **kwargs) -> Dict[s
         return {"content": "No URL provided", "sources": []}
     content = await _fetch_page_content(target_url, timeout=10.0)
     if not content:
-        return {"content": "Failed to fetch content from {}".format(target_url), "sources": []}
+        return {
+            "content": "Failed to fetch content from {}".format(target_url),
+            "sources": [],
+        }
     return {
         "content": content,
         "sources": [
-            {"type": "web", "title": target_url, "url": target_url, "snippet": content[:200]}
+            {
+                "type": "web",
+                "title": target_url,
+                "url": target_url,
+                "snippet": content[:200],
+            }
         ],
     }
 
 
-async def execute_datetime_info(timezone: str = "UTC", query: str = "", **kwargs) -> Dict[str, Any]:
+async def execute_datetime_info(
+    timezone: str = "UTC", query: str = "", **kwargs
+) -> Dict[str, Any]:
     """Get current date/time information."""
     try:
         import zoneinfo
@@ -95,7 +109,9 @@ async def execute_datetime_info(timezone: str = "UTC", query: str = "", **kwargs
     return {"content": content, "sources": []}
 
 
-async def execute_calculate(expression: str = "", query: str = "", **kwargs) -> Dict[str, Any]:
+async def execute_calculate(
+    expression: str = "", query: str = "", **kwargs
+) -> Dict[str, Any]:
     """Safely evaluate a math expression."""
     # Accept both 'expression' (new) and 'query' (backward compat)
     expr = expression or query
@@ -131,7 +147,11 @@ async def execute_calculate(expression: str = "", query: str = "", **kwargs) -> 
 
 
 async def execute_summarize(
-    text: str = "", query: str = "", settings: Settings = None, style: str = "brief", **kwargs
+    text: str = "",
+    query: str = "",
+    settings: Settings = None,
+    style: str = "brief",
+    **kwargs,
 ) -> Dict[str, Any]:
     """Summarize text using LLM."""
     from app.llm.provider import get_llm_response
@@ -145,7 +165,12 @@ async def execute_summarize(
     }
     instruction = style_instructions.get(style, style_instructions["brief"])
 
-    messages = [{"role": "user", "content": "{}\n\nText:\n{}".format(instruction, content[:4000])}]
+    messages = [
+        {
+            "role": "user",
+            "content": "{}\n\nText:\n{}".format(instruction, content[:4000]),
+        }
+    ]
     summary = await get_llm_response(messages, settings)
     return {"content": summary, "sources": []}
 
@@ -166,18 +191,29 @@ def register_all_executors(registry) -> None:
         if skill.skill_type == "workflow":
             steps = skill.get_workflow_steps()
             if steps:
+
                 async def _workflow_exec(
-                    query: str, db=None, settings: Settings = None,
-                    _steps=steps, on_progress=None, **kwargs
+                    query: str,
+                    db=None,
+                    settings: Settings = None,
+                    _steps=steps,
+                    on_progress=None,
+                    **kwargs,
                 ) -> Dict[str, Any]:
                     from app.workflows.engine import execute_workflow
-                    result = await execute_workflow(_steps, query, settings, on_progress=on_progress)
+
+                    result = await execute_workflow(
+                        _steps, query, settings, on_progress=on_progress
+                    )
                     step_summary = "\n".join(
-                        "- {}: {}".format(s["name"], s["status"]) for s in result["steps"]
+                        "- {}: {}".format(s["name"], s["status"])
+                        for s in result["steps"]
                     )
                     output = result["output"]
                     if result["status"] == "failed":
-                        output = "Workflow failed:\n{}\n\n{}".format(step_summary, output)
+                        output = "Workflow failed:\n{}\n\n{}".format(
+                            step_summary, output
+                        )
                     return {"content": output, "sources": []}
 
                 registry.register_executor(skill.name, _workflow_exec)

@@ -21,7 +21,12 @@ def upgrade() -> None:
         "webhook_integrations",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("public_id", sa.String(24), unique=True, nullable=False),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "user_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("name", sa.String(100), nullable=False),
         sa.Column("platform", sa.String(20), nullable=False),
         sa.Column("direction", sa.String(10), nullable=False),
@@ -30,7 +35,9 @@ def upgrade() -> None:
         sa.Column("subscribed_events", sa.Text(), nullable=True, server_default="[]"),
         sa.Column("config_json", sa.Text(), nullable=True, server_default="{}"),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
     )
 
 
