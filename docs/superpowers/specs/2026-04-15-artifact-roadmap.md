@@ -31,6 +31,23 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 - Error recovery with "Fix this" button
 - Auto-injected entry files (index.js/index.tsx)
 
+### Multi-File Artifacts — Phase 2: WebContainers (Apr 16)
+
+- WebContainer support for full-stack artifacts (Next.js, Express/Fastify, Vite)
+- Isolated `/sandbox` route with COOP/COEP headers (`credentialless` on parent, `require-corp` on sandbox)
+- Terminal (xterm) with interactive shell — users can type commands
+- Collapsible terminal panel, auto-collapses when dev server ready, logs preserved
+- Adaptive layout: preview-first for UI projects (nextjs/vite), terminal-first for servers (node-server)
+- PostMessage protocol for parent ↔ sandbox communication
+- Standalone CodeMirror editor + file explorer for WebContainer artifacts
+- Backend auto-detection of nextjs/node-server/vite templates from file contents
+- LLM system prompt updated with new template instructions
+- Auto-scaffold missing Vite files (vite.config, index.html, src/main.tsx)
+- Respects LLM-generated package.json with devDependencies
+- TypeScript node-server support via auto-injected `tsx` dependency
+- Sidebar auto-collapse when artifact panel opens, restores on close
+- Sandpack retained as fast path for react/react-ts/vanilla (~100ms vs ~2-5s boot)
+
 ### Other Shipped Features
 
 - Multi-step workflow engine with parallel execution and retry logic
@@ -41,17 +58,8 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 - Conversation folders
 - Admin dashboard with analytics
 - Vision/file attachments
-
-### Multi-File Artifacts — Phase 2: WebContainers (Apr 16)
-
-- WebContainer support for full-stack artifacts (Next.js, Express/Fastify, Vite)
-- Isolated `/sandbox` route with COOP/COEP headers (main app unaffected)
-- Terminal (xterm) + preview iframe in sandbox page
-- PostMessage protocol for parent ↔ sandbox communication
-- Standalone CodeMirror editor + file explorer for WebContainer artifacts
-- Backend auto-detection of nextjs/node-server/vite templates from file contents
-- LLM system prompt updated with new template instructions
-- Sandpack retained as fast path for react/react-ts/vanilla (~100ms vs ~2-5s boot)
+- LLM client reuse (shared HTTP connection pool)
+- ~~Theme sync~~ — Sandpack theme follows app light/dark mode
 
 ---
 
@@ -88,7 +96,6 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 
 Lower priority improvements to add over time:
 
-- ~~**Theme sync** — match Sandpack theme to app's light/dark mode~~ **Done (Apr 16)**
 - **ZIP download** — proper `.zip` export using `jszip`
 - **Artifact versioning** — track edit history, allow reverting
 - **Fork artifact** — create variations from existing artifacts
