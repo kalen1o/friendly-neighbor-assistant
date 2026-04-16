@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
-from app.models.artifact import Artifact
+from app.models.artifact import Artifact, ArtifactVersion
 from app.models.chat import Chat
 from app.models.user import User
-from app.schemas.artifact import ArtifactOut, ArtifactUpdate
+from app.schemas.artifact import ArtifactOut, ArtifactUpdate, ArtifactVersionOut
 
 router = APIRouter(tags=["artifacts"])
 
@@ -75,6 +75,66 @@ async def update_artifact(
         artifact.title = body.title
     if body.files is not None:
         artifact.files = body.files
+    await db.commit()
+    await db.refresh(artifact)
+    return ArtifactOut.from_artifact(artifact)
+
+
+@router.get(
+    "/api/artifacts/{artifact_id}/versions", response_model=List[ArtifactVersionOut]
+)
+async def list_versions(
+    artifact_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Artifact).where(
+            Artifact.public_id == artifact_id, Artifact.user_id == user.id
+        )
+    )
+    artifact = result.scalar_one_or_none()
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    result = await db.execute(
+        select(ArtifactVersion)
+        .where(ArtifactVersion.artifact_id == artifact.id)
+        .order_by(ArtifactVersion.version_number)
+    )
+    return result.scalars().all()
+
+
+@router.post(
+    "/api/artifacts/{artifact_id}/revert/{version_number}", response_model=ArtifactOut
+)
+async def revert_to_version(
+    artifact_id: str,
+    version_number: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Artifact).where(
+            Artifact.public_id == artifact_id, Artifact.user_id == user.id
+        )
+    )
+    artifact = result.scalar_one_or_none()
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    result = await db.execute(
+        select(ArtifactVersion).where(
+            ArtifactVersion.artifact_id == artifact.id,
+            ArtifactVersion.version_number == version_number,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    artifact.title = version.title
+    artifact.files = version.files
     await db.commit()
     await db.refresh(artifact)
     return ArtifactOut.from_artifact(artifact)

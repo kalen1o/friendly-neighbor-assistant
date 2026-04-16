@@ -959,6 +959,27 @@ export async function updateArtifact(
   return res.json();
 }
 
+export interface ArtifactVersionData {
+  version_number: number;
+  title: string;
+  files: Record<string, string> | null;
+  created_at: string;
+}
+
+export async function listArtifactVersions(artifactId: string): Promise<ArtifactVersionData[]> {
+  const res = await authFetch(`${API_BASE}/api/artifacts/${artifactId}/versions`);
+  if (!res.ok) throw new Error("Failed to list versions");
+  return res.json();
+}
+
+export async function revertArtifact(artifactId: string, versionNumber: number): Promise<ArtifactOut> {
+  const res = await authFetch(`${API_BASE}/api/artifacts/${artifactId}/revert/${versionNumber}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to revert artifact");
+  return res.json();
+}
+
 // ── Search ──
 
 export interface SearchResult {

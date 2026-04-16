@@ -40,3 +40,12 @@ class ArtifactUpdate(BaseModel):
     code: Optional[str] = None
     title: Optional[str] = None
     files: Optional[dict] = None
+
+
+class ArtifactVersionOut(BaseModel):
+    version_number: int
+    title: str
+    files: Optional[dict] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

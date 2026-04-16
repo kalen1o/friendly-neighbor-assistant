@@ -1167,6 +1167,18 @@ async def _llm_background_task(
                     db.add(artifact)
                     await db.commit()
                     await db.refresh(artifact)
+
+                    # Save version 1
+                    from app.models.artifact import ArtifactVersion
+
+                    v = ArtifactVersion(
+                        artifact_id=artifact.id,
+                        version_number=1,
+                        title=artifact.title,
+                        files=artifact.files,
+                    )
+                    db.add(v)
+                    await db.commit()
                     await queue.put(
                         {
                             "event": "artifact",

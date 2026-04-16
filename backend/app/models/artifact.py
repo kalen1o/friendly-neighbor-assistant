@@ -9,6 +9,19 @@ from app.db.base import Base
 from app.utils.ids import generate_public_id
 
 
+class ArtifactVersion(Base):
+    __tablename__ = "artifact_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="CASCADE"), index=True
+    )
+    version_number: Mapped[int] = mapped_column()
+    title: Mapped[str] = mapped_column(String(200))
+    files: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
 class Artifact(Base):
     __tablename__ = "artifacts"
 

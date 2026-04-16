@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Eye, Code, Copy, Check, Download } from "lucide-react";
+import { X, Eye, Code, Copy, Check, Download, ChevronDown, History } from "lucide-react";
 import {
   SandpackProvider,
   SandpackCodeEditor,
@@ -10,7 +10,7 @@ import {
   useSandpack,
 } from "@codesandbox/sandpack-react";
 import { Button } from "@/components/ui/button";
-import { updateArtifact, type ArtifactData } from "@/lib/api";
+import { updateArtifact, listArtifactVersions, revertArtifact, type ArtifactData, type ArtifactVersionData } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
@@ -148,6 +148,11 @@ function SandpackContent({
         <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5">
           {fileCount} {fileCount === 1 ? "file" : "files"}
         </Badge>
+        <FileDropdown
+          files={Object.keys(artifact.files)}
+          activeFile={sandpack.activeFile}
+          onSelect={(path) => { sandpack.setActiveFile(path); setTab("code"); }}
+        />
         <span className="text-muted-foreground text-xs">·</span>
         <div className="flex items-center rounded-md bg-muted p-0.5">
           <button
@@ -175,6 +180,15 @@ function SandpackContent({
         </div>
         <div className="flex-1" />
         <CopyActiveFile />
+        <VersionDropdown
+          artifactId={artifact.id}
+          onRevert={(files) => {
+            // Sandpack re-mounts via key change — update parent state
+            Object.entries(files).forEach(([path, code]) => {
+              sandpack.updateFile(path, code);
+            });
+          }}
+        />
         <Button
           variant="ghost"
           size="icon"
@@ -198,8 +212,8 @@ function SandpackContent({
       {/* Content */}
       <div className="relative flex flex-1 overflow-hidden">
         {onFixError && <SandpackErrorOverlay onFix={onFixError} />}
-        {/* File explorer */}
-        <div className="w-[150px] shrink-0 overflow-y-auto border-r">
+        {/* File explorer — hidden on narrow screens */}
+        <div className="hidden md:block w-[150px] shrink-0 overflow-y-auto border-r">
           <SandpackFileExplorer />
         </div>
         {/* Editor and Preview — both always mounted, toggle visibility */}
@@ -222,6 +236,99 @@ function SandpackContent({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── File dropdown for narrow screens ── */
+
+function FileDropdown({ files, activeFile, onSelect }: { files: string[]; activeFile: string; onSelect: (path: string) => void }) {
+  return (
+    <div className="relative inline-flex md:hidden">
+      <select
+        value={activeFile}
+        onChange={(e) => onSelect(e.target.value)}
+        className="appearance-none rounded-md border bg-muted pl-2 pr-6 py-1 text-xs text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+      >
+        {files.map((f) => (
+          <option key={f} value={f}>{f.replace(/^\//, "")}</option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  );
+}
+
+/* ── Version dropdown (shadcn) ── */
+
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+
+function VersionDropdown({ artifactId, onRevert }: { artifactId: string; onRevert: (files: Record<string, string>, title: string) => void }) {
+  const [versions, setVersions] = useState<ArtifactVersionData[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchVersions = async () => {
+    if (artifactId.startsWith("streaming-")) return;
+    setLoading(true);
+    try {
+      setVersions(await listArtifactVersions(artifactId));
+    } catch {
+      toast.error("Failed to load versions");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRevert = async (versionNumber: number) => {
+    try {
+      const updated = await revertArtifact(artifactId, versionNumber);
+      if (updated.files) {
+        onRevert(updated.files, updated.title);
+        toast.success(`Reverted to v${versionNumber}`);
+      }
+    } catch {
+      toast.error("Failed to revert");
+    }
+  };
+
+  if (artifactId.startsWith("streaming-")) return null;
+
+  return (
+    <DropdownMenu onOpenChange={(open) => { if (open) fetchVersions(); }}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" title="Version history" />}>
+        <History className="h-3.5 w-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Version History</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {loading ? (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">Loading...</p>
+          ) : versions.length === 0 ? (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">No versions yet</p>
+          ) : (
+            versions.map((v) => (
+              <DropdownMenuItem key={v.version_number} onSelect={() => handleRevert(v.version_number)}>
+                <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
+                  v{v.version_number}
+                </Badge>
+                <span className="truncate flex-1">{v.title}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0">
+                  {new Date(v.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </DropdownMenuItem>
+            ))
+          )}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -303,8 +410,13 @@ function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
         <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5">
           {fileCount} {fileCount === 1 ? "file" : "files"}
         </Badge>
-        <span className="text-muted-foreground text-xs">·</span>
-        <Badge variant="outline" className="shrink-0 text-[10px] px-1.5">
+        <FileDropdown
+          files={Object.keys(files)}
+          activeFile={activeFile}
+          onSelect={(path) => { setActiveFile(path); setTab("code"); }}
+        />
+        <span className="text-muted-foreground text-xs hidden md:inline">·</span>
+        <Badge variant="outline" className="hidden md:inline-flex shrink-0 text-[10px] px-1.5">
           {artifact.template}
         </Badge>
         <span className="text-muted-foreground text-xs">·</span>
@@ -346,6 +458,10 @@ function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
             <Copy className="h-3.5 w-3.5" />
           )}
         </Button>
+        <VersionDropdown
+          artifactId={artifact.id}
+          onRevert={(newFiles) => setFiles(newFiles)}
+        />
         <Button
           variant="ghost"
           size="icon"
@@ -362,8 +478,8 @@ function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
 
       {/* Content */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* File explorer */}
-        <div className="w-[150px] shrink-0 overflow-y-auto border-r">
+        {/* File explorer — hidden on narrow screens */}
+        <div className="hidden md:block w-[150px] shrink-0 overflow-y-auto border-r">
           <StandaloneFileExplorer
             files={files}
             activeFile={activeFile}

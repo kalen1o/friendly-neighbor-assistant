@@ -97,8 +97,8 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 Lower priority improvements to add over time:
 
 - ~~**ZIP download** — proper `.zip` export using `jszip`~~ **Done (Apr 16)**
-- **Artifact versioning** — track edit history, allow reverting
+- ~~**Artifact versioning** — track edit history, allow reverting~~ **Done (Apr 16)** — versions created on LLM generation, revert via dropdown
 - **Fork artifact** — create variations from existing artifacts
-- **Responsive file explorer** — collapse to dropdown on narrow screens
+- ~~**Responsive file explorer** — collapse to dropdown on narrow screens~~ **Done (Apr 16)**
 - ~~**File size warning** — warn when artifact tokens approach output limits~~ **Done (Apr 16)** — progress bar with green/yellow/red + truncation warning
 - **Evaluator agent** — deterministic validator (JSON structure, entry points, imports vs dependencies)
