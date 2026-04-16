@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Copy, Check, Globe, MessageCircle } from "lucide-react";
+import { Plus, Trash2, Copy, Check, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   listWebhooks,
@@ -53,16 +57,18 @@ const EVENTS = [
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
+      className="ml-1 h-5 w-5 text-muted-foreground hover:text-foreground"
       onClick={() => {
         navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className="ml-1 text-muted-foreground hover:text-foreground"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-    </button>
+    </Button>
   );
 }
 
@@ -141,27 +147,28 @@ export function IntegrationsSettings() {
           />
           <div className="flex gap-2">
             {PLATFORMS.map((p) => (
-              <button
+              <Button
                 key={p.value}
+                variant={form.platform === p.value ? "outline" : "ghost"}
+                size="sm"
                 onClick={() => setForm({ ...form, platform: p.value })}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
-                  form.platform === p.value ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted"
-                }`}
+                className={form.platform === p.value ? "border-primary bg-primary/10 text-primary" : ""}
               >
                 <p.icon className="h-3.5 w-3.5" />
                 {p.label}
-              </button>
+              </Button>
             ))}
           </div>
-          <select
-            value={form.direction}
-            onChange={(e) => setForm({ ...form, direction: e.target.value as WebhookCreate["direction"] })}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-          >
-            {DIRECTIONS.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
-            ))}
-          </select>
+          <Select value={form.direction} onValueChange={(v) => setForm({ ...form, direction: v as WebhookCreate["direction"] })}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DIRECTIONS.map((d) => (
+                <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {(form.direction === "outbound" || form.direction === "both") && (
             <Input
               placeholder="Webhook URL (https://...)"
@@ -169,27 +176,28 @@ export function IntegrationsSettings() {
               onChange={(e) => setForm({ ...form, webhook_url: e.target.value })}
             />
           )}
-          <div className="space-y-1">
+          <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Events</p>
-            {EVENTS.map((ev) => (
-              <label key={ev.value} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.subscribed_events?.includes(ev.value) ?? false}
-                  onChange={(e) => {
-                    const events = form.subscribed_events || [];
-                    setForm({
-                      ...form,
-                      subscribed_events: e.target.checked
-                        ? [...events, ev.value]
-                        : events.filter((x) => x !== ev.value),
-                    });
-                  }}
-                  className="rounded border-border"
-                />
-                {ev.label}
-              </label>
-            ))}
+            {EVENTS.map((ev) => {
+              const checked = form.subscribed_events?.includes(ev.value) ?? false;
+              return (
+                <Label key={ev.value} className="flex items-center gap-2 text-sm font-normal">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(c) => {
+                      const events = form.subscribed_events || [];
+                      setForm({
+                        ...form,
+                        subscribed_events: c
+                          ? [...events, ev.value]
+                          : events.filter((x) => x !== ev.value),
+                      });
+                    }}
+                  />
+                  {ev.label}
+                </Label>
+              );
+            })}
           </div>
           <div className="flex gap-2">
             <Button size="sm" disabled={saving || !form.name.trim()} onClick={handleCreate}>
@@ -225,17 +233,18 @@ export function IntegrationsSettings() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => handleToggle(wh)}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  wh.enabled ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"
+              <Badge
+                variant="outline"
+                className={`cursor-pointer text-[10px] ${
+                  wh.enabled ? "border-green-500/30 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : ""
                 }`}
+                onClick={() => handleToggle(wh)}
               >
                 {wh.enabled ? "Active" : "Off"}
-              </button>
-              <button onClick={() => handleDelete(wh.id)} className="text-muted-foreground hover:text-destructive">
+              </Badge>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(wh.id)}>
                 <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           );
         })}

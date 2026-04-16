@@ -7,6 +7,8 @@ import { Copy, Check, Pencil, X, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import { SourceAttribution } from "@/components/source-attribution";
 import { CodeBlock, InlineCode } from "@/components/code-block";
 import { processChildren, enrichText } from "@/components/rich-text";
@@ -96,22 +98,25 @@ const mdComponents: Components = {
   table({ children }) {
     return (
       <div className="my-3 overflow-x-auto rounded-lg border border-border/40">
-        <table className="w-full text-sm">{children}</table>
+        <Table className="w-full text-sm">{children}</Table>
       </div>
     );
   },
   thead({ children }) {
-    return <thead className="border-b border-border/40 bg-muted/50">{children}</thead>;
+    return <TableHeader className="border-b border-border/40 bg-muted/50">{children}</TableHeader>;
+  },
+  tr({ children }) {
+    return <TableRow>{children}</TableRow>;
   },
   th({ children }) {
-    return <th className="px-3 py-2 text-left text-xs font-semibold">{children}</th>;
+    return <TableHead className="px-3 py-2 text-left text-xs font-semibold">{children}</TableHead>;
   },
   td({ children }) {
-    return <td className="border-t border-border/20 px-3 py-2">{processChildren(children)}</td>;
+    return <TableCell className="border-t border-border/20 px-3 py-2">{processChildren(children)}</TableCell>;
   },
   // Horizontal rule
   hr() {
-    return <hr className="my-4 border-border/40" />;
+    return <Separator className="my-4" />;
   },
   // Links — citation anchors scroll in-page, external links open new tab
   a({ href, children }) {

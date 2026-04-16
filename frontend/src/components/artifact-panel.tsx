@@ -13,6 +13,10 @@ import { Button } from "@/components/ui/button";
 import { updateArtifact, type ArtifactData } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
+import { WebContainerFrame } from "@/components/webcontainer-frame";
+import { StandaloneEditor } from "@/components/standalone-editor";
+import { StandaloneFileExplorer } from "@/components/standalone-file-explorer";
 
 interface ArtifactPanelProps {
   artifact: ArtifactData;
@@ -27,6 +31,9 @@ function SandpackSaveBridge({ artifactId }: { artifactId: string }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFilesRef = useRef<string>("");
 
+  // Skip saving for streaming placeholders — not a real artifact yet
+  const isStreaming = artifactId.startsWith("streaming-");
+
   const filesSnapshot = JSON.stringify(
     Object.fromEntries(
       Object.entries(sandpack.files).map(([p, f]) => [p, f.code]),
@@ -34,6 +41,7 @@ function SandpackSaveBridge({ artifactId }: { artifactId: string }) {
   );
 
   useEffect(() => {
+    if (isStreaming) return;
     if (prevFilesRef.current && filesSnapshot !== prevFilesRef.current) {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
@@ -43,7 +51,7 @@ function SandpackSaveBridge({ artifactId }: { artifactId: string }) {
       }, 1000);
     }
     prevFilesRef.current = filesSnapshot;
-  }, [filesSnapshot, artifactId]);
+  }, [filesSnapshot, artifactId, isStreaming]);
 
   return null;
 }
@@ -238,9 +246,167 @@ function ensureEntryFiles(
   return { ...files, ...missing };
 }
 
+/* ── WebContainer content (for nextjs/node-server/vite templates) ── */
+
+const WEBCONTAINER_TEMPLATES = new Set(["nextjs", "node-server", "vite"]);
+
+function WebContainerContent({ artifact, onClose, onFixError }: ArtifactPanelProps) {
+  const { resolvedTheme } = useTheme();
+  const [tab, setTab] = useState<"code" | "preview">("preview");
+  const [activeFile, setActiveFile] = useState(Object.keys(artifact.files)[0] ?? "");
+  const [files, setFiles] = useState(artifact.files);
+  const fileCount = Object.keys(files).length;
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isStreaming = artifact.id.startsWith("streaming-");
+
+  const handleFileChange = (code: string) => {
+    const updated = { ...files, [activeFile]: code };
+    setFiles(updated);
+
+    if (!isStreaming) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        updateArtifact(artifact.id, { files: updated }).catch(() =>
+          toast.error("Failed to save project"),
+        );
+      }, 1000);
+    }
+  };
+
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    const code = files[activeFile];
+    if (code) {
+      navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col border-l bg-background">
+      {/* Header */}
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        <span className="truncate text-sm font-medium max-w-[160px]">
+          {artifact.title}
+        </span>
+        <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5">
+          {fileCount} {fileCount === 1 ? "file" : "files"}
+        </Badge>
+        <span className="text-muted-foreground text-xs">·</span>
+        <Badge variant="outline" className="shrink-0 text-[10px] px-1.5">
+          {artifact.template}
+        </Badge>
+        <span className="text-muted-foreground text-xs">·</span>
+        <div className="flex items-center rounded-md bg-muted p-0.5">
+          <button
+            onClick={() => setTab("code")}
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+              tab === "code"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Code className="h-3 w-3" />
+            Code
+          </button>
+          <button
+            onClick={() => setTab("preview")}
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+              tab === "preview"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Eye className="h-3 w-3" />
+            Preview
+          </button>
+        </div>
+        <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={handleCopy}
+          title={`Copy ${activeFile}`}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close">
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {/* Content */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* File explorer */}
+        <div className="w-[150px] shrink-0 overflow-y-auto border-r">
+          <StandaloneFileExplorer
+            files={files}
+            activeFile={activeFile}
+            onSelectFile={(path) => {
+              setActiveFile(path);
+              setTab("code");
+            }}
+          />
+        </div>
+        {/* Editor and Preview */}
+        <div className="relative flex-1 overflow-hidden">
+          <div className={tab === "code" ? "h-full" : "hidden"}>
+            <StandaloneEditor
+              code={files[activeFile] ?? ""}
+              filePath={activeFile}
+              onChange={handleFileChange}
+              theme={resolvedTheme === "dark" ? "dark" : "light"}
+            />
+          </div>
+          <div className={tab === "preview" ? "h-full" : "hidden"}>
+            <WebContainerFrame
+              files={files}
+              dependencies={artifact.dependencies ?? {}}
+              template={artifact.template}
+              artifactId={artifact.id}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main export ── */
 
 export function ArtifactPanel(props: ArtifactPanelProps) {
+  const { resolvedTheme } = useTheme();
+  const isStreaming = props.artifact.id.startsWith("streaming-");
+
+  if (isStreaming) {
+    const fileCount = Object.keys(props.artifact.files).length;
+    return (
+      <div className="flex h-full flex-col items-center justify-center border-l bg-background gap-3">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">
+          Generating {props.artifact.title}...
+        </p>
+        {fileCount > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {fileCount} {fileCount === 1 ? "file" : "files"} received
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // WebContainer templates
+  if (WEBCONTAINER_TEMPLATES.has(props.artifact.template)) {
+    return <WebContainerContent {...props} />;
+  }
+
+  // Sandpack templates (react, react-ts, vanilla)
   const TEMPLATES = {
     react: "react",
     "react-ts": "react-ts",
@@ -252,12 +418,13 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
 
   return (
     <SandpackProvider
+      key={props.artifact.id}
       template={template}
       files={files}
       customSetup={{
         dependencies: props.artifact.dependencies ?? {},
       }}
-      theme="dark"
+      theme={resolvedTheme === "dark" ? "dark" : "light"}
       options={{
         activeFile: Object.keys(props.artifact.files)[0] ?? "/App.js",
         bundlerURL: "https://sandpack-bundler.codesandbox.io",

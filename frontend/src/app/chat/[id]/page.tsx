@@ -64,6 +64,13 @@ export default function ChatPage() {
     fixArtifactError,
   } = useMessageStream(chatId);
 
+  // Notify layout to collapse/expand sidebar when artifact panel opens/closes
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("artifact-panel", { detail: { open: !!activeArtifact } }),
+    );
+  }, [activeArtifact]);
+
   const chatInputRef = useRef<ChatInputHandle>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);

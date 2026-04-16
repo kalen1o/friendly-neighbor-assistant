@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
@@ -26,10 +27,38 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
+  const collapsedBeforeArtifactRef = useRef(false);
+
+  // Auto-collapse sidebar when artifact panel opens, restore when it closes
+  useEffect(() => {
+    function handleArtifactPanel(e: Event) {
+      const open = (e as CustomEvent).detail?.open;
+      if (open) {
+        collapsedBeforeArtifactRef.current = desktopCollapsed;
+        setDesktopCollapsed(true);
+      } else {
+        setDesktopCollapsed(collapsedBeforeArtifactRef.current);
+      }
+    }
+    window.addEventListener("artifact-panel", handleArtifactPanel);
+    return () => window.removeEventListener("artifact-panel", handleArtifactPanel);
+  }, [desktopCollapsed]);
+
+  // Sandbox route: bare layout, no chrome
+  if (pathname === "/sandbox") {
+    return (
+      <html lang="en" suppressHydrationWarning>
+        <body className={inter.className} style={{ margin: 0, overflow: "hidden" }}>
+          {children}
+        </body>
+      </html>
+    );
+  }
 
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>

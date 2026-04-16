@@ -1,8 +1,26 @@
-# Multi-File Artifact System — Roadmap
+# Friendly Neighbor — Project Roadmap
 
-## Current State (Phase 1: Sandpack)
+Last updated: 2026-04-16
 
-Shipped and working:
+---
+
+## Completed
+
+### RAG Enhancements (Apr 13)
+
+All planned enhancements shipped and live on main:
+
+- **Hybrid search** — vector (pgvector) + PostgreSQL FTS with Reciprocal Rank Fusion
+- **Cohere reranking** — `rerank-v3.5` via Cohere API, graceful fallback if disabled
+- **Citation highlighting** — `[N]` inline markers in LLM output, clickable badges that scroll to sources
+- **Semantic chunking** — header-aware splitting (markdown/HTML), configurable overlap and chunk size
+- **Configurability** — all RAG settings via env vars (`RAG_HYBRID_SEARCH_ENABLED`, `RAG_RERANK_ENABLED`, `COHERE_API_KEY`, `RAG_TOP_K`, etc.)
+- **Source attribution** — numbered citations with filename, relevance score, and chunk excerpts in frontend
+
+Branch `feature/rag-enhancements` deleted (was fully merged, stale).
+
+### Multi-File Artifacts — Phase 1: Sandpack (Apr 14-15)
+
 - Unified `type="project"` format with JSON manifest
 - Sandpack rendering (react, react-ts, vanilla templates)
 - File explorer + tabbed Code/Preview
@@ -13,47 +31,31 @@ Shipped and working:
 - Error recovery with "Fix this" button
 - Auto-injected entry files (index.js/index.tsx)
 
-**Limitations:** Client-side only. No server-side rendering, no Node.js, no `npm install` at runtime.
+### Other Shipped Features
+
+- Multi-step workflow engine with parallel execution and retry logic
+- Webhook integrations (Slack, Discord, generic URLs)
+- OAuth/SSO (Google, GitHub)
+- Multi-model switching (Anthropic + OpenAI-compatible)
+- Background LLM task status tracking
+- Conversation folders
+- Admin dashboard with analytics
+- Vision/file attachments
+
+### Multi-File Artifacts — Phase 2: WebContainers (Apr 16)
+
+- WebContainer support for full-stack artifacts (Next.js, Express/Fastify, Vite)
+- Isolated `/sandbox` route with COOP/COEP headers (main app unaffected)
+- Terminal (xterm) + preview iframe in sandbox page
+- PostMessage protocol for parent ↔ sandbox communication
+- Standalone CodeMirror editor + file explorer for WebContainer artifacts
+- Backend auto-detection of nextjs/node-server/vite templates from file contents
+- LLM system prompt updated with new template instructions
+- Sandpack retained as fast path for react/react-ts/vanilla (~100ms vs ~2-5s boot)
 
 ---
 
-## Phase 2: WebContainers (Full-Stack)
-
-**Goal:** Support Next.js, Express, and full-stack apps with server processes.
-
-**When to build:** When users need server components, API routes, file-based routing, SSR, or `npm install`.
-
-**Technology:** `@webcontainer/api` (StackBlitz) — boots full Node.js in the browser via WebAssembly.
-
-**What it enables:**
-- Next.js apps with App Router, server components, API routes
-- Express/Fastify backends
-- Real `npm install` (any npm package)
-- Terminal access for running commands
-- Dev server (Vite, Next.js dev, etc.)
-
-**Key requirements:**
-- Cross-origin isolation headers (COOP/COEP) on Nginx
-- Heavier bundle (~2-5MB vs Sandpack's ~200KB)
-- Slower boot (~2-5s vs Sandpack's ~100ms)
-- SharedArrayBuffer support (Chrome/Edge/Firefox; limited Safari)
-- Commercial license for production use
-
-**Architecture:**
-- Detect template: if `next.config.*` or pages/app directory → use WebContainers
-- Otherwise → keep using Sandpack (lighter, faster)
-- New `template="nextjs"` value triggers WebContainers renderer
-- Same JSON manifest format (`files` + `dependencies`)
-- WebContainers panel: file explorer + editor + terminal + preview (split view)
-
-**Reference implementations:**
-- Bolt.new (gold standard) — https://github.com/stackblitz/bolt.new
-- StackBlitz — https://stackblitz.com
-- WebContainers docs — https://webcontainers.io/guides/introduction
-
----
-
-## Phase 3: E2B Sandboxes (Multi-Language)
+## Phase 3: E2B Sandboxes (Multi-Language Artifacts)
 
 **Goal:** Support Python, Go, Rust, and other non-JS runtimes.
 
@@ -86,10 +88,10 @@ Shipped and working:
 
 Lower priority improvements to add over time:
 
+- ~~**Theme sync** — match Sandpack theme to app's light/dark mode~~ **Done (Apr 16)**
 - **ZIP download** — proper `.zip` export using `jszip`
 - **Artifact versioning** — track edit history, allow reverting
 - **Fork artifact** — create variations from existing artifacts
-- **Theme sync** — match Sandpack theme to app's light/dark mode
 - **Responsive file explorer** — collapse to dropdown on narrow screens
 - **File size warning** — warn when artifact tokens approach output limits
 - **Evaluator agent** — deterministic validator (JSON structure, entry points, imports vs dependencies)

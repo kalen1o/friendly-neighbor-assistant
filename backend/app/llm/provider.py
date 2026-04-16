@@ -16,6 +16,27 @@ from app.llm.model_config import ModelConfig
 
 logger = logging.getLogger(__name__)
 
+# --- Client cache: reuse HTTP connections across calls ---
+_anthropic_clients: dict[str, anthropic.AsyncAnthropic] = {}
+_openai_clients: dict[str, openai.AsyncOpenAI] = {}
+
+
+def _get_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
+    if api_key not in _anthropic_clients:
+        _anthropic_clients[api_key] = anthropic.AsyncAnthropic(api_key=api_key)
+    return _anthropic_clients[api_key]
+
+
+def _get_openai_client(api_key: str, base_url: str | None = None) -> openai.AsyncOpenAI:
+    cache_key = f"{api_key}:{base_url or ''}"
+    if cache_key not in _openai_clients:
+        kwargs: dict = {"api_key": api_key, "timeout": 120.0}
+        if base_url:
+            kwargs["base_url"] = base_url
+        _openai_clients[cache_key] = openai.AsyncOpenAI(**kwargs)
+    return _openai_clients[cache_key]
+
+
 # Retry on transient errors: rate limits, server errors, timeouts
 _RETRYABLE_OPENAI = (
     openai.RateLimitError,
@@ -82,6 +103,11 @@ SYSTEM_PROMPT = (
     "- Keep artifacts concise — prefer inline styles or a single CSS file over many small files.\n"
     "- You can still include explanation text outside the artifact tag.\n"
     "- The JSON must be valid. Escape all special characters in strings properly (newlines as \\n, quotes as \\\", backslashes as \\\\)."
+    "\n\nFull-stack templates (use ONLY when the user explicitly asks for these frameworks or needs server-side features):\n"
+    "- template=\"nextjs\": Next.js App Router. Files: /next.config.js, /app/layout.tsx, /app/page.tsx. Include dependencies like \"next\", \"react\", \"react-dom\".\n"
+    "- template=\"node-server\": Express or Fastify API server. Entry file: /server.js or /server.ts. No browser UI needed.\n"
+    "- template=\"vite\": Vite-based frontend. Files: /vite.config.ts, /index.html, /src/main.tsx. For projects needing real npm packages that don't work in the browser bundler.\n"
+    "- PREFER template=\"react\" or \"react-ts\" for simple components — they load instantly. Only use nextjs/node-server/vite when truly needed."
 )
 
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
@@ -119,7 +145,7 @@ async def _anthropic_response(
 ) -> str:
     api_key = model_config.api_key if model_config else settings.anthropic_api_key
     model = model_config.model_id if model_config else ANTHROPIC_MODEL
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = _get_anthropic_client(api_key)
     response = await client.messages.create(
         model=model,
         max_tokens=16384,
@@ -133,24 +159,16 @@ def _build_openai_client(
     settings: Settings, model_config: Optional[ModelConfig] = None
 ) -> openai.AsyncOpenAI:
     if model_config:
-        kwargs: dict = {"api_key": model_config.api_key, "timeout": 120.0}
-        if model_config.base_url:
-            kwargs["base_url"] = model_config.base_url
+        return _get_openai_client(model_config.api_key, model_config.base_url)
     else:
-        kwargs = {"api_key": settings.openai_api_key, "timeout": 120.0}
-        if settings.openai_base_url:
-            kwargs["base_url"] = settings.openai_base_url
-    return openai.AsyncOpenAI(**kwargs)
+        return _get_openai_client(settings.openai_api_key, settings.openai_base_url)
 
 
 def _build_vision_client(settings: Settings) -> openai.AsyncOpenAI:
     """Build an OpenAI client for vision requests, using vision-specific keys if set."""
     api_key = settings.vision_api_key or settings.openai_api_key
     base_url = settings.vision_base_url or settings.openai_base_url
-    kwargs: dict = {"api_key": api_key, "timeout": 120.0}
-    if base_url:
-        kwargs["base_url"] = base_url
-    return openai.AsyncOpenAI(**kwargs)
+    return _get_openai_client(api_key, base_url)
 
 
 @_llm_retry
@@ -224,7 +242,7 @@ async def _anthropic_stream(
 ) -> AsyncIterator[str]:
     api_key = model_config.api_key if model_config else settings.anthropic_api_key
     model = model_config.model_id if model_config else ANTHROPIC_MODEL
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = _get_anthropic_client(api_key)
     converted = _convert_to_anthropic_format(messages)
     async with client.messages.stream(
         model=model,
@@ -250,7 +268,7 @@ async def _anthropic_stream_with_tools(
 
     api_key = model_config.api_key if model_config else settings.anthropic_api_key
     model = model_config.model_id if model_config else ANTHROPIC_MODEL
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = _get_anthropic_client(api_key)
     converted = _convert_to_anthropic_format(messages)
     anthropic_tools = _convert_tools_to_anthropic(tools) if tools else []
 

@@ -183,3 +183,40 @@ def test_detect_vanilla_from_html_entry():
 def test_detect_mixed_prefers_ts():
     files = {"/App.tsx": "code", "/helpers.js": "code"}
     assert detect_template(files) == "react-ts"
+
+
+def test_detect_nextjs_from_next_config():
+    files = {"/next.config.js": "module.exports = {}", "/app/page.tsx": "export default function Home() {}"}
+    assert detect_template(files) == "nextjs"
+
+
+def test_detect_nextjs_from_app_layout():
+    files = {"/app/layout.tsx": "export default function Layout({ children }) {}", "/app/page.tsx": "code"}
+    assert detect_template(files) == "nextjs"
+
+
+def test_detect_node_server_from_express():
+    files = {"/server.js": "const express = require('express');\nconst app = express();"}
+    assert detect_template(files) == "node-server"
+
+
+def test_detect_node_server_from_fastify():
+    files = {"/server.ts": "import Fastify from 'fastify';\nconst server = Fastify();"}
+    assert detect_template(files) == "node-server"
+
+
+def test_detect_node_server_ignores_next_with_server():
+    """If next.config exists alongside server.js, it's a Next.js project, not a plain node server."""
+    files = {"/next.config.js": "{}", "/server.js": "const express = require('express');"}
+    assert detect_template(files) == "nextjs"
+
+
+def test_detect_vite_from_config():
+    files = {"/vite.config.ts": "export default {}", "/src/main.tsx": "code"}
+    assert detect_template(files) == "vite"
+
+
+def test_detect_simple_react_unchanged():
+    """Simple React projects should still return 'react', not a WebContainer template."""
+    files = {"/App.js": "export default function App() { return <h1>Hi</h1>; }"}
+    assert detect_template(files) == "react"

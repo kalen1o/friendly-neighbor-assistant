@@ -483,11 +483,12 @@ export function useMessageStream(chatId: string) {
           onArtifactFile: (data) => {
             if (!streamingArtifactRef.current) return;
             streamingArtifactRef.current.files[data.path] = data.code;
+            const filesCopy = { ...streamingArtifactRef.current.files };
             setActiveArtifact((prev) => {
               if (!prev || !prev.id.startsWith("streaming-")) return prev;
               return {
                 ...prev,
-                files: { ...streamingArtifactRef.current!.files },
+                files: filesCopy,
               };
             });
           },

@@ -87,9 +87,36 @@ def detect_dependencies(
     return missing
 
 
+_SERVER_FRAMEWORKS = re.compile(r"(?:require\(['\"](?:express|fastify)['\"]|from\s+['\"](?:express|fastify)['\"]|http\.createServer)")
+
+
 def detect_template(files: dict) -> str:
-    """Auto-detect Sandpack template from file extensions."""
+    """Auto-detect template from file contents.
+
+    Priority: nextjs > vite > node-server > react-ts > vanilla > react
+    """
     paths = set(files.keys())
+
+    # Next.js: has next.config.* or app directory structure
+    has_next_config = any(p.split("/")[-1].startswith("next.config") for p in paths)
+    has_app_dir = any(p.startswith("/app/page") or p.startswith("/app/layout") for p in paths)
+    if has_next_config or has_app_dir:
+        return "nextjs"
+
+    # Vite: has vite.config.*
+    has_vite_config = any(p.split("/")[-1].startswith("vite.config") for p in paths)
+    if has_vite_config:
+        return "vite"
+
+    # Node server: has server.js/server.ts with express/fastify/http.createServer
+    for p in paths:
+        filename = p.split("/")[-1]
+        if filename in ("server.js", "server.ts"):
+            code = files.get(p, "")
+            if _SERVER_FRAMEWORKS.search(code):
+                return "node-server"
+
+    # Existing Sandpack detection
     has_ts = any(p.endswith(".tsx") or p.endswith(".ts") for p in paths)
     has_html_entry = "/index.html" in paths
 
