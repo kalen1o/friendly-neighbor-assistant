@@ -156,7 +156,6 @@ async def execute_workflow(
     steps = parse_steps(steps_raw)
     step_map = {s["name"]: s for s in steps}
     groups = _build_execution_groups(steps)
-    total_steps = len(steps)
     completed_count = 0
     results = {}  # type: Dict[str, StepResult]
 
@@ -169,7 +168,6 @@ async def execute_workflow(
 
     # Send all step names upfront so UI can render the full list
     import json as _json
-    step_names = [s["name"] for s in steps]
     parallel_names = set()
     for s in steps:
         for p in s["parallel"]:

@@ -7,7 +7,6 @@ import { DocumentUpload } from "@/components/document-upload";
 import { DocumentList } from "@/components/document-list";
 import {
   deleteDocument,
-  getDocumentStatus,
   listDocuments,
   uploadDocument,
   type DocumentOut,

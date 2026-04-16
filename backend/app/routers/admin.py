@@ -1,6 +1,5 @@
 """Admin dashboard — user management, analytics, audit log, quotas."""
 
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional

@@ -33,7 +33,7 @@ export interface ChatInputHandle {
   setInput: (text: string, cursorOffset?: number) => void;
 }
 
-export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, transparent, chatModelId, onModelChange }, ref) {
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, chatModelId, onModelChange }, ref) {
   const [value, setValue] = useState("");
   const [mode, setMode] = useState<ChatMode>("balanced");
   const [pendingFiles, setPendingFiles] = useState<

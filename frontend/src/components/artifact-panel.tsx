@@ -250,7 +250,7 @@ function ensureEntryFiles(
 
 const WEBCONTAINER_TEMPLATES = new Set(["nextjs", "node-server", "vite"]);
 
-function WebContainerContent({ artifact, onClose, onFixError }: ArtifactPanelProps) {
+function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
   const { resolvedTheme } = useTheme();
   const [tab, setTab] = useState<"code" | "preview">("preview");
   const [activeFile, setActiveFile] = useState(Object.keys(artifact.files)[0] ?? "");

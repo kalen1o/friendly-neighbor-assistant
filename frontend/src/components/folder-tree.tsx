@@ -21,7 +21,7 @@ import {
   FolderOpen,
   MoreHorizontal,
   Plus,
-  GripVertical,
+
   Loader2,
   CheckCircle2,
 } from "lucide-react";

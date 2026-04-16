@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { Table, TableHeader, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { SourceAttribution } from "@/components/source-attribution";
 import { CodeBlock, InlineCode } from "@/components/code-block";
 import { processChildren, enrichText } from "@/components/rich-text";
@@ -48,7 +48,7 @@ function processCitations(content: string, messageId?: string): string {
 
 const mdComponents: Components = {
   // Code blocks with syntax highlighting + copy
-  code({ className, children, ...props }) {
+  code({ className, children }) {
     const match = /language-(\w+)/.exec(className || "");
     const text = String(children).replace(/\n$/, "");
     // Fenced code block (has language class or is multi-line)

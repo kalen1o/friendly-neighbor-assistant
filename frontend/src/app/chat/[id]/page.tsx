@@ -54,7 +54,6 @@ export default function ChatPage() {
     activeSkills,
     workflowSteps,
     artifacts,
-    setArtifacts,
     activeArtifact,
     setActiveArtifact,
     chatModelId,

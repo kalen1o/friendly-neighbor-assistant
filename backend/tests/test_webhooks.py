@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models.webhook import WebhookIntegration
 from app.webhooks.events import _format_payload

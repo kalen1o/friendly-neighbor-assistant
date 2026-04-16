@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Gauge, Plus, Pencil, Trash2, X, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import { AdminGuard } from "@/components/admin-guard";
 import { AdminNav } from "@/components/admin-nav";
 import { Button } from "@/components/ui/button";

@@ -82,30 +82,6 @@ export default function SandboxPage() {
     return () => resizeObserver.disconnect();
   }, []);
 
-  useEffect(() => {
-    async function handleMessage(event: MessageEvent) {
-      const { data } = event;
-      if (!data?.type) return;
-
-      if (data.type === "mount") {
-        setCurrentTemplate(data.template);
-        await bootAndRun(data.files, data.dependencies, data.template);
-      } else if (data.type === "file-update" && wcRef.current) {
-        const filePath = data.path.replace(/^\//, "");
-        await wcRef.current.fs.writeFile(filePath, data.code);
-      } else if (data.type === "restart") {
-        if (processRef.current) processRef.current.kill();
-        if (wcRef.current && data.template) {
-          const cmd = getStartCommand(data.template, data.files || {});
-          await spawnProcess(cmd);
-        }
-      }
-    }
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
   async function spawnProcess(cmd: string[]) {
     if (!wcRef.current || !termRef.current) return;
     const process = await wcRef.current.spawn(cmd[0], cmd.slice(1));
@@ -270,6 +246,30 @@ export default function SandboxPage() {
     }
   }
 
+  useEffect(() => {
+    async function handleMessage(event: MessageEvent) {
+      const { data } = event;
+      if (!data?.type) return;
+
+      if (data.type === "mount") {
+        setCurrentTemplate(data.template);
+        await bootAndRun(data.files, data.dependencies, data.template);
+      } else if (data.type === "file-update" && wcRef.current) {
+        const filePath = data.path.replace(/^\//, "");
+        await wcRef.current.fs.writeFile(filePath, data.code);
+      } else if (data.type === "restart") {
+        if (processRef.current) processRef.current.kill();
+        if (wcRef.current && data.template) {
+          const cmd = getStartCommand(data.template, data.files || {});
+          await spawnProcess(cmd);
+        }
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   const phaseColors: Record<Phase, string> = {
     waiting: "text-muted-foreground",
     booting: "text-yellow-500",
@@ -284,7 +284,10 @@ export default function SandboxPage() {
 
   // For UI templates: auto-collapse terminal once ready. For node-server: keep terminal open.
   useEffect(() => {
-    if (phase === "ready" && !isNodeServer) setTerminalOpen(false);
+    if (phase === "ready" && !isNodeServer) {
+      const id = requestAnimationFrame(() => setTerminalOpen(false));
+      return () => cancelAnimationFrame(id);
+    }
   }, [phase, isNodeServer]);
 
   // Unified layout: preview area + toggle bar + terminal

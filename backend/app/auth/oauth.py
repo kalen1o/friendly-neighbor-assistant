@@ -8,7 +8,7 @@ async def get_google_user(code: str, redirect_uri: str, settings: Settings) -> d
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
     )
-    token = await client.fetch_token(
+    await client.fetch_token(
         "https://oauth2.googleapis.com/token",
         code=code,
         redirect_uri=redirect_uri,
@@ -31,7 +31,7 @@ async def get_github_user(code: str, redirect_uri: str, settings: Settings) -> d
         client_id=settings.github_client_id,
         client_secret=settings.github_client_secret,
     )
-    token = await client.fetch_token(
+    await client.fetch_token(
         "https://github.com/login/oauth/access_token",
         code=code,
         redirect_uri=redirect_uri,

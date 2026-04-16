@@ -2,7 +2,11 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.config import Settings
-
+from app.rag.fulltext import search_fulltext
+from app.rag.retrieval import search_knowledge_base
+from app.rag.reranking import rerank_results
+from app.rag.chunking import chunk_text, chunk_text_semantic
+from app.skills.executors import execute_knowledge_base
 
 def test_rag_settings_defaults():
     """RAG settings have correct defaults."""
@@ -20,8 +24,6 @@ def test_rag_settings_defaults():
 
 
 # --- Task 3: Full-text search ---
-
-from app.rag.fulltext import search_fulltext
 
 
 @pytest.mark.anyio
@@ -60,8 +62,6 @@ async def test_search_fulltext_empty_query():
 
 
 # --- Task 4: Hybrid search with RRF ---
-
-from app.rag.retrieval import search_knowledge_base
 
 
 @pytest.mark.anyio
@@ -117,8 +117,6 @@ async def test_hybrid_search_disabled_falls_back_to_vector():
 
 
 # --- Task 5: Cohere reranking ---
-
-from app.rag.reranking import rerank_results
 
 
 @pytest.mark.anyio
@@ -197,8 +195,6 @@ async def test_search_knowledge_base_with_reranking():
 
 # --- Task 6: Semantic chunking ---
 
-from app.rag.chunking import chunk_text, chunk_text_semantic
-
 
 def test_chunk_text_semantic_splits_on_headers():
     """Semantic chunking respects markdown headers as boundaries."""
@@ -265,8 +261,6 @@ def test_chunk_text_fixed_still_works():
 
 
 # --- Task 8: Citation formatting ---
-
-from app.skills.executors import execute_knowledge_base
 
 
 @pytest.mark.anyio

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 import { execSync } from "child_process";
 
 test("screenshot citation badges closeup", async ({ page, context }) => {

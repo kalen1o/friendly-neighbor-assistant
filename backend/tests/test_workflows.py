@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from app.workflows.engine import parse_steps, _build_execution_groups, execute_workflow, StepResult
+from app.workflows.engine import parse_steps, _build_execution_groups, execute_workflow
 
 
 def test_parse_steps_basic():

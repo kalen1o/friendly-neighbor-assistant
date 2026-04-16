@@ -931,7 +931,6 @@ async def _llm_background_task(
 
             full_response = ""
             assistant_msg = None
-            assistant_saved = False
             last_save_len = 0
             art_stream = ArtifactStreamParser()
             try:
@@ -965,7 +964,6 @@ async def _llm_background_task(
                         db.add(assistant_msg)
                         await db.commit()
                         await db.refresh(assistant_msg)
-                        assistant_saved = True
                         last_save_len = len(full_response)
                     elif assistant_msg and len(full_response) - last_save_len >= 500:
                         assistant_msg.content = full_response

@@ -1,6 +1,6 @@
 import json
 
-from app.agent.artifact_parser import parse_artifacts
+from app.agent.artifact_parser import parse_artifacts, detect_dependencies, detect_template
 
 
 def test_no_artifacts():
@@ -120,9 +120,6 @@ def test_malformed_no_closing_tag():
     assert "some code" in cleaned
 
 
-from app.agent.artifact_parser import detect_dependencies
-
-
 def test_detect_missing_npm_deps():
     files = {
         "/App.js": "import { motion } from 'framer-motion';\nimport axios from 'axios';",
@@ -162,7 +159,6 @@ def test_detect_scoped_packages():
     assert "@emotion/styled" in missing
 
 
-from app.agent.artifact_parser import detect_template
 
 
 def test_detect_react_ts_from_tsx_files():

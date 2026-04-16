@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,16 +13,11 @@ import { Sidebar } from "@/components/sidebar";
 
 export function MobileSidebar() {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
 
   // Close sheet on navigation
   const handleOpenChange = (value: boolean) => {
     setOpen(value);
   };
-
-  // Close when pathname changes (user navigated)
-  // useEffect would cause hydration issues, so we check on render
-  // The Sheet will close when the user taps a link because Sidebar calls router.push
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>

@@ -122,7 +122,7 @@ export function AddServerDialog({ onCreated }: { onCreated: () => void }) {
 export function EditServerDialog({ server, onUpdated }: { server: McpServerOut; onUpdated: () => void }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { register, handleSubmit, setValue, watch, reset, formState: { errors, isSubmitting } } = useForm<ServerFormData>({
+  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<ServerFormData>({
     resolver: zodResolver(serverSchema),
     defaultValues: {
       name: server.name,

@@ -13,7 +13,6 @@ from app.utils.ids import generate_public_id
 if TYPE_CHECKING:
     from app.models.chat_file import ChatFile
     from app.models.folder import Folder
-    from app.models.user_model import UserModel
 
 
 class Chat(Base):

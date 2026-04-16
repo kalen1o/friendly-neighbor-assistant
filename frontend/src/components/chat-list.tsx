@@ -16,11 +16,7 @@ interface ChatListProps {
   onRename: (chatId: string, title: string) => void;
 }
 
-function isRecentlyUpdated(dateStr: string): boolean {
-  const updated = new Date(dateStr).getTime();
-  const now = Date.now();
-  return now - updated < 30000; // 30 seconds
-}
+
 
 function formatRelativeTime(dateStr: string): string {
   const now = new Date();

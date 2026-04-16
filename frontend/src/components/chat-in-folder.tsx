@@ -18,11 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-function isRecentlyUpdated(dateStr: string): boolean {
-  const updated = new Date(dateStr).getTime();
-  const now = Date.now();
-  return now - updated < 30000; // 30 seconds
-}
+
 
 export interface ChatInFolderProps {
   chat: ChatSummary;

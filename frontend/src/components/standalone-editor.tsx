@@ -26,7 +26,7 @@ export function StandaloneEditor({ code, filePath, onChange, theme = "dark" }: S
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   useEffect(() => {
     if (!containerRef.current) return;
