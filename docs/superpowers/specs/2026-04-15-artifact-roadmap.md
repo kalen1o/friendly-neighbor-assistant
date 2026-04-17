@@ -48,6 +48,14 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 - Sidebar auto-collapse when artifact panel opens, restores on close
 - Sandpack retained as fast path for react/react-ts/vanilla (~100ms vs ~2-5s boot)
 
+### Artifact Enhancements — Phase 4 (Apr 16) — COMPLETE
+
+- **ZIP download** — proper `.zip` export using `jszip`, download button in panel header + artifact card
+- **Artifact versioning** — versions created on LLM generation, revert via shadcn dropdown in panel header
+- **Responsive file explorer** — collapses to `<select>` dropdown on narrow screens
+- **File size warning** — streaming progress bar (green/yellow/red) with truncation warning
+- **Evaluator agent** — validates entry files, local imports, truncated code, template consistency; auto-fixes deps, warns via SSE
+
 ### Other Shipped Features
 
 - Multi-step workflow engine with parallel execution and retry logic
@@ -59,7 +67,7 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 - Admin dashboard with analytics
 - Vision/file attachments
 - LLM client reuse (shared HTTP connection pool)
-- ~~Theme sync~~ — Sandpack theme follows app light/dark mode
+- Theme sync — Sandpack theme follows app light/dark mode
 
 ---
 
@@ -90,15 +98,23 @@ Branch `feature/rag-enhancements` deleted (was fully merged, stale).
 - Output streamed back via SSE
 - Frontend shows terminal output + optional iframe for web servers
 
+### MCP Integration (Previously shipped)
+
+- MCP server registration per-user with CRUD API and frontend management page
+- MCP client with JSON-RPC + SSE transport, auth (bearer/custom header)
+- Tool discovery (`tools/list`) with Redis cache (1hr TTL)
+- Tool execution (`tools/call`) with text content extraction
+- Agent integration — MCP tools loaded alongside built-in + user skills
+- Tools disabled by default after discovery, user enables via UI
+
 ---
 
-## Phase 4: Enhancements
+## Future — Planned Features
 
-Lower priority improvements to add over time:
-
-- ~~**ZIP download** — proper `.zip` export using `jszip`~~ **Done (Apr 16)**
-- ~~**Artifact versioning** — track edit history, allow reverting~~ **Done (Apr 16)** — versions created on LLM generation, revert via dropdown
-- **Fork artifact** — create variations from existing artifacts
-- ~~**Responsive file explorer** — collapse to dropdown on narrow screens~~ **Done (Apr 16)**
-- ~~**File size warning** — warn when artifact tokens approach output limits~~ **Done (Apr 16)** — progress bar with green/yellow/red + truncation warning
-- **Evaluator agent** — deterministic validator (JSON structure, entry points, imports vs dependencies)
+| Feature | Effort | Impact |
+|---|---|---|
+| ~~**Scheduled agents**~~ — **Done (Apr 16)** APScheduler in-process with Redis, cron scheduling, dedicated chat + webhook output | ~~Medium~~ | ~~High~~ |
+| **E2B integration** — Python execution in artifacts (Phase 3 above) | Medium | High for data science |
+| **Conversation branching** — fork at any message to explore alternatives | Medium | Nice UX for exploration |
+| **RAG auto-ingest from MCP** — automatically index documents from connected MCP sources | Low | Compounds RAG value |
+| **Skill chaining** — let skills call other skills (tool → workflow escalation) | Low | Unlocks complex workflows |

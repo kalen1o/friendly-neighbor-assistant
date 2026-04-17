@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     rag_chunk_strategy: str = "semantic"  # "semantic" or "fixed"
 
     max_tool_rounds: int = 5
+    max_output_tokens: int = 16384
 
     # Auth — JWT
     jwt_secret: str = _DEFAULT_JWT_SECRET

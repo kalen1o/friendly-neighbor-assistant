@@ -1085,6 +1085,15 @@ async def _llm_background_task(
                 # Parse artifacts from response
                 cleaned_response, found_artifacts = parse_artifacts(full_response)
 
+                # Strip leaked tool call syntax from response
+                import re as _re
+                cleaned_response = _re.sub(
+                    r'<tool_call>.*?(?:<｜end▁of▁thinking｜>|$)',
+                    '',
+                    cleaned_response,
+                    flags=_re.DOTALL,
+                ).strip()
+
                 # Save assistant message (with artifact tags stripped)
                 sources_json = json.dumps(sources_data) if sources_data else None
                 if assistant_msg:
@@ -1154,6 +1163,17 @@ async def _llm_background_task(
                     if detected_template != art_data.get("template", "react"):
                         art_data["template"] = detected_template
 
+                    # Run evaluator pipeline
+                    from app.agent.artifact_evaluator import evaluate_artifact
+
+                    fixed_files, fixed_deps, art_warnings = evaluate_artifact(
+                        art_data.get("files", {}),
+                        art_data.get("dependencies", {}),
+                        art_data.get("template", "react"),
+                    )
+                    art_data["files"] = fixed_files
+                    art_data["dependencies"] = fixed_deps
+
                     artifact = Artifact(
                         message_id=assistant_msg.id,
                         chat_id=chat.id,
@@ -1194,6 +1214,20 @@ async def _llm_background_task(
                             ),
                         }
                     )
+
+                    # Emit warnings from evaluator
+                    if art_warnings:
+                        await queue.put(
+                            {
+                                "event": "artifact_warnings",
+                                "data": json.dumps(
+                                    {
+                                        "artifact_id": artifact.public_id,
+                                        "warnings": art_warnings,
+                                    }
+                                ),
+                            }
+                        )
 
                 # 6. post_message hooks (latency calculated here)
                 hook_ctx.response = full_response

@@ -151,7 +151,7 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setConfirmDelete(false); setConfirmDeleteAccount(false); } }}>
-      <DialogContent className="h-full max-h-screen w-full sm:h-auto sm:max-h-[85vh] sm:max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="flex h-full max-h-screen w-full flex-col sm:h-auto sm:max-h-[85vh] sm:max-w-lg p-0 gap-0 overflow-hidden">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <p className="text-sm font-semibold">Settings</p>
           <ThemeIcons />

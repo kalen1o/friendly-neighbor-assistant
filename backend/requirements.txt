@@ -25,6 +25,9 @@ redis[hiredis]>=5.0.0
 python-dotenv>=1.0.0
 tenacity>=8.0.0
 
+# Scheduler
+apscheduler>=3.10.0,<4.0.0
+
 # Config
 pydantic-settings>=2.0.0
 

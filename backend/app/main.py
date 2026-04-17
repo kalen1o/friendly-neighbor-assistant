@@ -25,6 +25,7 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.models import router as models_router
 from app.routers.skills import router as skills_router
 from app.routers.uploads import router as uploads_router
+from app.routers.schedules import router as schedules_router
 
 
 @asynccontextmanager
@@ -62,7 +63,21 @@ async def lifespan(app: FastAPI):
                 )
     except Exception:
         pass  # Don't block startup
+
+    # Start scheduled agents
+    from app.scheduler.engine import start_scheduler, stop_scheduler
+    try:
+        await start_scheduler()
+    except Exception:
+        pass  # Don't block startup if scheduler fails
+
     yield
+
+    # Stop scheduler before closing connections
+    try:
+        await stop_scheduler()
+    except Exception:
+        pass
     await close_redis()
     await dispose_engine()
 
@@ -100,3 +115,4 @@ app.include_router(uploads_router)
 app.include_router(models_router)
 app.include_router(admin_router)
 app.include_router(webhooks_router)
+app.include_router(schedules_router)

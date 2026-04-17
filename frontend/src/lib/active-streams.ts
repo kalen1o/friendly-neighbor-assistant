@@ -25,6 +25,7 @@ interface StreamCallbacks {
   onArtifactStart?: (data: { title: string; template: string }) => void;
   onArtifactFile?: (data: { path: string; code: string }) => void;
   onArtifactEnd?: (data: { files: Record<string, string>; dependencies: Record<string, string> }) => void;
+  onArtifactWarnings?: (data: { artifact_id: string; warnings: string[] }) => void;
   onWorkflow?: (steps: Array<{ name: string; status: string; parallel?: boolean }>) => void;
   onWorkflowStep?: (step: { name: string; status: string }) => void;
   onDone: () => void;

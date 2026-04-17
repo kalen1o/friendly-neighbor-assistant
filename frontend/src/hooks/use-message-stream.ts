@@ -34,6 +34,7 @@ export function useMessageStream(chatId: string) {
   const [workflowSteps, setWorkflowSteps] = useState<Array<{ name: string; status: string; parallel?: boolean }>>([]);
   const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
+  const [artifactWarnings, setArtifactWarnings] = useState<Record<string, string[]>>({});
   const [chatModelId, setChatModelId] = useState<string | null>(null);
 
   // Accumulated text from SSE chunks (full received text)
@@ -495,6 +496,12 @@ export function useMessageStream(chatId: string) {
           onArtifactEnd: () => {
             streamingArtifactRef.current = null;
           },
+          onArtifactWarnings: (data) => {
+            setArtifactWarnings((prev) => ({
+              ...prev,
+              [data.artifact_id]: data.warnings,
+            }));
+          },
           onWorkflow: (steps) => {
             setWorkflowSteps(steps);
           },
@@ -575,9 +582,9 @@ export function useMessageStream(chatId: string) {
     activeSkills,
     workflowSteps,
     artifacts,
-    setArtifacts,
     activeArtifact,
     setActiveArtifact,
+    artifactWarnings,
     chatModelId,
     setChatModelId,
     loadOlderMessages,

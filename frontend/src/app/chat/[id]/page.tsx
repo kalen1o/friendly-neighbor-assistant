@@ -56,6 +56,7 @@ export default function ChatPage() {
     artifacts,
     activeArtifact,
     setActiveArtifact,
+    artifactWarnings,
     chatModelId,
     setChatModelId,
     loadOlderMessages,
@@ -274,6 +275,7 @@ export default function ChatPage() {
             artifact={activeArtifact}
             onClose={() => setActiveArtifact(null)}
             onFixError={(error) => fixArtifactError(error)}
+            warnings={artifactWarnings[activeArtifact.id]}
           />
         )}
       </div>

@@ -148,7 +148,7 @@ async def _anthropic_response(
     client = _get_anthropic_client(api_key)
     response = await client.messages.create(
         model=model,
-        max_tokens=16384,
+        max_tokens=settings.max_output_tokens,
         system=SYSTEM_PROMPT,
         messages=messages,
     )
@@ -246,7 +246,7 @@ async def _anthropic_stream(
     converted = _convert_to_anthropic_format(messages)
     async with client.messages.stream(
         model=model,
-        max_tokens=16384,
+        max_tokens=settings.max_output_tokens,
         system=SYSTEM_PROMPT,
         messages=converted,
     ) as stream:
@@ -274,7 +274,7 @@ async def _anthropic_stream_with_tools(
 
     kwargs = {
         "model": model,
-        "max_tokens": 4096,
+        "max_tokens": settings.max_output_tokens,
         "system": SYSTEM_PROMPT,
         "messages": converted,
     }
@@ -282,17 +282,19 @@ async def _anthropic_stream_with_tools(
         kwargs["tools"] = anthropic_tools
 
     for _ in range(max_tool_rounds):
-        response = await client.messages.create(**kwargs)
-
-        # Process content blocks
-        text_content = ""
+        # Stream response — text yields immediately to the user
         tool_uses = []
 
+        async with client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                yield text
+
+            # After stream completes, get the full message to check for tool calls
+            response = await stream.get_final_message()
+
+        # Extract tool calls from the final message
         for block in response.content:
-            if block.type == "text":
-                text_content += block.text
-                yield block.text
-            elif block.type == "tool_use":
+            if block.type == "tool_use":
                 tool_uses.append(
                     {"id": block.id, "name": block.name, "input": block.input}
                 )
@@ -334,10 +336,9 @@ async def _anthropic_stream_with_tools(
 
     # Hit max rounds — final response without tools
     kwargs.pop("tools", None)
-    response = await client.messages.create(**kwargs)
-    for block in response.content:
-        if block.type == "text":
-            yield block.text
+    async with client.messages.stream(**kwargs) as stream:
+        async for text in stream.text_stream:
+            yield text
 
 
 async def _openai_stream(
@@ -442,8 +443,54 @@ async def stream_with_tools(
     else:
         raise ValueError(f"Unsupported AI provider: {provider}")
 
-    async for chunk in _buffered_stream(raw):
+    async for chunk in _filter_tool_leaks(_buffered_stream(raw)):
         yield chunk
+
+
+async def _filter_tool_leaks(source: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Strip leaked tool call syntax from streamed chunks.
+
+    Some models (GLM, DeepSeek, Qwen) leak internal markup like
+    <tool_call>...</tool_call> or <｜end▁of▁thinking｜> into the text stream.
+    """
+    import re
+    buffer = ""
+    in_tool_leak = False
+
+    async for chunk in source:
+        buffer += chunk
+
+        # Check if we're inside a leaked tool call block
+        if "<tool_call>" in buffer and not in_tool_leak:
+            # Yield everything before the tag
+            idx = buffer.index("<tool_call>")
+            if idx > 0:
+                yield buffer[:idx]
+            buffer = buffer[idx:]
+            in_tool_leak = True
+
+        if in_tool_leak:
+            # Look for end markers
+            for end_marker in ("</tool_call>", "<｜end▁of▁thinking｜>"):
+                if end_marker in buffer:
+                    idx = buffer.index(end_marker) + len(end_marker)
+                    buffer = buffer[idx:]
+                    in_tool_leak = False
+                    break
+            # If still in leak and buffer is getting large, discard it
+            if in_tool_leak and len(buffer) > 2000:
+                buffer = ""
+                in_tool_leak = False
+            continue
+
+        # Not in a leak — yield the buffer
+        if buffer:
+            yield buffer
+            buffer = ""
+
+    # Flush remaining buffer
+    if buffer and not in_tool_leak:
+        yield buffer
 
 
 async def _openai_stream_with_tools(

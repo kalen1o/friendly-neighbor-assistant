@@ -23,6 +23,30 @@ interface ArtifactPanelProps {
   artifact: ArtifactData;
   onClose: () => void;
   onFixError?: (error: string) => void;
+  warnings?: string[];
+}
+
+/* ── Warning banner ── */
+
+import { AlertTriangle } from "lucide-react";
+
+function ArtifactWarnings({ warnings }: { warnings?: string[] }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (!warnings?.length || dismissed) return null;
+
+  return (
+    <div className="flex items-start gap-2 border-b bg-yellow-500/10 px-3 py-2">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-yellow-500 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        {warnings.map((w, i) => (
+          <p key={i} className="text-xs text-yellow-700 dark:text-yellow-400">{w}</p>
+        ))}
+      </div>
+      <button onClick={() => setDismissed(true)} className="text-xs text-muted-foreground hover:text-foreground">
+        dismiss
+      </button>
+    </div>
+  );
 }
 
 /* ── Sandpack save bridge — watches file changes and auto-saves ── */
@@ -124,6 +148,7 @@ function SandpackContent({
   artifact,
   onClose,
   onFixError,
+  warnings,
 }: ArtifactPanelProps) {
   const { sandpack } = useSandpack();
   const [tab, setTab] = useState<"code" | "preview">("preview");
@@ -139,6 +164,7 @@ function SandpackContent({
   return (
     <div className="flex h-full flex-col border-l bg-background">
       <SandpackSaveBridge artifactId={artifact.id} />
+      <ArtifactWarnings warnings={warnings} />
 
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-3 py-2">
@@ -367,7 +393,7 @@ function ensureEntryFiles(
 
 const WEBCONTAINER_TEMPLATES = new Set(["nextjs", "node-server", "vite"]);
 
-function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
+function WebContainerContent({ artifact, onClose, warnings }: ArtifactPanelProps) {
   const { resolvedTheme } = useTheme();
   const [tab, setTab] = useState<"code" | "preview">("preview");
   const [activeFile, setActiveFile] = useState(Object.keys(artifact.files)[0] ?? "");
@@ -402,6 +428,7 @@ function WebContainerContent({ artifact, onClose }: ArtifactPanelProps) {
 
   return (
     <div className="flex h-full flex-col border-l bg-background">
+      <ArtifactWarnings warnings={warnings} />
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <span className="truncate text-sm font-medium max-w-[160px]">

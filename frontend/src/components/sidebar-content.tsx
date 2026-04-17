@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Plus, FileText, Zap, Anchor, Plug, Loader2, FolderPlus } from "lucide-react";
+import { Plus, FileText, Zap, Anchor, Plug, Clock, Loader2, FolderPlus } from "lucide-react";
 import { useAuth } from "@/components/auth-guard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,7 @@ const NAV_ITEMS = [
   { href: "/skills", icon: Zap, label: "Skills", iconBg: "bg-amber-500/10", iconBgActive: "bg-amber-500/25", iconColor: "text-amber-500", activeBorder: "border-amber-500/30", activeBg: "bg-amber-500/5" },
   { href: "/hooks", icon: Anchor, label: "Hooks", iconBg: "bg-blue-500/10", iconBgActive: "bg-blue-500/25", iconColor: "text-blue-500", activeBorder: "border-blue-500/30", activeBg: "bg-blue-500/5" },
   { href: "/mcp", icon: Plug, label: "MCP", iconBg: "bg-purple-500/10", iconBgActive: "bg-purple-500/25", iconColor: "text-purple-500", activeBorder: "border-purple-500/30", activeBg: "bg-purple-500/5" },
+  { href: "/schedules", icon: Clock, label: "Schedules", iconBg: "bg-teal-500/10", iconBgActive: "bg-teal-500/25", iconColor: "text-teal-500", activeBorder: "border-teal-500/30", activeBg: "bg-teal-500/5" },
 ];
 
 // ── Sidebar Content (shared between Sidebar and Drawer) ──

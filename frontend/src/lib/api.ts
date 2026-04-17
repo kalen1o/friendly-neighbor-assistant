@@ -419,6 +419,7 @@ export interface SSECallbacks {
   onArtifactStart?: (data: { title: string; template: string }) => void;
   onArtifactFile?: (data: { path: string; code: string }) => void;
   onArtifactEnd?: (data: { files: Record<string, string>; dependencies: Record<string, string> }) => void;
+  onArtifactWarnings?: (data: { artifact_id: string; warnings: string[] }) => void;
   onWorkflow?: (steps: WorkflowStep[]) => void;
   onWorkflowStep?: (step: WorkflowStep) => void;
   onDone: () => void;
@@ -528,6 +529,11 @@ export function sendMessage(
             case "artifact_end":
               try {
                 callbacks.onArtifactEnd?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact_warnings":
+              try {
+                callbacks.onArtifactWarnings?.(JSON.parse(data));
               } catch {}
               break;
             case "workflow":
@@ -977,6 +983,66 @@ export async function revertArtifact(artifactId: string, versionNumber: number):
     method: "POST",
   });
   if (!res.ok) throw new Error("Failed to revert artifact");
+  return res.json();
+}
+
+// ── Schedules ──
+
+export interface ScheduleData {
+  id: string;
+  name: string;
+  prompt: string;
+  cron_expression: string;
+  chat_id: string | null;
+  webhook_url: string | null;
+  enabled: boolean;
+  last_run_at: string | null;
+  last_status: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listSchedules(): Promise<ScheduleData[]> {
+  const res = await authFetch(`${API_BASE}/api/schedules`);
+  if (!res.ok) throw new Error("Failed to list schedules");
+  return res.json();
+}
+
+export async function createSchedule(data: {
+  name: string;
+  prompt: string;
+  cron_expression: string;
+  webhook_url?: string;
+}): Promise<ScheduleData> {
+  const res = await authFetch(`${API_BASE}/api/schedules`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create schedule");
+  return res.json();
+}
+
+export async function updateSchedule(
+  id: string,
+  data: { name?: string; prompt?: string; cron_expression?: string; webhook_url?: string; enabled?: boolean }
+): Promise<ScheduleData> {
+  const res = await authFetch(`${API_BASE}/api/schedules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update schedule");
+  return res.json();
+}
+
+export async function deleteSchedule(id: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/api/schedules/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete schedule");
+}
+
+export async function runScheduleNow(id: string): Promise<ScheduleData> {
+  const res = await authFetch(`${API_BASE}/api/schedules/${id}/run`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to run schedule");
   return res.json();
 }
 
