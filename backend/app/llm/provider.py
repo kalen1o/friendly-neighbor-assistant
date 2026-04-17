@@ -281,7 +281,7 @@ async def _anthropic_stream_with_tools(
     if anthropic_tools:
         kwargs["tools"] = anthropic_tools
 
-    for _ in range(max_tool_rounds):
+    for round_num in range(max_tool_rounds):
         # Stream response — text yields immediately to the user
         tool_uses = []
 
@@ -305,6 +305,9 @@ async def _anthropic_stream_with_tools(
 
         # Add assistant response to messages
         kwargs["messages"].append({"role": "assistant", "content": response.content})
+
+        fetch_cache = getattr(tool_executor, "fetch_cache", None)
+        urls_before = set(fetch_cache.keys()) if fetch_cache is not None else set()
 
         # Execute tools in parallel
         async def _execute_tool(tu):
@@ -331,6 +334,17 @@ async def _anthropic_stream_with_tools(
             for tool_id, result_text in results
         ]
         kwargs["messages"].append({"role": "user", "content": tool_result_content})
+
+        # If no new URLs were fetched, the model is spinning — strip tools and
+        # force a final synthesis next round.
+        urls_after = set(fetch_cache.keys()) if fetch_cache is not None else set()
+        stuck = fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
+        if stuck:
+            logger.info(
+                "Anthropic tool round %d: no new URLs — forcing synthesis",
+                round_num + 1,
+            )
+            kwargs.pop("tools", None)
 
         # Loop back for next response
 
@@ -529,6 +543,9 @@ async def _openai_stream_with_tools(
     async def _create_stream(**kw):
         return await client.chat.completions.create(**kw)
 
+    total_content_yielded = 0
+    finished_normally = False
+
     for round_num in range(max_tool_rounds):
         logger.info(
             "Tool round %d: calling LLM with %d messages",
@@ -547,6 +564,7 @@ async def _openai_stream_with_tools(
             # Stream text content to user
             if delta.content:
                 collected_content += delta.content
+                total_content_yielded += len(delta.content)
                 yield delta.content
 
             # Accumulate tool call data
@@ -572,10 +590,15 @@ async def _openai_stream_with_tools(
 
             # Check finish reason
             if chunk.choices[0].finish_reason == "stop":
-                return  # Done, no more tool calls
+                finished_normally = True
+                break  # Done, no more tool calls — but fall through to fallback check
 
             if chunk.choices[0].finish_reason == "tool_calls":
                 break  # Need to execute tools
+
+        # Model signalled end of turn — exit the tool loop.
+        if finished_normally:
+            break
 
         # Log what the LLM returned this round
         if tool_calls_in_progress:
@@ -598,7 +621,7 @@ async def _openai_stream_with_tools(
                 round_num + 1,
                 len(collected_content),
             )
-            return
+            break
 
         # Build assistant message with tool calls for the conversation
         assistant_tool_calls = []
@@ -649,6 +672,10 @@ async def _openai_stream_with_tools(
 
             return tc_data["id"], str(result) if not isinstance(result, str) else result
 
+        # Snapshot fetch cache before tools run so we can detect "nothing new"
+        fetch_cache = getattr(tool_executor, "fetch_cache", None)
+        urls_before = set(fetch_cache.keys()) if fetch_cache is not None else set()
+
         # Run all tools in parallel
         tool_results = await _asyncio.gather(
             *[_execute_single_tool(tc) for tc in tool_calls_in_progress.values()]
@@ -664,6 +691,27 @@ async def _openai_stream_with_tools(
                 }
             )
 
+        # If this round fetched no new URLs, the model is spinning.
+        # Nudge it to synthesize and strip tools for the next call.
+        urls_after = set(fetch_cache.keys()) if fetch_cache is not None else set()
+        stuck = fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
+        if stuck:
+            logger.info(
+                "Tool round %d: no new URLs fetched — forcing synthesis next round",
+                round_num + 1,
+            )
+            kwargs["messages"].append(
+                {
+                    "role": "system",
+                    "content": (
+                        "You already have sufficient information from prior tool "
+                        "calls. Do not call any more tools. Answer the user now "
+                        "using the content already gathered."
+                    ),
+                }
+            )
+            kwargs.pop("tools", None)
+
         # Loop back to get LLM's response after tool results
         logger.info(
             "Tool round %d: executed %d tools, looping back to LLM",
@@ -671,6 +719,36 @@ async def _openai_stream_with_tools(
             len(tool_results),
         )
         continue
+
+    # Tool loop finished (either exhausted rounds or model stopped) but no
+    # response text was yielded. Emit a fallback so the user sees something.
+    if total_content_yielded == 0:
+        logger.warning(
+            "Tool loop exited with no response text (finished_normally=%s)",
+            finished_normally,
+        )
+        sources = getattr(tool_executor, "collected_sources", None) or []
+        seen = set()
+        url_lines = []
+        for s in sources:
+            u = s.get("url") or s.get("title", "")
+            if u and u not in seen:
+                seen.add(u)
+                url_lines.append(f"- {u}")
+            if len(url_lines) >= 5:
+                break
+        if url_lines:
+            yield (
+                "I gathered information but couldn't finalize an answer. "
+                "Sources consulted:\n\n"
+                + "\n".join(url_lines)
+                + "\n\nPlease rephrase or ask me to summarize these sources."
+            )
+        else:
+            yield (
+                "I wasn't able to produce an answer. "
+                "Please try rephrasing your question."
+            )
 
     # Hit max tool rounds — force a final text response without tools
     kwargs.pop("tools", None)

@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Eye, Code, Copy, Check, Download, ChevronDown, History } from "lucide-react";
+import {
+  X,
+  Eye,
+  Code,
+  Copy,
+  Check,
+  Download,
+  ChevronDown,
+  History,
+} from "lucide-react";
 import {
   SandpackProvider,
   SandpackCodeEditor,
@@ -10,7 +19,13 @@ import {
   useSandpack,
 } from "@codesandbox/sandpack-react";
 import { Button } from "@/components/ui/button";
-import { updateArtifact, listArtifactVersions, revertArtifact, type ArtifactData, type ArtifactVersionData } from "@/lib/api";
+import {
+  updateArtifact,
+  listArtifactVersions,
+  revertArtifact,
+  type ArtifactData,
+  type ArtifactVersionData,
+} from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
@@ -39,10 +54,15 @@ function ArtifactWarnings({ warnings }: { warnings?: string[] }) {
       <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-yellow-500 mt-0.5" />
       <div className="flex-1 min-w-0">
         {warnings.map((w, i) => (
-          <p key={i} className="text-xs text-yellow-700 dark:text-yellow-400">{w}</p>
+          <p key={i} className="text-xs text-yellow-700 dark:text-yellow-400">
+            {w}
+          </p>
         ))}
       </div>
-      <button onClick={() => setDismissed(true)} className="text-xs text-muted-foreground hover:text-foreground">
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-xs text-muted-foreground hover:text-foreground"
+      >
         dismiss
       </button>
     </div>
@@ -177,7 +197,10 @@ function SandpackContent({
         <FileDropdown
           files={Object.keys(artifact.files)}
           activeFile={sandpack.activeFile}
-          onSelect={(path) => { sandpack.setActiveFile(path); setTab("code"); }}
+          onSelect={(path) => {
+            sandpack.setActiveFile(path);
+            setTab("code");
+          }}
         />
         <span className="text-muted-foreground text-xs">·</span>
         <div className="flex items-center rounded-md bg-muted p-0.5">
@@ -267,7 +290,15 @@ function SandpackContent({
 
 /* ── File dropdown for narrow screens ── */
 
-function FileDropdown({ files, activeFile, onSelect }: { files: string[]; activeFile: string; onSelect: (path: string) => void }) {
+function FileDropdown({
+  files,
+  activeFile,
+  onSelect,
+}: {
+  files: string[];
+  activeFile: string;
+  onSelect: (path: string) => void;
+}) {
   return (
     <div className="relative inline-flex md:hidden">
       <select
@@ -276,7 +307,9 @@ function FileDropdown({ files, activeFile, onSelect }: { files: string[]; active
         className="appearance-none rounded-md border bg-muted pl-2 pr-6 py-1 text-xs text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
       >
         {files.map((f) => (
-          <option key={f} value={f}>{f.replace(/^\//, "")}</option>
+          <option key={f} value={f}>
+            {f.replace(/^\//, "")}
+          </option>
         ))}
       </select>
       <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
@@ -296,7 +329,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-function VersionDropdown({ artifactId, onRevert }: { artifactId: string; onRevert: (files: Record<string, string>, title: string) => void }) {
+function VersionDropdown({
+  artifactId,
+  onRevert,
+}: {
+  artifactId: string;
+  onRevert: (files: Record<string, string>, title: string) => void;
+}) {
   const [versions, setVersions] = useState<ArtifactVersionData[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -327,8 +366,21 @@ function VersionDropdown({ artifactId, onRevert }: { artifactId: string; onRever
   if (artifactId.startsWith("streaming-")) return null;
 
   return (
-    <DropdownMenu onOpenChange={(open) => { if (open) fetchVersions(); }}>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" title="Version history" />}>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) fetchVersions();
+      }}
+    >
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Version history"
+          />
+        }
+      >
         <History className="h-3.5 w-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -336,18 +388,31 @@ function VersionDropdown({ artifactId, onRevert }: { artifactId: string; onRever
           <DropdownMenuLabel>Version History</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {loading ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">Loading...</p>
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              Loading...
+            </p>
           ) : versions.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">No versions yet</p>
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              No versions yet
+            </p>
           ) : (
             versions.map((v) => (
-              <DropdownMenuItem key={v.version_number} onSelect={() => handleRevert(v.version_number)}>
-                <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
+              <DropdownMenuItem
+                key={v.version_number}
+                onSelect={() => handleRevert(v.version_number)}
+              >
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 shrink-0"
+                >
                   v{v.version_number}
                 </Badge>
                 <span className="truncate flex-1">{v.title}</span>
                 <span className="text-[10px] text-muted-foreground shrink-0">
-                  {new Date(v.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(v.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
               </DropdownMenuItem>
             ))
@@ -371,32 +436,71 @@ const ENTRY_FILES: Record<string, Record<string, string>> = {
   },
 };
 
+// Sandpack's v1 React bundler uses classic JSX transform — any file using
+// JSX or the React.* namespace needs the React default identifier in scope.
+// LLM-generated files often import named hooks only or omit the import
+// entirely, so we inject a default import when the binding is missing.
+const REACT_IMPORT_TEMPLATES = new Set(["react", "react-ts"]);
+const JSX_FILE_RE = /\.(jsx?|tsx)$/;
+// Matches only forms that bind the `React` identifier:
+//   import React from "react"
+//   import React, { ... } from "react"
+//   import * as React from "react"
+const REACT_DEFAULT_IMPORT_RE =
+  /^\s*import\s+(?:React\b(?:\s*,\s*\{[^}]*\})?|\*\s+as\s+React\b)\s+from\s+['"]react['"]/m;
+const HAS_JSX_RE = /<[A-Za-z][\w.]*[\s/>]/;
+const USES_REACT_NAMESPACE_RE = /\bReact\./;
+
+function injectReactImports(
+  files: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [path, code] of Object.entries(files)) {
+    const needsReact =
+      JSX_FILE_RE.test(path) &&
+      (HAS_JSX_RE.test(code) || USES_REACT_NAMESPACE_RE.test(code)) &&
+      !REACT_DEFAULT_IMPORT_RE.test(code);
+    result[path] = needsReact ? `import React from "react";\n${code}` : code;
+  }
+  return result;
+}
+
 function ensureEntryFiles(
   files: Record<string, string>,
   template: string,
 ): Record<string, string> {
   const entries = ENTRY_FILES[template];
-  if (!entries) return files;
+  const base = REACT_IMPORT_TEMPLATES.has(template)
+    ? injectReactImports(files)
+    : files;
+
+  if (!entries) return base;
 
   const missing: Record<string, string> = {};
   for (const [path, code] of Object.entries(entries)) {
-    if (!(path in files)) {
+    if (!(path in base)) {
       missing[path] = code;
     }
   }
 
-  if (Object.keys(missing).length === 0) return files;
-  return { ...files, ...missing };
+  if (Object.keys(missing).length === 0) return base;
+  return { ...base, ...missing };
 }
 
 /* ── WebContainer content (for nextjs/node-server/vite templates) ── */
 
 const WEBCONTAINER_TEMPLATES = new Set(["nextjs", "node-server", "vite"]);
 
-function WebContainerContent({ artifact, onClose, warnings }: ArtifactPanelProps) {
+function WebContainerContent({
+  artifact,
+  onClose,
+  warnings,
+}: ArtifactPanelProps) {
   const { resolvedTheme } = useTheme();
   const [tab, setTab] = useState<"code" | "preview">("preview");
-  const [activeFile, setActiveFile] = useState(Object.keys(artifact.files)[0] ?? "");
+  const [activeFile, setActiveFile] = useState(
+    Object.keys(artifact.files)[0] ?? "",
+  );
   const [files, setFiles] = useState(artifact.files);
   const fileCount = Object.keys(files).length;
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,10 +544,18 @@ function WebContainerContent({ artifact, onClose, warnings }: ArtifactPanelProps
         <FileDropdown
           files={Object.keys(files)}
           activeFile={activeFile}
-          onSelect={(path) => { setActiveFile(path); setTab("code"); }}
+          onSelect={(path) => {
+            setActiveFile(path);
+            setTab("code");
+          }}
         />
-        <span className="text-muted-foreground text-xs hidden md:inline">·</span>
-        <Badge variant="outline" className="hidden md:inline-flex shrink-0 text-[10px] px-1.5">
+        <span className="text-muted-foreground text-xs hidden md:inline">
+          ·
+        </span>
+        <Badge
+          variant="outline"
+          className="hidden md:inline-flex shrink-0 text-[10px] px-1.5"
+        >
           {artifact.template}
         </Badge>
         <span className="text-muted-foreground text-xs">·</span>
@@ -498,7 +610,13 @@ function WebContainerContent({ artifact, onClose, warnings }: ArtifactPanelProps
         >
           <Download className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={onClose}
+          title="Close"
+        >
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -548,10 +666,14 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
 
   if (isStreaming) {
     const fileCount = Object.keys(props.artifact.files).length;
-    const totalChars = Object.values(props.artifact.files).reduce((sum, code) => sum + code.length, 0);
+    const totalChars = Object.values(props.artifact.files).reduce(
+      (sum, code) => sum + code.length,
+      0,
+    );
     const maxChars = 65_000; // ~16K tokens * ~4 chars/token
     const pct = Math.min((totalChars / maxChars) * 100, 100);
-    const barColor = pct >= 95 ? "bg-red-500" : pct >= 80 ? "bg-yellow-500" : "bg-green-500";
+    const barColor =
+      pct >= 95 ? "bg-red-500" : pct >= 80 ? "bg-yellow-500" : "bg-green-500";
 
     return (
       <div className="flex h-full flex-col items-center justify-center border-l bg-background gap-3">
@@ -573,10 +695,16 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
               />
             </div>
             <p className="text-[10px] text-muted-foreground">
-              {(totalChars / 1000).toFixed(1)}K / {(maxChars / 1000).toFixed(0)}K chars
+              {(totalChars / 1000).toFixed(1)}K / {(maxChars / 1000).toFixed(0)}
+              K chars
               {pct >= 80 && (
-                <span className={pct >= 95 ? " text-red-500 font-medium" : " text-yellow-500"}>
-                  {" "}— {pct >= 95 ? "may be truncated" : "approaching limit"}
+                <span
+                  className={
+                    pct >= 95 ? " text-red-500 font-medium" : " text-yellow-500"
+                  }
+                >
+                  {" "}
+                  — {pct >= 95 ? "may be truncated" : "approaching limit"}
                 </span>
               )}
             </p>

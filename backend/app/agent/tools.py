@@ -52,8 +52,30 @@ def _extract_text_from_html(html: str, max_chars: int = 3000) -> str:
     return text[:max_chars]
 
 
-async def _fetch_page_content(url: str, timeout: float = 5.0) -> str:
-    """Fetch a URL and extract text content. Returns empty string on failure."""
+DUP_FETCH_MARKER = (
+    "[Already fetched earlier in this conversation — reuse the content from the "
+    "previous tool result instead of re-fetching.]"
+)
+
+
+def _normalize_url(url: str) -> str:
+    return url.strip().rstrip("/").lower()
+
+
+async def _fetch_page_content(
+    url: str,
+    timeout: float = 5.0,
+    cache: Dict[str, str] = None,
+) -> str:
+    """Fetch a URL and extract text content. Returns empty string on failure.
+
+    If `cache` is provided and already contains this URL, returns a short
+    marker instead of the full content so duplicate fetches don't bloat context.
+    """
+    key = _normalize_url(url) if url else ""
+    if cache is not None and key and key in cache:
+        logger.info(f"Dedup hit: skipping re-fetch of {url}")
+        return DUP_FETCH_MARKER
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
             resp = await client.get(
@@ -63,14 +85,20 @@ async def _fetch_page_content(url: str, timeout: float = 5.0) -> str:
                 },
             )
             if resp.status_code == 200:
-                return _extract_text_from_html(resp.text)
+                content = _extract_text_from_html(resp.text)
+                if cache is not None and key and content:
+                    cache[key] = content
+                return content
     except Exception as e:
         logger.debug(f"Failed to fetch {url}: {e}")
     return ""
 
 
 async def tool_search_web(
-    query: str, max_results: int = 3, fetch_top: int = 1
+    query: str,
+    max_results: int = 3,
+    fetch_top: int = 1,
+    cache: Dict[str, str] = None,
 ) -> List[Dict[str, Any]]:
     """Search the web and fetch content from top results for fresh data."""
     try:
@@ -89,7 +117,7 @@ async def tool_search_web(
 
         # Fetch actual page content for top results
         if i < fetch_top and entry["url"]:
-            page_content = await _fetch_page_content(entry["url"])
+            page_content = await _fetch_page_content(entry["url"], cache=cache)
             if page_content:
                 entry["content"] = page_content
                 logger.info(f"Fetched {len(page_content)} chars from {entry['url']}")

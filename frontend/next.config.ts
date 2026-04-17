@@ -6,21 +6,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // All pages need COEP credentialless for WebContainer iframe to work
-        source: "/:path*",
-        headers: [
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "credentialless",
-          },
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-        ],
-      },
-      {
-        // Sandbox needs strict require-corp for SharedArrayBuffer
+        // Only the WebContainer popup route is cross-origin-isolated.
+        // Main app routes stay header-free so Sandpack's cross-origin
+        // bundler iframe isn't blocked by COEP.
         source: "/sandbox",
         headers: [
           {

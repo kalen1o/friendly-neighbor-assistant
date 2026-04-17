@@ -270,52 +270,11 @@ User <-> Next.js UI <-> FastAPI Backend
 
 ## Roadmap
 
-- [x] Project scaffolding, Docker, Makefile
-- [x] Database schema + Alembic migrations (32 migrations)
-- [x] AI provider integration (Anthropic + OpenAI + any compatible API)
-- [x] Basic chat with SSE streaming and auto-titles
-- [x] Multi-conversation support
-- [x] Document upload with background processing
-- [x] Semantic chunking with header-aware splitting (upgraded from paragraph-based)
-- [x] Vector embeddings + pgvector retrieval
-- [x] Web search with page content fetching
-- [x] Source attribution in UI
-- [x] Skill system with registry, built-in skills, and management UI
-- [x] Hook system — pre/post-action callbacks
-- [x] MCP integration — connect external tools via Model Context Protocol
-- [x] User authentication (JWT + refresh tokens)
-- [x] Chat sharing (read-only links)
-- [x] Artifacts (React/HTML live rendering)
-- [x] Vision & file attachments
-- [x] Analytics dashboard (personal + admin)
-- [x] Full-text search across conversations
-- [x] Conversation export (Markdown, PDF)
-- [x] User memories (context across conversations)
-- [x] Conversation folders (nested, drag-and-drop, customizable)
-- [x] Multi-model switching (project models, user models, per-chat selection)
-- [x] Admin dashboard (user management, audit log, quotas)
-- [x] Mobile-responsive polish (swipe gestures, safe areas, animations)
-- [x] Browser push notifications (with first-login prompt)
-- [x] Background LLM tasks — response generation survives navigation and page reload (message-level status tracking, server-driven sidebar indicators, toast notifications)
-- [x] OAuth/SSO login (Google, GitHub) — OAuth2 authorization code flow with account linking by email
-- [x] RAG enhancements — hybrid search (Postgres FTS + RRF), Cohere reranking, inline citations, semantic chunking, configurable pipeline, auto-KB injection
-- [x] Webhook integrations — Slack, Discord, generic URL (outbound notifications + inbound triggers)
-- [x] Delete account — user self-service account deletion with full data cleanup
+The roadmap, completed milestones, planned features, and the multi-agent evolution track are maintained in a single document:
 
-**Multi-Agent Evolution** (Level 3 → Level 4):
-- [ ] Evaluator-optimizer — reviewer agent checks response quality before sending (same LLM, different prompt); opt-in via `evaluate: true` in skill frontmatter; use cheaper model for evaluation
-- [ ] Plan-validate-execute — planner agent generates step list, validator checks for invalid tools/unreasonable steps, executor runs the validated plan
-- [ ] Specialist worker agents — route to domain-specific agents (Research, Code, Writing, Admin) each with tailored system prompts; `agent:` field in skill frontmatter
-- [ ] Coder-reviewer for artifacts — reviewer agent checks generated React/HTML code for correctness and safety before rendering
-- [ ] Orchestrator-workers — central orchestrator decomposes complex requests into subtasks, delegates to specialist workers (parallel where possible), synthesizes final output
+➡ **[`docs/superpowers/specs/2026-04-15-artifact-roadmap.md`](docs/superpowers/specs/2026-04-15-artifact-roadmap.md)**
 
-**Additional Features**:
-- [x] Prompt chaining + Parallelization — workflow engine with sequential chaining, parallel execution, per-step model override, retry-then-stop error handling
-- [x] Agent-computer interface — per-tool typed parameter schemas with validation and multi-parameter support
-- [ ] Scheduled agents — recurring tasks
-- [ ] Artifact enhancements — multi-file project generation (Sandpack), Mermaid diagrams, SVG, folder organization
-- [ ] CI/CD & deployment pipeline
-- [ ] Voice input/output
+Update that file whenever scope, status, or priorities change — do not duplicate roadmap content here.
 
 ## License
 

@@ -16,6 +16,8 @@ build/
 .venv/
 venv/
 env/
+.cache/
+.local/
 
 # ── Node / Next.js ──
 node_modules/

@@ -18,7 +18,9 @@ async def execute_web_search(
     query: str, db, settings: Settings, max_results: int = 3, **kwargs
 ) -> Dict[str, Any]:
     """Execute web search skill."""
-    results = await tool_search_web(query, max_results=max_results)
+    results = await tool_search_web(
+        query, max_results=max_results, cache=kwargs.get("fetch_cache")
+    )
     if not results:
         return {"content": "No web results found.", "sources": []}
 
@@ -67,7 +69,9 @@ async def execute_web_reader(
     target_url = url or query
     if not target_url:
         return {"content": "No URL provided", "sources": []}
-    content = await _fetch_page_content(target_url, timeout=10.0)
+    content = await _fetch_page_content(
+        target_url, timeout=10.0, cache=kwargs.get("fetch_cache")
+    )
     if not content:
         return {
             "content": "Failed to fetch content from {}".format(target_url),
@@ -175,6 +179,182 @@ async def execute_summarize(
     return {"content": summary, "sources": []}
 
 
+# --- Vietnamese lunar calendar ----------------------------------------------
+
+# Can-Chi (Sexagenary cycle) — Vietnamese transliteration
+_CAN = ["Giáp", "Ất", "Bính", "Đinh", "Mậu", "Kỷ", "Canh", "Tân", "Nhâm", "Quý"]
+_CHI = [
+    "Tý", "Sửu", "Dần", "Mão", "Thìn", "Tỵ",
+    "Ngọ", "Mùi", "Thân", "Dậu", "Tuất", "Hợi",
+]
+
+
+def _can_chi_year(lunar_year: int) -> str:
+    return "{} {}".format(
+        _CAN[(lunar_year + 6) % 10],
+        _CHI[(lunar_year + 8) % 12],
+    )
+
+
+_LUNAR_YEAR_MIN = 1900
+_LUNAR_YEAR_MAX = 2199
+
+
+async def execute_lunar_convert(
+    direction: str = "today",
+    year: int = 0,
+    month: int = 0,
+    day: int = 0,
+    is_leap: bool = False,
+    timezone: str = "Asia/Ho_Chi_Minh",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Deterministic Vietnamese lunar ↔ solar calendar conversion.
+
+    Uses the `lunarcalendar` library, which implements the Ho Ngoc Duc
+    algorithm — the same math used by VN government and major calendar sites.
+    """
+    try:
+        from lunarcalendar import Converter, Solar, Lunar
+        from lunarcalendar.converter import DateNotExist
+    except ImportError as e:
+        return {
+            "content": "Lunar calendar library unavailable: {}".format(e),
+            "sources": [],
+        }
+
+    def _fmt_result(solar, lunar, direction_used: str) -> Dict[str, Any]:
+        import datetime as _dt
+
+        try:
+            weekday = _dt.date(solar.year, solar.month, solar.day).strftime("%A")
+        except Exception:
+            weekday = ""
+        lunar_label = "{:02d}/{:02d}/{} âm lịch{}".format(
+            lunar.day,
+            lunar.month,
+            lunar.year,
+            " (tháng nhuận)" if lunar.isleap else "",
+        )
+        solar_label = "{:02d}/{:02d}/{} dương lịch".format(
+            solar.day, solar.month, solar.year
+        )
+        summary = "{} = {} (năm {}, {})".format(
+            solar_label, lunar_label, _can_chi_year(lunar.year), weekday
+        )
+        return {
+            "content": summary,
+            "sources": [
+                {
+                    "type": "calendar",
+                    "title": "Vietnamese lunar calendar conversion",
+                    "solar": {
+                        "year": solar.year,
+                        "month": solar.month,
+                        "day": solar.day,
+                    },
+                    "lunar": {
+                        "year": lunar.year,
+                        "month": lunar.month,
+                        "day": lunar.day,
+                        "is_leap_month": bool(lunar.isleap),
+                    },
+                    "can_chi_year": _can_chi_year(lunar.year),
+                    "weekday": weekday,
+                    "direction": direction_used,
+                }
+            ],
+        }
+
+    direction = (direction or "today").strip().lower()
+
+    if direction == "today":
+        import datetime as _dt
+
+        try:
+            import zoneinfo
+
+            now = _dt.datetime.now(zoneinfo.ZoneInfo(timezone))
+        except Exception:
+            now = _dt.datetime.now()
+            timezone = "UTC"
+        solar = Solar(now.year, now.month, now.day)
+        lunar = Converter.Solar2Lunar(solar)
+        return _fmt_result(solar, lunar, "today")
+
+    if direction == "solar_to_lunar":
+        if not (1900 <= year <= 2199) or not (1 <= month <= 12) or not (1 <= day <= 31):
+            return {
+                "content": "Invalid solar date: year={}, month={}, day={}. Year must be 1900–2199.".format(
+                    year, month, day
+                ),
+                "sources": [],
+            }
+        try:
+            solar = Solar(year, month, day)
+            lunar = Converter.Solar2Lunar(solar)
+        except Exception as e:
+            return {
+                "content": "Could not convert solar date {}/{}/{}: {}".format(
+                    day, month, year, e
+                ),
+                "sources": [],
+            }
+        return _fmt_result(solar, lunar, "solar_to_lunar")
+
+    if direction == "lunar_to_solar":
+        if not (_LUNAR_YEAR_MIN <= year <= _LUNAR_YEAR_MAX) or not (1 <= month <= 12) or not (1 <= day <= 30):
+            return {
+                "content": "Invalid lunar date: year={}, month={}, day={}. Year must be {}–{}, day 1–30.".format(
+                    year, month, day, _LUNAR_YEAR_MIN, _LUNAR_YEAR_MAX
+                ),
+                "sources": [],
+            }
+        try:
+            lunar = Lunar(year, month, day, isleap=bool(is_leap))
+            solar = Converter.Lunar2Solar(lunar)
+        except DateNotExist:
+            # Day doesn't exist in this lunar month (month has only 29 days).
+            # Probe for the last valid day so the LLM can relay a useful answer.
+            last_day_info = ""
+            for probe in range(29, 0, -1):
+                try:
+                    probe_lunar = Lunar(year, month, probe, isleap=bool(is_leap))
+                    probe_solar = Converter.Lunar2Solar(probe_lunar)
+                    last_day_info = (
+                        " Tháng {} âm lịch năm {} chỉ có {} ngày — ngày cuối là "
+                        "{}/{}/{} âm = {:02d}/{:02d}/{} dương.".format(
+                            month, year, probe,
+                            probe, month, year,
+                            probe_solar.day, probe_solar.month, probe_solar.year,
+                        )
+                    )
+                    break
+                except DateNotExist:
+                    continue
+            return {
+                "content": "Ngày {}/{}/{} âm lịch không tồn tại.{}".format(
+                    day, month, year, last_day_info
+                ),
+                "sources": [],
+            }
+        except Exception as e:
+            return {
+                "content": "Could not convert lunar date {}/{}/{}: {}".format(
+                    day, month, year, e
+                ),
+                "sources": [],
+            }
+        return _fmt_result(solar, lunar, "lunar_to_solar")
+
+    return {
+        "content": "Unknown direction '{}'. Use 'today', 'solar_to_lunar', or 'lunar_to_solar'.".format(
+            direction
+        ),
+        "sources": [],
+    }
+
+
 def register_all_executors(registry) -> None:
     """Register all built-in skill executors with the registry."""
     registry.register_executor("web_search", execute_web_search)
@@ -183,6 +363,7 @@ def register_all_executors(registry) -> None:
     registry.register_executor("datetime_info", execute_datetime_info)
     registry.register_executor("calculate", execute_calculate)
     registry.register_executor("summarize", execute_summarize)
+    registry.register_executor("lunar_convert", execute_lunar_convert)
     # Knowledge skills (coding_assistant, writing_assistant) don't need executors
     # -- they modify the system prompt, not run code
 

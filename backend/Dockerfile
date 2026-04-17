@@ -9,7 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Long timeout + retries so a slow mirror or a stalled TCP read doesn't kill the build
+ENV PIP_DEFAULT_TIMEOUT=300 PIP_RETRIES=5
+RUN pip install --no-cache-dir --prefix=/install --timeout=300 --retries=5 -r requirements.txt
 
 # ── Stage 2: Production image ──
 FROM python:3.12-slim

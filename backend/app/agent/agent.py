@@ -161,6 +161,43 @@ TOOL_PARAMETERS = {
         },
         "required": ["text"],
     },
+    "lunar_convert": {
+        "type": "object",
+        "properties": {
+            "direction": {
+                "type": "string",
+                "enum": ["today", "solar_to_lunar", "lunar_to_solar"],
+                "description": (
+                    "'today' for today's lunar date; 'solar_to_lunar' to convert a "
+                    "Gregorian date to âm lịch; 'lunar_to_solar' to convert a lunar "
+                    "date to dương lịch."
+                ),
+            },
+            "year": {
+                "type": "integer",
+                "description": "Year. Gregorian for solar_to_lunar; lunar year for lunar_to_solar. Range 1900–2199.",
+            },
+            "month": {
+                "type": "integer",
+                "description": "Month 1–12.",
+            },
+            "day": {
+                "type": "integer",
+                "description": "Day 1–31 (solar) or 1–30 (lunar).",
+            },
+            "is_leap": {
+                "type": "boolean",
+                "description": "For lunar_to_solar only: true if the lunar month is a leap (nhuận) month. Default false.",
+                "default": False,
+            },
+            "timezone": {
+                "type": "string",
+                "description": "For 'today' only. IANA timezone, default Asia/Ho_Chi_Minh.",
+                "default": "Asia/Ho_Chi_Minh",
+            },
+        },
+        "required": ["direction"],
+    },
 }
 
 # Default fallback for tools without a specific schema
@@ -237,6 +274,9 @@ async def create_tool_executor(
     """
 
     collected_sources: List[Dict[str, Any]] = []
+    # Per-request URL cache. Dedup blocks same-URL refetches within one message
+    # so duplicate tool calls don't bloat the context window.
+    fetch_cache: Dict[str, str] = {}
 
     async def executor(tool_name: str, arguments: Dict[str, Any]) -> str:
         skill_executor = registry.get_executor(tool_name)
@@ -244,7 +284,7 @@ async def create_tool_executor(
             return "Tool '{}' not found".format(tool_name)
 
         # Inject on_progress for workflow executors
-        extra_kwargs = {}
+        extra_kwargs = {"fetch_cache": fetch_cache}
         skill = registry.get_skill(tool_name)
         if skill and skill.skill_type == "workflow" and on_action:
             extra_kwargs["on_progress"] = on_action
@@ -288,4 +328,5 @@ async def create_tool_executor(
             return "Tool error: {}".format(str(e))
 
     executor.collected_sources = collected_sources
+    executor.fetch_cache = fetch_cache
     return executor

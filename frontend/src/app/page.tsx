@@ -4,14 +4,15 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-guard";
 import { EmptyState } from "@/components/chat-messages";
 import { ChatInput, type ChatInputHandle } from "@/components/chat-input";
-import { createChat, type ChatMode } from "@/lib/api";
-import { useRef } from "react";
+import { createChat, updateChat, type ChatMode } from "@/lib/api";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 export default function Home() {
   const router = useRouter();
   const { requireAuth } = useAuth();
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
 
   const handleSend = async (content: string, mode: ChatMode = "balanced") => {
     const authed = await requireAuth();
@@ -21,6 +22,9 @@ export default function Home() {
     }
     try {
       const chat = await createChat();
+      if (selectedModelId) {
+        await updateChat(chat.id, undefined, undefined, selectedModelId);
+      }
       router.push(`/chat/${chat.id}?q=${encodeURIComponent(content)}&mode=${mode}`);
     } catch {
       toast.error("Failed to create chat");
@@ -38,7 +42,14 @@ export default function Home() {
       </div>
 
       <div className="pt-6">
-        <ChatInput ref={chatInputRef} onSend={handleSend} disabled={false} transparent />
+        <ChatInput
+          ref={chatInputRef}
+          onSend={handleSend}
+          disabled={false}
+          transparent
+          chatModelId={selectedModelId}
+          onModelChange={(modelId) => setSelectedModelId(modelId)}
+        />
       </div>
 
       {/* Bottom spacer */}

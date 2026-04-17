@@ -52,6 +52,7 @@ export default function SandboxPage() {
   const termRef = useRef<Terminal | null>(null);
   const processRef = useRef<{ kill: () => void } | null>(null);
   const shellWriterRef = useRef<WritableStreamDefaultWriter | null>(null);
+  const channelRef = useRef<BroadcastChannel | null>(null);
   const [phase, setPhase] = useState<Phase>("waiting");
   const [statusMessage, setStatusMessage] = useState("Waiting for files...");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export default function SandboxPage() {
   function sendStatus(p: Phase, msg: string) {
     setPhase(p);
     setStatusMessage(msg);
-    window.parent.postMessage({ type: "status", phase: p, message: msg }, "*");
+    channelRef.current?.postMessage({ type: "status", phase: p, message: msg });
   }
 
   useEffect(() => {
@@ -171,7 +172,7 @@ export default function SandboxPage() {
         console.log("[sandbox] server-ready event: port=", _port, "url=", url);
         setPreviewUrl(url);
         sendStatus("ready", "Dev server ready");
-        window.parent.postMessage({ type: "preview-url", url }, "*");
+        channelRef.current?.postMessage({ type: "preview-url", url });
       });
 
       // Patch files/deps based on template
@@ -247,7 +248,14 @@ export default function SandboxPage() {
   }
 
   useEffect(() => {
-    async function handleMessage(event: MessageEvent) {
+    const params = new URLSearchParams(window.location.search);
+    const channelName = params.get("channel");
+    if (!channelName) return;
+
+    const channel = new BroadcastChannel(channelName);
+    channelRef.current = channel;
+
+    channel.onmessage = async (event: MessageEvent) => {
       const { data } = event;
       if (!data?.type) return;
 
@@ -264,10 +272,15 @@ export default function SandboxPage() {
           await spawnProcess(cmd);
         }
       }
-    }
+    };
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    // Tell the opener we're listening so it can send the mount payload.
+    channel.postMessage({ type: "sandbox-ready" });
+
+    return () => {
+      channel.close();
+      channelRef.current = null;
+    };
   }, []);
 
   const phaseColors: Record<Phase, string> = {
