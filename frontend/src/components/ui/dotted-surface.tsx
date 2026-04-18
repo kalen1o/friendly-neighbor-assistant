@@ -150,6 +150,8 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
             count,
         };
 
+        const container = containerRef.current;
+
         // Cleanup function
         return () => {
             window.removeEventListener('resize', handleResize);
@@ -171,8 +173,8 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
 
                 sceneRef.current.renderer.dispose();
 
-                if (containerRef.current && sceneRef.current.renderer.domElement) {
-                    containerRef.current.removeChild(
+                if (container && sceneRef.current.renderer.domElement) {
+                    container.removeChild(
                         sceneRef.current.renderer.domElement,
                     );
                 }

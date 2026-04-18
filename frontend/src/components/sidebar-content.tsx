@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Plus, FileText, Zap, Anchor, Plug, Clock, Loader2, FolderPlus } from "lucide-react";
@@ -424,7 +425,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
       <div className="p-3">
         <div className="mb-3 flex items-center justify-between px-2">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg" />
+            <Image src="/small-logo.png" alt="FN" width={28} height={28} className="rounded-lg" />
             <div>
               <h1 className="text-lg font-bold leading-tight tracking-tight">
                 Friendly Neighbor

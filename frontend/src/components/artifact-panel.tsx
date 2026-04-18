@@ -182,11 +182,14 @@ function SandpackErrorOverlay({
     bundlerError ??
     (sandpack.status === "idle" && sandpack.error ? sandpack.error.message : null);
 
+  const [prevError, setPrevError] = useState<string | null>(null);
+  if (error !== prevError) {
+    setPrevError(error);
+    if (!error) setAutoFixing(false);
+  }
+
   useEffect(() => {
-    if (!error) {
-      setAutoFixing(false);
-      return;
-    }
+    if (!error) return;
     // Ignore streaming placeholders — the artifact isn't committed yet.
     if (artifactId.startsWith("streaming-")) return;
     const key = `${artifactId}::${error.slice(0, 200)}`;

@@ -39,6 +39,7 @@ export function AddServerDialog({ onCreated }: { onCreated: () => void }) {
     resolver: zodResolver(serverSchema),
     defaultValues: { name: "", url: "", description: "", auth_type: "none", auth_token: "", auth_header: "" },
   });
+  // eslint-disable-next-line react-hooks/incompatible-library
   const authType = watch("auth_type");
 
   const onSubmit = async (data: ServerFormData) => {
@@ -133,6 +134,7 @@ export function EditServerDialog({ server, onUpdated }: { server: McpServerOut; 
       auth_header: "",
     },
   });
+  // eslint-disable-next-line react-hooks/incompatible-library
   const authType = watch("auth_type");
 
   const onSubmit = async (data: ServerFormData) => {

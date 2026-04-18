@@ -131,6 +131,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-2 py-1"
               >
                 {f.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={f.previewUrl}
                     alt={f.filename}

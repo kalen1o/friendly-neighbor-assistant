@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import Image from "next/image";
 import { MessageBubble } from "@/components/message-bubble";
 import { Badge } from "@/components/ui/badge";
 import { Globe, FileText, Pencil, Code, Sparkles, Calculator, Loader2 } from "lucide-react";
@@ -20,7 +21,7 @@ const SUGGESTIONS = [
 export function EmptyState({ onSuggestionClick }: { onSuggestionClick: (content: string, cursorOffset?: number) => void }) {
   return (
     <div className="flex flex-col items-center">
-      <img src="/small-logo.png" alt="Friendly Neighbor" className="mb-3 h-14 w-14 rounded-2xl" />
+      <Image src="/small-logo.png" alt="Friendly Neighbor" width={56} height={56} className="mb-3 rounded-2xl" />
       <h2 className="mb-1 text-lg font-semibold">What can I help you with?</h2>
       <p className="mb-8 text-sm text-muted-foreground">
         Ask me anything, or try one of these

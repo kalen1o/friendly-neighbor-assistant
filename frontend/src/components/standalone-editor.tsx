@@ -57,6 +57,7 @@ export function StandaloneEditor({ code, filePath, onChange, theme = "dark" }: S
       viewRef.current?.destroy();
       viewRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, theme]);
 
   useEffect(() => {

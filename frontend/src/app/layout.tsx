@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import Image from "next/image";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
@@ -108,7 +109,7 @@ export default function RootLayout({
                     </SheetContent>
                   </Sheet>
                   <Link href="/" className="ml-2 flex items-center gap-1.5">
-                    <img src="/small-logo.png" alt="FN" className="h-5 w-5 rounded" />
+                    <Image src="/small-logo.png" alt="FN" width={20} height={20} className="rounded" />
                     <span className="text-sm font-semibold">Friendly Neighbor</span>
                   </Link>
                   <div className="flex-1" />

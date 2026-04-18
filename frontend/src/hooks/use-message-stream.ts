@@ -400,6 +400,7 @@ export function useMessageStream(chatId: string) {
     } finally {
       setChatLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, mapMessages, router]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -596,7 +597,7 @@ export function useMessageStream(chatId: string) {
         artCtx
       );
     },
-    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll, activeArtifact]
+    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll, activeArtifact, artifacts]
   );
 
   const fixArtifactError = useCallback((error: string) => {

@@ -262,6 +262,7 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
                 <div className="mb-2 flex flex-wrap gap-2">
                   {files.map((f, i) =>
                     f.type.startsWith("image/") ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         key={i}
                         src={f.url}

@@ -281,6 +281,7 @@ export default function SandboxPage() {
       channel.close();
       channelRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const phaseColors: Record<Phase, string> = {

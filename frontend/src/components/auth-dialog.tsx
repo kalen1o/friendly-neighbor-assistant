@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -174,6 +175,7 @@ export function AuthDialog({
     defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedPassword = registerForm.watch("password");
 
   const handleLogin = async (data: LoginForm) => {
@@ -214,7 +216,7 @@ export function AuthDialog({
       <DialogContent className="sm:max-w-[400px] p-0 gap-0 overflow-hidden">
         {/* Header */}
         <div className="flex flex-col items-center px-6 pt-8 pb-2">
-          <img src="/small-logo.png" alt="Friendly Neighbor" className="mb-3 h-12 w-12 rounded-2xl" />
+          <Image src="/small-logo.png" alt="Friendly Neighbor" width={48} height={48} className="mb-3 rounded-2xl" />
           <h2 className="text-lg font-semibold">
             {mode === "login" ? "Welcome back" : "Create your account"}
           </h2>

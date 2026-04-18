@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { Plus, FileText, Zap, Anchor, Plug, PanelLeft, PanelLeftClose, BarChart3, Clock } from "lucide-react";
 import { useAuth } from "@/components/auth-guard";
@@ -55,13 +56,13 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
       <div className={cn("flex items-center py-3", collapsed ? "justify-center px-0" : "justify-between px-5")}>
         {collapsed ? (
           <Button variant="ghost" size="icon" onClick={onToggle} title="Expand sidebar">
-            <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg transition-opacity group-hover/sidebar:opacity-0" />
+            <Image src="/small-logo.png" alt="FN" width={28} height={28} className="rounded-lg transition-opacity group-hover/sidebar:opacity-0" />
             <PanelLeft className="absolute h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover/sidebar:opacity-100" />
           </Button>
         ) : (
           <>
             <Link href="/" className="flex items-center gap-2">
-              <img src="/small-logo.png" alt="FN" className="h-7 w-7 rounded-lg" />
+              <Image src="/small-logo.png" alt="FN" width={28} height={28} className="rounded-lg" />
               <div className="overflow-hidden">
                 <h1 className="truncate text-lg font-bold leading-tight tracking-tight">Friendly Neighbor</h1>
                 <p className="truncate text-xs text-muted-foreground">Your AI assistant</p>
