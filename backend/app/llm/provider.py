@@ -100,10 +100,27 @@ SYSTEM_PROMPT = (
     "- The dependencies object maps npm package names to version strings. Use {} if none.\n"
     "- Even simple single-component UIs use this format (one file is fine).\n"
     "- Always include the artifact tag when generating UI code.\n"
+    "- Emit exactly ONE <artifact> tag per response. Do not include a preliminary version followed by a refined version; pick your best answer and emit it once. Only emit multiple artifact tags if the user explicitly asks for several separate projects.\n"
     "- Keep artifacts concise — prefer inline styles or a single CSS file over many small files.\n"
     "- You can still include explanation text outside the artifact tag.\n"
     '- The JSON must be valid. Escape all special characters in strings properly (newlines as \\n, quotes as \\", backslashes as \\\\).'
-    "\n\nFull-stack templates (use ONLY when the user explicitly asks for these frameworks or needs server-side features):\n"
+    "\n\nEditing an existing artifact (EXTREMELY IMPORTANT):\n"
+    '- Whenever the context contains "[Active artifact context —" with an Id, you are almost always modifying that artifact. '
+    'You MUST include that exact id on the artifact tag: <artifact id="art-xyz" type="project" title="..." template="...">. '
+    "Forgetting the id will create a duplicate artifact and lose the user's project — this is a hard requirement, not a suggestion.\n"
+    '- In edit mode, emit ONLY the files you are changing. Unchanged files are preserved automatically — do not repeat them.\n'
+    '- To delete a file, add "deleted_files": ["/path/to/file"] in the manifest alongside "files".\n'
+    '- Keep the same id, template, and title unless the user explicitly asks to rename.\n'
+    "- Edit mode example — renaming a button label in one file of a multi-file project:\n"
+    '  <artifact id="art-abc123" type="project" title="Landing Page" template="react">\n'
+    "  {\n"
+    '    "files": {\n'
+    '      "/Hero.tsx": "export default function Hero() { return <button>BUILD faster</button>; }"\n'
+    "    }\n"
+    "  }\n"
+    "  </artifact>\n"
+    "- Only omit the id (treat as a brand-new artifact) when the user is asking for something distinct from the current project, not a modification of it.\n"
+    "\nFull-stack templates (use ONLY when the user explicitly asks for these frameworks or needs server-side features):\n"
     '- template="nextjs": Next.js App Router. Files: /next.config.js, /app/layout.tsx, /app/page.tsx. Include dependencies like "next", "react", "react-dom".\n'
     '- template="node-server": Express or Fastify API server. Entry file: /server.js or /server.ts. No browser UI needed.\n'
     '- template="vite": Vite-based frontend. Files: /vite.config.ts, /index.html, /src/main.tsx. For projects needing real npm packages that don\'t work in the browser bundler.\n'

@@ -4,13 +4,18 @@ import json
 import re
 from typing import List, Tuple
 
+# Attributes may appear in any order. The content must be followed by </artifact>.
 _ARTIFACT_PATTERN = re.compile(
-    r'<artifact\s+type="(?P<type>[^"]+)"\s+title="(?P<title>[^"]+)"'
-    r'(?:\s+template="(?P<template>[^"]+)")?\s*>\s*\n?'
+    r"<artifact(?P<attrs>\s+[^>]*)>\s*\n?"
     r"(?P<content>.*?)"
     r"\s*</artifact>",
     re.DOTALL,
 )
+_ATTR_PATTERN = re.compile(r'(\w+)="([^"]*)"')
+
+
+def _parse_attrs(attrs_str: str) -> dict:
+    return {m.group(1): m.group(2) for m in _ATTR_PATTERN.finditer(attrs_str)}
 
 
 def parse_artifacts(text: str) -> Tuple[str, List[dict]]:
@@ -18,14 +23,15 @@ def parse_artifacts(text: str) -> Tuple[str, List[dict]]:
 
     Returns:
         (cleaned_text, list of artifact dicts)
-        Each artifact: {type, title, template, files, dependencies}
+        Each artifact: {id?, type, title, template, files, dependencies, deleted_files?}
         Artifacts with invalid JSON are skipped.
     """
     artifacts = []
 
     for match in _ARTIFACT_PATTERN.finditer(text):
-        title = match.group("title")
-        template = match.group("template") or "react"
+        attrs = _parse_attrs(match.group("attrs"))
+        title = attrs.get("title", "Untitled")
+        template = attrs.get("template") or "react"
         content = match.group("content").strip()
 
         try:
@@ -33,15 +39,19 @@ def parse_artifacts(text: str) -> Tuple[str, List[dict]]:
         except (json.JSONDecodeError, ValueError):
             continue
 
-        artifacts.append(
-            {
-                "type": "project",
-                "title": title,
-                "template": template,
-                "files": manifest.get("files", {}),
-                "dependencies": manifest.get("dependencies", {}),
-            }
-        )
+        art = {
+            "type": "project",
+            "title": title,
+            "template": template,
+            "files": manifest.get("files", {}),
+            "dependencies": manifest.get("dependencies", {}),
+        }
+        if attrs.get("id"):
+            art["id"] = attrs["id"]
+        deleted = manifest.get("deleted_files")
+        if isinstance(deleted, list) and deleted:
+            art["deleted_files"] = [p for p in deleted if isinstance(p, str)]
+        artifacts.append(art)
 
     cleaned = _ARTIFACT_PATTERN.sub("", text).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)

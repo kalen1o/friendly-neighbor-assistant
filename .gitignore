@@ -47,6 +47,9 @@ uploads/
 htmlcov/
 .pytest_cache/
 frontend/tests/screenshots/
+frontend/tests/*.png
+frontend/tests/debug-autofix.spec.ts
+frontend/tests/repro-edit.spec.ts
 frontend/test-results/
 frontend/playwright-report/
 

@@ -133,15 +133,73 @@ function CopyActiveFile() {
   );
 }
 
-/* ── Error overlay with Fix button ── */
+/* ── Error overlay with auto-fix ── */
 
-function SandpackErrorOverlay({ onFix }: { onFix: (error: string) => void }) {
-  const { sandpack } = useSandpack();
+// Auto-fires onFix once per (artifactId, error) pair after a short debounce.
+// The manual button remains as a fallback (for re-tries).
+function SandpackErrorOverlay({
+  artifactId,
+  onFix,
+}: {
+  artifactId: string;
+  onFix: (error: string) => void;
+}) {
+  const { sandpack, listen } = useSandpack();
+  const autoFiredRef = useRef<Set<string>>(new Set());
+  const [autoFixing, setAutoFixing] = useState(false);
+  const [bundlerError, setBundlerError] = useState<string | null>(null);
 
+  // Stash onFix in a ref so it's not an effect dep — parents pass inline
+  // arrows, which would otherwise cancel the debounced timer on every render.
+  const onFixRef = useRef(onFix);
+  useEffect(() => {
+    onFixRef.current = onFix;
+  }, [onFix]);
+
+  // Bundler module-resolution / compile errors arrive via `listen` messages
+  // (action: "show-error"), not on sandpack.error — so we subscribe directly.
+  useEffect(() => {
+    const unsubscribe = listen((msg: unknown) => {
+      if (!msg || typeof msg !== "object") return;
+      const m = msg as Record<string, unknown>;
+      if (m.type === "action" && m.action === "show-error") {
+        const title = typeof m.title === "string" ? m.title : "";
+        const message = typeof m.message === "string" ? m.message : "";
+        const path = typeof m.path === "string" ? m.path : "";
+        const parts = [title, message, path && `at ${path}`].filter(Boolean);
+        setBundlerError(parts.join(" — "));
+      } else if (m.type === "start" || m.type === "compile") {
+        // New compile run — clear stale error; real ones will re-arrive.
+        setBundlerError(null);
+      }
+    });
+    return () => unsubscribe();
+  }, [listen]);
+
+  // Runtime errors still come through sandpack.error; prefer bundler errors
+  // (they fire for missing modules / parse errors).
   const error =
-    sandpack.status === "idle" && sandpack.error
-      ? sandpack.error.message
-      : null;
+    bundlerError ??
+    (sandpack.status === "idle" && sandpack.error ? sandpack.error.message : null);
+
+  useEffect(() => {
+    if (!error) {
+      setAutoFixing(false);
+      return;
+    }
+    // Ignore streaming placeholders — the artifact isn't committed yet.
+    if (artifactId.startsWith("streaming-")) return;
+    const key = `${artifactId}::${error.slice(0, 200)}`;
+    if (autoFiredRef.current.has(key)) return;
+    autoFiredRef.current.add(key);
+
+    // Debounce so we don't auto-fix a transient compile error that clears.
+    const timer = setTimeout(() => {
+      setAutoFixing(true);
+      onFixRef.current(error);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [error, artifactId]);
 
   if (!error) return null;
 
@@ -154,9 +212,15 @@ function SandpackErrorOverlay({ onFix }: { onFix: (error: string) => void }) {
         <pre className="mb-4 max-h-[200px] overflow-auto rounded bg-muted p-3 text-xs text-muted-foreground">
           {error}
         </pre>
-        <Button size="sm" variant="destructive" onClick={() => onFix(error)}>
-          Fix this
-        </Button>
+        {autoFixing ? (
+          <p className="text-xs text-muted-foreground">
+            Asking the assistant to fix this…
+          </p>
+        ) : (
+          <Button size="sm" variant="destructive" onClick={() => onFix(error)}>
+            Fix this
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -260,7 +324,7 @@ function SandpackContent({
 
       {/* Content */}
       <div className="relative flex flex-1 overflow-hidden">
-        {onFixError && <SandpackErrorOverlay onFix={onFixError} />}
+        {onFixError && <SandpackErrorOverlay artifactId={artifact.id} onFix={onFixError} />}
         {/* File explorer — hidden on narrow screens */}
         <div className="hidden md:block w-[150px] shrink-0 overflow-y-auto border-r">
           <SandpackFileExplorer />

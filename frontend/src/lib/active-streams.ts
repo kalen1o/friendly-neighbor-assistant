@@ -22,9 +22,9 @@ interface StreamCallbacks {
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
   onArtifact?: (artifact: ArtifactData) => void;
-  onArtifactStart?: (data: { title: string; template: string }) => void;
+  onArtifactStart?: (data: { id?: string; title: string; template: string }) => void;
   onArtifactFile?: (data: { path: string; code: string }) => void;
-  onArtifactEnd?: (data: { files: Record<string, string>; dependencies: Record<string, string> }) => void;
+  onArtifactEnd?: (data: { id?: string; files: Record<string, string>; dependencies: Record<string, string>; deleted_files?: string[] }) => void;
   onArtifactWarnings?: (data: { artifact_id: string; warnings: string[] }) => void;
   onWorkflow?: (steps: Array<{ name: string; status: string; parallel?: boolean }>) => void;
   onWorkflowStep?: (step: { name: string; status: string }) => void;
@@ -59,7 +59,7 @@ export function startStream(
   fileIds: string[],
   chatTitle: string,
   callbacks: StreamCallbacks,
-  artifactContext?: { files: Record<string, string>; template: string; title: string } | null
+  artifactContext?: { id?: string; files: Record<string, string>; template: string; title: string } | null
 ): void {
   // Abort existing stream for this chat
   const existing = streams.get(chatId);

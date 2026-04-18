@@ -53,6 +53,7 @@ export function useMessageStream(chatId: string) {
   const skillsUsedRef = useRef<SkillUsage[]>([]);
   const sendingRef = useRef(false);
   const streamingArtifactRef = useRef<{
+    id?: string;
     title: string;
     template: string;
     files: Record<string, string>;
@@ -201,17 +202,27 @@ export function useMessageStream(chatId: string) {
           setActiveArtifact(artifact);
         },
         onArtifactStart: (data) => {
+          // Edit mode: seed with the existing artifact's files so the panel
+          // doesn't flash empty while the LLM streams in just the changed files.
+          let seedFiles: Record<string, string> = {};
+          if (data.id) {
+            const base =
+              artifacts.find((a) => a.id === data.id) ??
+              (activeArtifact?.id === data.id ? activeArtifact : null);
+            if (base) seedFiles = { ...base.files };
+          }
           streamingArtifactRef.current = {
+            id: data.id,
             title: data.title,
             template: data.template,
-            files: {},
+            files: seedFiles,
           };
           const placeholder: ArtifactData = {
             id: `streaming-${Date.now()}`,
             type: "project",
             title: data.title,
             template: data.template,
-            files: {},
+            files: seedFiles,
             dependencies: {},
           };
           setActiveArtifact(placeholder);
@@ -227,7 +238,17 @@ export function useMessageStream(chatId: string) {
             };
           });
         },
-        onArtifactEnd: () => {
+        onArtifactEnd: (data) => {
+          if (data?.deleted_files && streamingArtifactRef.current) {
+            for (const path of data.deleted_files) {
+              delete streamingArtifactRef.current.files[path];
+            }
+            const filesCopy = { ...streamingArtifactRef.current.files };
+            setActiveArtifact((prev) => {
+              if (!prev || !prev.id.startsWith("streaming-")) return prev;
+              return { ...prev, files: filesCopy };
+            });
+          }
           streamingArtifactRef.current = null;
         },
         onWorkflow: (steps) => { setWorkflowSteps(steps); },
@@ -431,8 +452,21 @@ export function useMessageStream(chatId: string) {
       setIsLoading(true);
       setActionText(null);
 
-      const artCtx = activeArtifact && !activeArtifact.id.startsWith("streaming-")
-        ? { files: activeArtifact.files, template: activeArtifact.template, title: activeArtifact.title }
+      // Prefer the open panel's artifact; if it's null or a streaming placeholder,
+      // fall back to the latest real artifact in state. This ensures edits always
+      // carry an id back to the backend even when the user sends a follow-up
+      // before re-opening the panel.
+      const contextSource =
+        activeArtifact && !activeArtifact.id.startsWith("streaming-")
+          ? activeArtifact
+          : artifacts.find((a) => !a.id.startsWith("streaming-")) ?? null;
+      const artCtx = contextSource
+        ? {
+            id: contextSource.id,
+            files: contextSource.files,
+            template: contextSource.template,
+            title: contextSource.title,
+          }
         : undefined;
 
       startStream(
@@ -466,17 +500,25 @@ export function useMessageStream(chatId: string) {
             setActiveArtifact(artifact);
           },
           onArtifactStart: (data) => {
+            let seedFiles: Record<string, string> = {};
+            if (data.id) {
+              const base =
+                artifacts.find((a) => a.id === data.id) ??
+                (activeArtifact?.id === data.id ? activeArtifact : null);
+              if (base) seedFiles = { ...base.files };
+            }
             streamingArtifactRef.current = {
+              id: data.id,
               title: data.title,
               template: data.template,
-              files: {},
+              files: seedFiles,
             };
             const placeholder: ArtifactData = {
               id: `streaming-${Date.now()}`,
               type: "project",
               title: data.title,
               template: data.template,
-              files: {},
+              files: seedFiles,
               dependencies: {},
             };
             setActiveArtifact(placeholder);
@@ -493,7 +535,17 @@ export function useMessageStream(chatId: string) {
               };
             });
           },
-          onArtifactEnd: () => {
+          onArtifactEnd: (data) => {
+            if (data?.deleted_files && streamingArtifactRef.current) {
+              for (const path of data.deleted_files) {
+                delete streamingArtifactRef.current.files[path];
+              }
+              const filesCopy = { ...streamingArtifactRef.current.files };
+              setActiveArtifact((prev) => {
+                if (!prev || !prev.id.startsWith("streaming-")) return prev;
+                return { ...prev, files: filesCopy };
+              });
+            }
             streamingArtifactRef.current = null;
           },
           onArtifactWarnings: (data) => {
@@ -549,7 +601,7 @@ export function useMessageStream(chatId: string) {
 
   const fixArtifactError = useCallback((error: string) => {
     if (!activeArtifact || activeArtifact.id.startsWith("streaming-")) return;
-    const fixPrompt = `Fix this runtime error in the artifact "${activeArtifact.title}":\n\n\`\`\`\n${error}\n\`\`\`\n\nPlease generate a corrected version of the project.`;
+    const fixPrompt = `The artifact "${activeArtifact.title}" has this runtime error:\n\n\`\`\`\n${error}\n\`\`\`\n\nFix it with the minimal change — edit only the file(s) directly involved and keep the rest of the project intact.`;
     doSend(fixPrompt, "balanced" as ChatMode, []);
   }, [activeArtifact, doSend]);
 

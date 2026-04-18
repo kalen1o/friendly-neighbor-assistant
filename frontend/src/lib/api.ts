@@ -416,9 +416,9 @@ export interface SSECallbacks {
   onSources?: (sources: Source[]) => void;
   onMetrics?: (metrics: MessageMetrics) => void;
   onArtifact?: (artifact: ArtifactData) => void;
-  onArtifactStart?: (data: { title: string; template: string }) => void;
+  onArtifactStart?: (data: { id?: string; title: string; template: string }) => void;
   onArtifactFile?: (data: { path: string; code: string }) => void;
-  onArtifactEnd?: (data: { files: Record<string, string>; dependencies: Record<string, string> }) => void;
+  onArtifactEnd?: (data: { id?: string; files: Record<string, string>; dependencies: Record<string, string>; deleted_files?: string[] }) => void;
   onArtifactWarnings?: (data: { artifact_id: string; warnings: string[] }) => void;
   onWorkflow?: (steps: WorkflowStep[]) => void;
   onWorkflowStep?: (step: WorkflowStep) => void;
@@ -434,7 +434,7 @@ export function sendMessage(
   callbacks: SSECallbacks,
   mode: ChatMode = "balanced",
   fileIds: string[] = [],
-  artifactContext?: { files: Record<string, string>; template: string; title: string } | null
+  artifactContext?: { id?: string; files: Record<string, string>; template: string; title: string } | null
 ): () => void {
   const controller = new AbortController();
 

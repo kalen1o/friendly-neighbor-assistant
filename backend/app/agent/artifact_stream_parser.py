@@ -1,20 +1,22 @@
 """Incremental artifact parser for SSE streaming.
 
 Feeds on token chunks as they arrive from the LLM and yields events:
-  - artifact_start: {title, template} — opening tag detected
+  - artifact_start: {id?, title, template} — opening tag detected
   - artifact_file:  {path, code}      — one file's JSON value fully received
-  - artifact_end:   {files, dependencies} — closing tag detected, full manifest available
+  - artifact_end:   {id?, files, dependencies, deleted_files?} — closing tag detected
 """
 
 import json
 import re
 from typing import List
 
-_OPEN_TAG = re.compile(
-    r'<artifact\s+type="(?P<type>[^"]+)"\s+title="(?P<title>[^"]+)"'
-    r'(?:\s+template="(?P<template>[^"]+)")?\s*>'
-)
+_OPEN_TAG = re.compile(r"<artifact(?P<attrs>\s+[^>]*)>")
+_ATTR_PATTERN = re.compile(r'(\w+)="([^"]*)"')
 _CLOSE_TAG = re.compile(r"</artifact>")
+
+
+def _parse_attrs(attrs_str: str) -> dict:
+    return {m.group(1): m.group(2) for m in _ATTR_PATTERN.finditer(attrs_str)}
 
 
 class ArtifactStreamParser:
@@ -35,10 +37,13 @@ class ArtifactStreamParser:
                 if not m:
                     break
                 self._inside = True
+                attrs = _parse_attrs(m.group("attrs"))
                 self._tag_meta = {
-                    "title": m.group("title"),
-                    "template": m.group("template") or "react",
+                    "title": attrs.get("title", "Untitled"),
+                    "template": attrs.get("template") or "react",
                 }
+                if attrs.get("id"):
+                    self._tag_meta["id"] = attrs["id"]
                 self._files_emitted = {}
                 events.append(
                     {
@@ -54,10 +59,14 @@ class ArtifactStreamParser:
                 content = self._buffer[: close.start()].strip()
                 self._inside = False
 
+                deleted_files: list = []
                 try:
                     manifest = json.loads(content)
                     all_files = manifest.get("files", {})
                     deps = manifest.get("dependencies", {})
+                    raw_deleted = manifest.get("deleted_files")
+                    if isinstance(raw_deleted, list):
+                        deleted_files = [p for p in raw_deleted if isinstance(p, str)]
                 except (json.JSONDecodeError, ValueError):
                     all_files = self._files_emitted
                     deps = {}
@@ -72,13 +81,19 @@ class ArtifactStreamParser:
                             }
                         )
 
+                end_data = {
+                    "files": all_files,
+                    "dependencies": deps,
+                }
+                if self._tag_meta.get("id"):
+                    end_data["id"] = self._tag_meta["id"]
+                if deleted_files:
+                    end_data["deleted_files"] = deleted_files
+
                 events.append(
                     {
                         "event": "artifact_end",
-                        "data": {
-                            "files": all_files,
-                            "dependencies": deps,
-                        },
+                        "data": end_data,
                     }
                 )
 

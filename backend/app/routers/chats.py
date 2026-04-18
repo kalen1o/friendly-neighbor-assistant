@@ -942,11 +942,18 @@ async def _llm_background_task(
                 ctx_lines = [
                     "\n\n[Active artifact context — the user is viewing this project:]\n"
                 ]
+                if art_ctx.get("id"):
+                    ctx_lines.append(f"Id: {art_ctx['id']}")
                 ctx_lines.append(f"Title: {art_ctx.get('title', 'Untitled')}")
                 ctx_lines.append(f"Template: {art_ctx.get('template', 'react')}")
                 ctx_lines.append("Current files:")
                 for path, code in art_ctx["files"].items():
                     ctx_lines.append(f"\n--- {path} ---\n{code}")
+                if art_ctx.get("id"):
+                    ctx_lines.append(
+                        "\nIf the user is asking you to modify this artifact, "
+                        f'echo the id "{art_ctx["id"]}" on the artifact tag and emit only the files you change.'
+                    )
                 ctx_str = "\n".join(ctx_lines)
                 llm_messages[-1] = {
                     "role": "user",
@@ -1145,60 +1152,164 @@ async def _llm_background_task(
                 )
 
                 # Save and emit artifacts
+                from app.agent.artifact_parser import detect_dependencies, detect_template
+                from app.agent.artifact_evaluator import evaluate_artifact
+                from app.models.artifact import ArtifactVersion
+
+                # Some models emit a draft + polished pair in one response.
+                # Prefer the one that echoes the active artifact's id (that's
+                # the real edit), otherwise prefer the artifact with the most
+                # files (the fuller version), otherwise fall back to the last.
+                if len(found_artifacts) > 1:
+                    ctx_id_collapse = (
+                        (artifact_context or {}).get("id") if artifact_context else None
+                    )
+                    picked = None
+                    if ctx_id_collapse:
+                        for a in found_artifacts:
+                            if a.get("id") == ctx_id_collapse:
+                                picked = a
+                                break
+                    if picked is None:
+                        picked = max(
+                            found_artifacts,
+                            key=lambda a: len(a.get("files") or {}),
+                        )
+                    logger.info(
+                        "Collapsing %d artifacts → id=%s files=%d (chat=%s)",
+                        len(found_artifacts),
+                        picked.get("id"),
+                        len(picked.get("files") or {}),
+                        chat_public_id,
+                    )
+                    found_artifacts = [picked]
+
                 for art_data in found_artifacts:
-                    # Auto-detect missing dependencies
-                    from app.agent.artifact_parser import detect_dependencies
+                    emitted_files = art_data.get("files", {})
+                    deleted_files = art_data.get("deleted_files") or []
+                    emitted_deps = art_data.get("dependencies", {})
 
-                    art_files = art_data.get("files", {})
-                    art_deps = art_data.get("dependencies", {})
-                    missing_deps = detect_dependencies(art_files, art_deps)
+                    # Safety net: LLM sometimes forgets to echo the id on edits.
+                    # If there's an artifact_context.id AND the emission has no id,
+                    # AND the emitted template matches the context, treat it as an edit.
+                    ctx_id = (artifact_context or {}).get("id") if artifact_context else None
+                    ctx_template = (artifact_context or {}).get("template") if artifact_context else None
+                    requested_id = art_data.get("id")
+                    inferred = False
+                    if not requested_id and ctx_id and (
+                        not art_data.get("template") or art_data.get("template") == ctx_template
+                    ):
+                        requested_id = ctx_id
+                        inferred = True
+
+                    logger.info(
+                        "Artifact emitted: id=%s%s title=%r template=%s files=%d deleted=%d ctx_id=%s",
+                        requested_id,
+                        " (inferred from ctx)" if inferred else "",
+                        art_data.get("title"),
+                        art_data.get("template"),
+                        len(emitted_files),
+                        len(deleted_files),
+                        ctx_id,
+                    )
+
+                    # Look up existing artifact if the LLM echoed back an id it owns.
+                    existing_artifact: Optional[Artifact] = None
+                    if requested_id:
+                        r = await db.execute(
+                            select(Artifact).where(
+                                Artifact.public_id == requested_id,
+                                Artifact.chat_id == chat.id,
+                                Artifact.user_id == user_id,
+                            )
+                        )
+                        existing_artifact = r.scalar_one_or_none()
+
+                    if existing_artifact is not None:
+                        # Edit mode: merge emitted files over existing, drop deleted, keep others.
+                        merged_files = {**existing_artifact.files, **emitted_files}
+                        for p in deleted_files:
+                            merged_files.pop(p, None)
+                        merged_deps = {**(existing_artifact.dependencies or {}), **emitted_deps}
+                        final_files = merged_files
+                        final_deps = merged_deps
+                        final_template = art_data.get("template") or existing_artifact.template
+                        final_title = art_data.get("title") or existing_artifact.title
+                    else:
+                        final_files = emitted_files
+                        final_deps = emitted_deps
+                        final_template = art_data.get("template", "react")
+                        final_title = art_data.get("title", "Untitled")
+
+                    # Auto-detect missing dependencies from the full resulting file set.
+                    missing_deps = detect_dependencies(final_files, final_deps)
                     if missing_deps:
-                        art_deps = {**art_deps, **missing_deps}
-                        art_data["dependencies"] = art_deps
+                        final_deps = {**final_deps, **missing_deps}
 
-                    # Auto-detect template from file extensions
-                    from app.agent.artifact_parser import detect_template
+                    # Auto-detect template (only when there isn't an existing one to respect).
+                    if existing_artifact is None:
+                        detected_template = detect_template(final_files)
+                        if detected_template != final_template:
+                            final_template = detected_template
 
-                    detected_template = detect_template(art_files)
-                    if detected_template != art_data.get("template", "react"):
-                        art_data["template"] = detected_template
-
-                    # Run evaluator pipeline
-                    from app.agent.artifact_evaluator import evaluate_artifact
-
-                    fixed_files, fixed_deps, art_warnings = evaluate_artifact(
-                        art_data.get("files", {}),
-                        art_data.get("dependencies", {}),
-                        art_data.get("template", "react"),
+                    # Run evaluator pipeline on the full file set.
+                    final_files, final_deps, art_warnings = evaluate_artifact(
+                        final_files, final_deps, final_template,
                     )
-                    art_data["files"] = fixed_files
-                    art_data["dependencies"] = fixed_deps
+                    art_data["files"] = final_files
+                    art_data["dependencies"] = final_deps
+                    art_data["template"] = final_template
 
-                    artifact = Artifact(
-                        message_id=assistant_msg.id,
-                        chat_id=chat.id,
-                        user_id=user_id,
-                        title=art_data["title"],
-                        artifact_type="project",
-                        template=art_data.get("template", "react"),
-                        files=art_data.get("files", {}),
-                        dependencies=art_data.get("dependencies", {}),
-                    )
-                    db.add(artifact)
-                    await db.commit()
-                    await db.refresh(artifact)
+                    if existing_artifact is not None:
+                        # Update in place and append a new version row.
+                        existing_artifact.title = final_title
+                        existing_artifact.template = final_template
+                        existing_artifact.files = final_files
+                        existing_artifact.dependencies = final_deps
+                        existing_artifact.message_id = assistant_msg.id
+                        await db.commit()
+                        await db.refresh(existing_artifact)
 
-                    # Save version 1
-                    from app.models.artifact import ArtifactVersion
+                        max_version = (
+                            await db.execute(
+                                select(func.max(ArtifactVersion.version_number)).where(
+                                    ArtifactVersion.artifact_id == existing_artifact.id
+                                )
+                            )
+                        ).scalar() or 0
+                        v = ArtifactVersion(
+                            artifact_id=existing_artifact.id,
+                            version_number=max_version + 1,
+                            title=existing_artifact.title,
+                            files=existing_artifact.files,
+                        )
+                        db.add(v)
+                        await db.commit()
+                        artifact = existing_artifact
+                    else:
+                        artifact = Artifact(
+                            message_id=assistant_msg.id,
+                            chat_id=chat.id,
+                            user_id=user_id,
+                            title=final_title,
+                            artifact_type="project",
+                            template=final_template,
+                            files=final_files,
+                            dependencies=final_deps,
+                        )
+                        db.add(artifact)
+                        await db.commit()
+                        await db.refresh(artifact)
 
-                    v = ArtifactVersion(
-                        artifact_id=artifact.id,
-                        version_number=1,
-                        title=artifact.title,
-                        files=artifact.files,
-                    )
-                    db.add(v)
-                    await db.commit()
+                        v = ArtifactVersion(
+                            artifact_id=artifact.id,
+                            version_number=1,
+                            title=artifact.title,
+                            files=artifact.files,
+                        )
+                        db.add(v)
+                        await db.commit()
+
                     await queue.put(
                         {
                             "event": "artifact",
