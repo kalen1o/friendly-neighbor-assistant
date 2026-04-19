@@ -2,6 +2,50 @@
 
 An AI-powered chatbot agent that connects to any LLM provider, searches the web and your documents via RAG, and extends its capabilities through a markdown-based skill system. Features multi-model switching, conversation folders, admin dashboard, and a polished mobile experience.
 
+## Screenshots
+
+### Chat with streaming responses
+![Chat with real LLM response](docs/screenshots/03-chat-with-response.png)
+
+### Live artifacts — LLM-generated React/HTML rendered in a side panel
+![Artifact split view](docs/screenshots/11-artifact.png)
+
+### Home / empty state
+![Landing page](docs/screenshots/02-landing.png)
+
+<details>
+<summary><b>More screenshots</b> — click to expand</summary>
+
+<br>
+
+**Skills library** — built-in and user-created skills, toggle on/off per-skill.
+![Skills](docs/screenshots/05-skills.png)
+
+**Usage analytics** — per-message cost, token breakdown, daily chart.
+![Analytics](docs/screenshots/07-analytics.png)
+
+**Knowledge base** — upload docs for RAG retrieval.
+![Knowledge base](docs/screenshots/06-knowledge-base.png)
+
+**MCP integration** — connect external tool servers.
+![MCP](docs/screenshots/08-mcp.png)
+
+**Scheduled agents** — cron-triggered chat runs.
+![Schedules](docs/screenshots/09-schedules.png)
+
+**Register** / **Login** — JWT auth with OAuth (Google, GitHub) support.
+
+<p>
+  <img src="docs/screenshots/01-register.png" alt="Register" width="49%" />
+  <img src="docs/screenshots/10-login.png" alt="Login" width="49%" />
+</p>
+
+</details>
+
+> Screenshots are captured end-to-end by a Playwright script — see
+> [`frontend/tests/readme-screenshots.spec.ts`](frontend/tests/readme-screenshots.spec.ts).
+> Re-generate with `npx playwright test tests/readme-screenshots.spec.ts` from the `frontend/` directory.
+
 ## Features
 
 ### Core Chat
