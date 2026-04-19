@@ -30,7 +30,7 @@ def _get_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
 def _get_openai_client(api_key: str, base_url: str | None = None) -> openai.AsyncOpenAI:
     cache_key = f"{api_key}:{base_url or ''}"
     if cache_key not in _openai_clients:
-        kwargs: dict = {"api_key": api_key, "timeout": 120.0}
+        kwargs: dict = {"api_key": api_key, "timeout": 300.0}
         if base_url:
             kwargs["base_url"] = base_url
         _openai_clients[cache_key] = openai.AsyncOpenAI(**kwargs)
@@ -298,12 +298,18 @@ async def _anthropic_stream_with_tools(
     if anthropic_tools:
         kwargs["tools"] = anthropic_tools
 
+    needs_separator = False
     for round_num in range(max_tool_rounds):
         # Stream response — text yields immediately to the user
         tool_uses = []
+        had_text = False
 
         async with client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
+                if needs_separator:
+                    yield "\n\n"
+                    needs_separator = False
+                had_text = True
                 yield text
 
             # After stream completes, get the full message to check for tool calls
@@ -319,6 +325,9 @@ async def _anthropic_stream_with_tools(
         # If no tool calls, we're done
         if not tool_uses:
             return
+
+        if had_text:
+            needs_separator = True
 
         # Add assistant response to messages
         kwargs["messages"].append({"role": "assistant", "content": response.content})
@@ -562,6 +571,7 @@ async def _openai_stream_with_tools(
 
     total_content_yielded = 0
     finished_normally = False
+    needs_separator = False
 
     for round_num in range(max_tool_rounds):
         logger.info(
@@ -580,6 +590,9 @@ async def _openai_stream_with_tools(
 
             # Stream text content to user
             if delta.content:
+                if needs_separator:
+                    yield "\n\n"
+                    needs_separator = False
                 collected_content += delta.content
                 total_content_yielded += len(delta.content)
                 yield delta.content
@@ -728,6 +741,9 @@ async def _openai_stream_with_tools(
                 }
             )
             kwargs.pop("tools", None)
+
+        if collected_content:
+            needs_separator = True
 
         # Loop back to get LLM's response after tool results
         logger.info(

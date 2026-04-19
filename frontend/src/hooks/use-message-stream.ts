@@ -580,6 +580,27 @@ export function useMessageStream(chatId: string) {
             if (!intervalRef.current) {
               finalizeMessage();
             }
+            // If the artifact is still in streaming state, fetch the real one
+            setActiveArtifact((prev) => {
+              if (prev?.id.startsWith("streaming-")) {
+                listArtifacts(chatId).then((arts) => {
+                  if (arts.length > 0) {
+                    const latest = arts[arts.length - 1];
+                    const real: ArtifactData = {
+                      id: latest.id,
+                      type: "project",
+                      title: latest.title,
+                      template: latest.template ?? "react",
+                      files: latest.files ?? {},
+                      dependencies: latest.dependencies ?? {},
+                    };
+                    setArtifacts([real]);
+                    setActiveArtifact(real);
+                  }
+                }).catch(() => {});
+              }
+              return prev;
+            });
           },
           onError: (err) => {
             stopTypewriter();

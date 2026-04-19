@@ -18,13 +18,13 @@ async function tryRefresh(): Promise<boolean> {
 }
 
 async function authFetch(input: string, init?: RequestInit): Promise<Response> {
+  const isFormData = init?.body instanceof FormData;
   const opts: RequestInit = {
     ...init,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers: isFormData
+      ? { ...init?.headers }
+      : { "Content-Type": "application/json", ...init?.headers },
   };
 
   let res = await fetch(input, opts);
@@ -93,8 +93,8 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 export async function getMe(): Promise<UserInfo> {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    credentials: "include",
+  const res = await authFetch(`${API_BASE}/api/auth/me`, {
+    method: "GET",
   });
   if (!res.ok) throw new Error("Not authenticated");
   return res.json();
@@ -440,7 +440,7 @@ export function sendMessage(
 
   (async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/chats/${chatId}/messages`, {
+      let res = await fetch(`${API_BASE}/api/chats/${chatId}/messages`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -452,6 +452,24 @@ export function sendMessage(
         }),
         signal: controller.signal,
       });
+
+      if (res.status === 401) {
+        const refreshed = await tryRefresh();
+        if (refreshed) {
+          res = await fetch(`${API_BASE}/api/chats/${chatId}/messages`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content,
+              mode,
+              file_ids: fileIds,
+              ...(artifactContext ? { artifact_context: artifactContext } : {}),
+            }),
+            signal: controller.signal,
+          });
+        }
+      }
 
       if (!res.ok) {
         callbacks.onError(`HTTP ${res.status}`);
@@ -606,9 +624,8 @@ export interface DocumentStatus {
 export async function uploadDocument(file: File): Promise<DocumentOut> {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${API_BASE}/api/documents/upload`, {
+  const res = await authFetch(`${API_BASE}/api/documents/upload`, {
     method: "POST",
-    credentials: "include",
     body: formData,
   });
   if (!res.ok) {
@@ -911,9 +928,7 @@ export async function listShares(chatId: string): Promise<ShareOut[]> {
 }
 
 export async function viewSharedChat(shareId: string): Promise<SharedChatView> {
-  const res = await fetch(`${API_BASE}/api/shared/${shareId}`, {
-    credentials: "include",
-  });
+  const res = await authFetch(`${API_BASE}/api/shared/${shareId}`);
   if (res.status === 401) throw new Error("LOGIN_REQUIRED");
   if (!res.ok) throw new Error("NOT_FOUND");
   return res.json();
@@ -1071,9 +1086,7 @@ export async function searchChats(query: string): Promise<SearchResponse> {
 // ── Export ──
 
 export async function exportChat(chatId: string, format: "markdown" | "pdf"): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/chats/${chatId}/export?format=${format}`, {
-    credentials: "include",
-  });
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/export?format=${format}`);
   if (!res.ok) throw new Error("Export failed");
 
   // Get filename from Content-Disposition header or generate one
@@ -1105,9 +1118,8 @@ export interface ChatFileOut {
 export async function uploadChatFile(file: File): Promise<ChatFileOut> {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${API_BASE}/api/uploads`, {
+  const res = await authFetch(`${API_BASE}/api/uploads`, {
     method: "POST",
-    credentials: "include",
     body: formData,
   });
   if (!res.ok) {

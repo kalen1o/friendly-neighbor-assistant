@@ -997,6 +997,8 @@ async def _llm_background_task(
             assistant_msg = None
             last_save_len = 0
             art_stream = ArtifactStreamParser()
+            streamed_artifacts: list[dict] = []
+            _pending_art_meta: dict = {}
             try:
                 async for chunk in stream_with_tools(
                     llm_messages,
@@ -1017,12 +1019,22 @@ async def _llm_background_task(
 
                     # Stream artifact files as they complete
                     for art_event in art_stream.feed(chunk):
+                        evt_type = art_event["event"]
                         await queue.put(
                             {
-                                "event": art_event["event"],
+                                "event": evt_type,
                                 "data": json.dumps(art_event["data"]),
                             }
                         )
+                        if evt_type == "artifact_start":
+                            _pending_art_meta = art_event["data"]
+                        elif evt_type == "artifact_end":
+                            streamed_artifacts.append({
+                                **_pending_art_meta,
+                                "type": "project",
+                                **art_event["data"],
+                            })
+                            _pending_art_meta = {}
 
                     # Create assistant message on first text chunk
                     if assistant_msg is None and full_response:
@@ -1091,6 +1103,14 @@ async def _llm_background_task(
 
                 # Parse artifacts from response
                 cleaned_response, found_artifacts = parse_artifacts(full_response)
+
+                # Fallback: if parse_artifacts failed but streaming detected artifacts
+                if not found_artifacts and streamed_artifacts:
+                    logger.warning(
+                        "parse_artifacts found nothing but streaming parser detected %d artifact(s) — using streamed data",
+                        len(streamed_artifacts),
+                    )
+                    found_artifacts = streamed_artifacts
 
                 # Strip leaked tool call syntax from response
                 import re as _re
