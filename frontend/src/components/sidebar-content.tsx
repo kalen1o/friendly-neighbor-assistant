@@ -349,7 +349,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
             <button
               onClick={() => setViewMode("all")}
               className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                "cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
                 viewMode === "all"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground/50 hover:text-muted-foreground"
@@ -360,7 +360,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
             <button
               onClick={() => setViewMode("folders")}
               className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                "cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
                 viewMode === "folders"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground/50 hover:text-muted-foreground"
@@ -450,7 +450,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
                 key={href}
                 onClick={() => router.push(href)}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors",
+                  "group flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors",
                   isActive
                     ? cn("bg-accent", iconColor)
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -485,7 +485,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
               <button
                 onClick={() => setViewMode("all")}
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                  "cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
                   viewMode === "all"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground/50 hover:text-muted-foreground"
@@ -496,7 +496,7 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
               <button
                 onClick={() => setViewMode("folders")}
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
+                  "cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-colors",
                   viewMode === "folders"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground/50 hover:text-muted-foreground"

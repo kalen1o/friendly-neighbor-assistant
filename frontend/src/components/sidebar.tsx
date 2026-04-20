@@ -85,7 +85,7 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
               onClick={() => router.push(href)}
               title={collapsed ? label : undefined}
               className={cn(
-                "group flex items-center rounded-lg transition-colors",
+                "group flex cursor-pointer items-center rounded-lg transition-colors",
                 collapsed
                   ? cn("h-9 w-9 justify-center", isActive ? iconBgActive : "hover:bg-accent")
                   : cn(
@@ -115,7 +115,7 @@ export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; 
           <button
             onClick={handleNewChat}
             title="New Chat"
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
           </button>
