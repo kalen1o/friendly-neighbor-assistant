@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus, FileText, Zap, Anchor, Plug, PanelLeft, PanelLeftClose, BarChart3, Clock } from "lucide-react";
+import { Plus, FileText, Zap, Anchor, Plug, PanelLeft, PanelLeftClose, BarChart3 } from "lucide-react";
 import { useAuth } from "@/components/auth-guard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ const NAV_ITEMS = [
   { href: "/hooks", icon: Anchor, label: "Hooks", iconBg: "bg-blue-500/10", iconBgActive: "bg-blue-500/25", iconColor: "text-blue-500" },
   { href: "/mcp", icon: Plug, label: "MCP", iconBg: "bg-purple-500/10", iconBgActive: "bg-purple-500/25", iconColor: "text-purple-500" },
   { href: "/analytics", icon: BarChart3, label: "Analytics", iconBg: "bg-emerald-500/10", iconBgActive: "bg-emerald-500/25", iconColor: "text-emerald-500" },
-  { href: "/schedules", icon: Clock, label: "Schedules", iconBg: "bg-teal-500/10", iconBgActive: "bg-teal-500/25", iconColor: "text-teal-500" },
 ];
 
 export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {

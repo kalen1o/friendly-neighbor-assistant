@@ -575,11 +575,14 @@ async def _llm_background_task(
 
             # Load user memories for system prompt (Redis-cached)
             from app.agent.memory import build_memory_prompt, get_cached_memories
+            from app.agent.personalization import build_personalization_prompt
 
             memory_prompt = ""
             if user_memory_enabled:
                 user_memories = await get_cached_memories(user_id, user)
                 memory_prompt = build_memory_prompt(user_memories)
+
+            personalization_prompt = build_personalization_prompt(user)
 
             # Resolve which model to use: per-chat > user default > project default
             resolved_model_config = None
@@ -772,6 +775,17 @@ async def _llm_background_task(
                     {
                         "role": "assistant",
                         "content": "Understood, I'll keep these in mind.",
+                    },
+                )
+
+            # Inject personalization preferences as context
+            if personalization_prompt:
+                llm_messages.insert(0, {"role": "user", "content": personalization_prompt})
+                llm_messages.insert(
+                    1,
+                    {
+                        "role": "assistant",
+                        "content": "Got it, I'll keep these preferences in mind.",
                     },
                 )
 

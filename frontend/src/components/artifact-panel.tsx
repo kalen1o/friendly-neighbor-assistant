@@ -10,6 +10,7 @@ import {
   Download,
   ChevronDown,
   History,
+  RefreshCw,
 } from "lucide-react";
 import {
   SandpackProvider,
@@ -236,8 +237,9 @@ function SandpackContent({
   onClose,
   onFixError,
   warnings,
-}: ArtifactPanelProps) {
-  const { sandpack } = useSandpack();
+  onReload,
+}: ArtifactPanelProps & { onReload: () => void }) {
+  const { sandpack, listen } = useSandpack();
   const [tab, setTab] = useState<"code" | "preview">("preview");
   const fileCount = Object.keys(artifact.files).length;
   const [prevFile, setPrevFile] = useState(sandpack.activeFile);
@@ -247,6 +249,42 @@ function SandpackContent({
     setPrevFile(sandpack.activeFile);
     setTab("code");
   }
+
+  // Auto-remount on Sandpack runtime TIME_OUT (upstream bug: codesandbox/sandpack#920).
+  // The "Try Again" button is broken — only a fresh SandpackProvider instance recovers.
+  const autoReloadedRef = useRef(false);
+  useEffect(() => {
+    const unsubscribe = listen((msg: unknown) => {
+      if (!msg || typeof msg !== "object") return;
+      const m = msg as Record<string, unknown>;
+      const looksLikeTimeout =
+        m.type === "timeout" ||
+        (m.type === "action" &&
+          m.action === "show-error" &&
+          typeof m.title === "string" &&
+          /time[_ ]?out|couldn.?t connect/i.test(m.title));
+      if (looksLikeTimeout && !autoReloadedRef.current) {
+        autoReloadedRef.current = true;
+        onReload();
+      }
+    });
+    return () => unsubscribe();
+  }, [listen, onReload]);
+
+  // Also catch the state-based timeout signal.
+  useEffect(() => {
+    if (sandpack.status === "timeout" && !autoReloadedRef.current) {
+      autoReloadedRef.current = true;
+      onReload();
+    }
+  }, [sandpack.status, onReload]);
+
+  // Reset the guard when we're actively running again — lets a later timeout re-trigger.
+  useEffect(() => {
+    if (sandpack.status === "running" || sandpack.status === "done") {
+      autoReloadedRef.current = false;
+    }
+  }, [sandpack.status]);
 
   return (
     <div className="flex h-full flex-col border-l bg-background">
@@ -305,6 +343,15 @@ function SandpackContent({
             });
           }}
         />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={onReload}
+          title="Reload runtime"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -730,6 +777,8 @@ function WebContainerContent({
 export function ArtifactPanel(props: ArtifactPanelProps) {
   const { resolvedTheme } = useTheme();
   const isStreaming = props.artifact.id.startsWith("streaming-");
+  const [reloadCount, setReloadCount] = useState(0);
+  const handleReload = () => setReloadCount((c) => c + 1);
 
   if (isStreaming) {
     const fileCount = Object.keys(props.artifact.files).length;
@@ -798,7 +847,7 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
 
   return (
     <SandpackProvider
-      key={props.artifact.id}
+      key={`${props.artifact.id}:${reloadCount}`}
       template={template}
       files={files}
       customSetup={{
@@ -811,7 +860,7 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
       }}
       style={{ height: "100%", display: "flex", flexDirection: "column" }}
     >
-      <SandpackContent {...props} />
+      <SandpackContent {...props} onReload={handleReload} />
     </SandpackProvider>
   );
 }

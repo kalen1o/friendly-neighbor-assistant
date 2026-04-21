@@ -198,6 +198,25 @@ export function ChatMessages({ messages, streamingContent, isLoading, actionText
     onLoadMore();
   }, [onLoadMore, loadingMore]);
 
+  // Keep user pinned to bottom when container resizes (e.g. artifact panel opens/resizes)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let wasAtBottom = true;
+    const onScroll = () => {
+      wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 16;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(() => {
+      if (wasAtBottom) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, []);
+
   // IntersectionObserver for infinite scroll
   useEffect(() => {
     const sentinel = sentinelRef.current;

@@ -36,6 +36,8 @@ export function useMessageStream(chatId: string) {
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
   const [artifactWarnings, setArtifactWarnings] = useState<Record<string, string[]>>({});
   const [chatModelId, setChatModelId] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const lastSendArgsRef = useRef<{ content: string; mode: ChatMode; files: PendingFile[] } | null>(null);
 
   // Accumulated text from SSE chunks (full received text)
   const fullTextRef = useRef("");
@@ -267,7 +269,7 @@ export function useMessageStream(chatId: string) {
         onError: (err) => {
           stopTypewriter();
           sendingRef.current = false;
-          toast.error(err);
+          setLastError(err || "Generation failed");
           setStreamingContent("");
           fullTextRef.current = "";
           revealedRef.current = 0;
@@ -422,6 +424,8 @@ export function useMessageStream(chatId: string) {
   const doSend = useCallback(
     (content: string, mode: ChatMode = "balanced", files: PendingFile[] = []) => {
       sendingRef.current = true;
+      lastSendArgsRef.current = { content, mode, files };
+      setLastError(null);
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const attachedFiles = files.map((f) => ({
         url: f.previewUrl || `${apiBase}/api/uploads/${f.id}`,
@@ -605,7 +609,7 @@ export function useMessageStream(chatId: string) {
           onError: (err) => {
             stopTypewriter();
             sendingRef.current = false;
-            toast.error(err);
+            setLastError(err || "Generation failed");
             setStreamingContent("");
             fullTextRef.current = "";
             revealedRef.current = 0;
@@ -620,6 +624,23 @@ export function useMessageStream(chatId: string) {
     },
     [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll, activeArtifact, artifacts]
   );
+
+  const retryLastSend = useCallback(() => {
+    const args = lastSendArgsRef.current;
+    if (!args) return;
+    setLastError(null);
+    // Remove the last user message from local state so doSend re-adds it cleanly
+    // (the backend will persist a new user message; accepted tradeoff for error recovery).
+    setMessages((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].role === "user") return prev.slice(0, i);
+      }
+      return prev;
+    });
+    doSend(args.content, args.mode, args.files);
+  }, [doSend]);
+
+  const dismissError = useCallback(() => setLastError(null), []);
 
   const fixArtifactError = useCallback((error: string) => {
     if (!activeArtifact || activeArtifact.id.startsWith("streaming-")) return;
@@ -664,5 +685,8 @@ export function useMessageStream(chatId: string) {
     loadOlderMessages,
     doSend,
     fixArtifactError,
+    lastError,
+    retryLastSend,
+    dismissError,
   };
 }

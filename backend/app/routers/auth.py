@@ -259,6 +259,18 @@ async def update_me(
         user.memory_enabled = body.memory_enabled
     if body.preferred_model is not None:
         user.preferred_model = body.preferred_model
+    for field in (
+        "personalization_nickname",
+        "personalization_role",
+        "personalization_tone",
+        "personalization_length",
+        "personalization_language",
+        "personalization_about",
+        "personalization_style",
+    ):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(user, field, value.strip() or None if isinstance(value, str) else value)
     await db.commit()
     await db.refresh(user)
     return user

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
 
     max_tool_rounds: int = 5
     max_output_tokens: int = 16384
+    # Per-chunk read timeout for LLM streams. If no bytes arrive for this many
+    # seconds, the stream is aborted with a TimeoutError. Prevents silent hangs
+    # when an upstream provider holds the connection open without sending data.
+    llm_stream_idle_timeout: int = 120
 
     # Auth — JWT
     jwt_secret: str = _DEFAULT_JWT_SECRET

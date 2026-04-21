@@ -397,6 +397,30 @@ async def _openai_stream(
             yield chunk.choices[0].delta.content
 
 
+async def _with_idle_timeout(
+    source: AsyncIterator[str], timeout_s: float
+) -> AsyncIterator[str]:
+    """Abort if no chunk arrives within `timeout_s` of the previous one.
+
+    Prevents silent hangs when an upstream provider holds the connection open
+    without sending data. Raises a TimeoutError with a readable message so the
+    caller can surface it via SSE and the UI can show a retry banner.
+    """
+    import asyncio
+
+    iterator = source.__aiter__()
+    while True:
+        try:
+            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=timeout_s)
+        except StopAsyncIteration:
+            return
+        except asyncio.TimeoutError:
+            raise TimeoutError(
+                f"LLM stream idle for {timeout_s:.0f}s — provider stopped sending data."
+            )
+        yield chunk
+
+
 async def _buffered_stream(
     source: AsyncIterator[str],
     flush_interval: float = 0.06,
@@ -483,7 +507,9 @@ async def stream_with_tools(
     else:
         raise ValueError(f"Unsupported AI provider: {provider}")
 
-    async for chunk in _filter_tool_leaks(_buffered_stream(raw)):
+    async for chunk in _filter_tool_leaks(
+        _buffered_stream(_with_idle_timeout(raw, settings.llm_stream_idle_timeout))
+    ):
         yield chunk
 
 

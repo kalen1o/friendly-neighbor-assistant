@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
-import { Share2, Search, Download } from "lucide-react";
+import { Share2, Search, Download, GripVertical, AlertCircle, RefreshCw, X } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
 import { ChatMessages, EmptyState } from "@/components/chat-messages";
 import { ChatInput, type ChatInputHandle, type PendingFile } from "@/components/chat-input";
@@ -62,6 +62,9 @@ export default function ChatPage() {
     loadOlderMessages,
     doSend,
     fixArtifactError,
+    lastError,
+    retryLastSend,
+    dismissError,
   } = useMessageStream(chatId);
 
   // Notify layout to collapse/expand sidebar when artifact panel opens/closes
@@ -100,6 +103,48 @@ export default function ChatPage() {
   const isEmpty = messages.length === 0 && !chatLoading && !streamingContent && !isLoading && !actionText;
   const [showSuggestions, setShowSuggestions] = useState(!chatLoading);
 
+  // Resizable artifact panel (desktop only)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const ARTIFACT_WIDTH_KEY = "artifact-panel-width";
+  const MIN_ARTIFACT_WIDTH = 360;
+  const MIN_CHAT_WIDTH = 360;
+  const [artifactWidth, setArtifactWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 600;
+    const saved = Number(localStorage.getItem(ARTIFACT_WIDTH_KEY));
+    if (Number.isFinite(saved) && saved > 0) return saved;
+    return Math.round(window.innerWidth / 2);
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMove = (e: PointerEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const next = Math.round(rect.right - e.clientX);
+      const max = Math.max(MIN_ARTIFACT_WIDTH, rect.width - MIN_CHAT_WIDTH);
+      const clamped = Math.min(Math.max(next, MIN_ARTIFACT_WIDTH), max);
+      setArtifactWidth(clamped);
+    };
+    const handleUp = () => {
+      setIsResizing(false);
+      setArtifactWidth((w) => {
+        localStorage.setItem(ARTIFACT_WIDTH_KEY, String(w));
+        return w;
+      });
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing]);
+
   // Keep suggestions visible briefly during the slide-down transition
   useEffect(() => {
     if (!isEmpty) {
@@ -111,8 +156,14 @@ export default function ChatPage() {
   }, [isEmpty]);
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className={`relative flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-out ${activeArtifact ? "hidden md:flex md:w-1/2" : "flex w-full"}`}>
+    <div ref={containerRef} className="flex min-h-0 flex-1">
+      <div
+        className={`relative min-h-0 overflow-hidden ${
+          activeArtifact
+            ? "hidden md:flex md:flex-1 md:min-w-0 flex-col"
+            : "flex w-full flex-col"
+        } ${isResizing ? "" : "transition-[width,flex] duration-300 ease-out"}`}
+      >
 
         {/* Desktop action buttons — non-overlapping header row */}
         {!isEmpty && (
@@ -232,6 +283,39 @@ export default function ChatPage() {
           </div>
         )}
 
+        {lastError && (
+          <div className="mx-auto w-full max-w-3xl px-4 pb-2">
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-destructive">Generation failed</p>
+                <p className="mt-0.5 line-clamp-3 text-xs text-muted-foreground break-words">
+                  {lastError}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 gap-1.5"
+                onClick={retryLastSend}
+                disabled={isStreaming || isLoading}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={dismissError}
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className={`transition-[padding] duration-500 ${isEmpty ? "pt-6" : "pt-0"}`}>
           <ChatInput
             ref={chatInputRef}
@@ -265,10 +349,33 @@ export default function ChatPage() {
         <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       </div>
 
+      {activeArtifact && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          onPointerDown={(e) => { e.preventDefault(); setIsResizing(true); }}
+          onDoubleClick={() => {
+            const def = Math.round(window.innerWidth / 2);
+            setArtifactWidth(def);
+            localStorage.setItem(ARTIFACT_WIDTH_KEY, String(def));
+          }}
+          className="hidden md:flex group relative w-1 shrink-0 cursor-col-resize items-center justify-center bg-border hover:bg-primary/30 active:bg-primary/50"
+          title="Drag to resize · double-click to reset"
+        >
+          <span className="absolute inset-y-0 -left-1 -right-1" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border bg-background text-muted-foreground opacity-0 shadow-sm transition-opacity duration-150 group-hover:opacity-100 group-active:opacity-100">
+            <GripVertical className="h-3.5 w-3.5" />
+          </div>
+        </div>
+      )}
+
       <div
-        className={`h-full overflow-hidden transition-[width,opacity] duration-300 ease-out ${
-          activeArtifact ? "w-full md:w-1/2 opacity-100" : "w-0 opacity-0"
-        }`}
+        style={activeArtifact ? { width: `${artifactWidth}px` } : undefined}
+        className={`h-full overflow-hidden ${
+          activeArtifact
+            ? "max-md:!w-full md:shrink-0 opacity-100"
+            : "!w-0 opacity-0"
+        } ${isResizing ? "" : "transition-[width,opacity] duration-300 ease-out"}`}
       >
         {activeArtifact && (
           <ArtifactPanel

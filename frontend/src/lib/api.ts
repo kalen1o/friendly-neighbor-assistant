@@ -61,7 +61,26 @@ export interface UserInfo {
   role: string;
   memory_enabled: boolean;
   preferred_model: string | null;
+  personalization_nickname: string | null;
+  personalization_role: string | null;
+  personalization_tone: string | null;
+  personalization_length: string | null;
+  personalization_language: string | null;
+  personalization_about: string | null;
+  personalization_style: string | null;
   created_at: string;
+}
+
+export interface UpdateMePayload {
+  memory_enabled?: boolean;
+  preferred_model?: string | null;
+  personalization_nickname?: string | null;
+  personalization_role?: string | null;
+  personalization_tone?: string | null;
+  personalization_length?: string | null;
+  personalization_language?: string | null;
+  personalization_about?: string | null;
+  personalization_style?: string | null;
 }
 
 export async function register(email: string, password: string, name: string): Promise<AuthResponse> {
@@ -484,6 +503,10 @@ export function sendMessage(
 
       const decoder = new TextDecoder();
       let buffer = "";
+      // Track whether the stream ended with a terminal event. If not, the
+      // connection was closed prematurely (e.g. server crashed / restarted)
+      // and the UI would otherwise hang on a loading spinner forever.
+      let terminated = false;
 
       const processEvents = (text: string) => {
         // Normalize CRLF -> LF (sse_starlette sends \r\n line endings)
@@ -566,9 +589,11 @@ export function sendMessage(
               } catch {}
               break;
             case "done":
+              terminated = true;
               callbacks.onDone();
               break;
             case "error":
+              terminated = true;
               callbacks.onError(data);
               break;
           }
@@ -589,6 +614,12 @@ export function sendMessage(
 
         buffer += decoder.decode(value, { stream: true });
         buffer = processEvents(buffer);
+      }
+
+      if (!terminated) {
+        callbacks.onError(
+          "Connection lost — the server may have restarted or the request timed out."
+        );
       }
     } catch (e: unknown) {
       if (e instanceof Error && e.name !== "AbortError") {
@@ -1345,7 +1376,7 @@ export async function getAuthProviders(): Promise<AuthProviders> {
 
 // ── Account Deletion ──
 
-export async function updateMe(data: { memory_enabled?: boolean; preferred_model?: string | null }): Promise<UserInfo> {
+export async function updateMe(data: UpdateMePayload): Promise<UserInfo> {
   const res = await authFetch(`${API_BASE}/api/auth/me`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

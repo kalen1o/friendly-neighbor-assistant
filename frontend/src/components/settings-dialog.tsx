@@ -14,6 +14,7 @@ import { deleteAllChats, deleteAccount, getUsage, getMe, updateMe, type UsageSta
 import { toast } from "sonner";
 import { ModelSettings } from "@/components/model-settings";
 import { IntegrationsSettings } from "@/components/integrations-settings";
+import { PersonalizeSettings } from "@/components/personalize-settings";
 import { Switch } from "@/components/ui/switch";
 
 interface SettingsDialogProps {
@@ -96,7 +97,7 @@ function UsageSection() {
 
 export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsDialogProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "models" | "integrations">("general");
+  const [tab, setTab] = useState<"general" | "personalize" | "models" | "integrations">("general");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
@@ -168,6 +169,17 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
             )}
           >
             General
+          </button>
+          <button
+            onClick={() => setTab("personalize")}
+            className={cn(
+              "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+              tab === "personalize"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Personalize
           </button>
           <button
             onClick={() => setTab("models")}
@@ -332,6 +344,8 @@ export function SettingsDialog({ open, onOpenChange, onChatsDeleted }: SettingsD
             </div>
           </div>
             </>
+          ) : tab === "personalize" ? (
+            <PersonalizeSettings />
           ) : tab === "models" ? (
             <ModelSettings />
           ) : tab === "integrations" ? (

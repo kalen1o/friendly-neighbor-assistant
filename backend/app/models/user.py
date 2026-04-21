@@ -26,6 +26,27 @@ class User(Base):
     preferred_model: Mapped[Optional[str]] = mapped_column(
         String(100), default=None, nullable=True
     )
+    personalization_nickname: Mapped[Optional[str]] = mapped_column(
+        String(100), default=None, nullable=True
+    )
+    personalization_role: Mapped[Optional[str]] = mapped_column(
+        String(200), default=None, nullable=True
+    )
+    personalization_tone: Mapped[Optional[str]] = mapped_column(
+        String(30), default=None, nullable=True
+    )
+    personalization_length: Mapped[Optional[str]] = mapped_column(
+        String(20), default=None, nullable=True
+    )
+    personalization_language: Mapped[Optional[str]] = mapped_column(
+        String(50), default=None, nullable=True
+    )
+    personalization_about: Mapped[Optional[str]] = mapped_column(
+        Text, default=None, nullable=True
+    )
+    personalization_style: Mapped[Optional[str]] = mapped_column(
+        Text, default=None, nullable=True
+    )
     oauth_provider: Mapped[Optional[str]] = mapped_column(
         String(20), default=None, nullable=True
     )

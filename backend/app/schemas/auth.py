@@ -27,6 +27,13 @@ class UserOut(BaseModel):
     role: str
     memory_enabled: bool
     preferred_model: Optional[str] = None
+    personalization_nickname: Optional[str] = None
+    personalization_role: Optional[str] = None
+    personalization_tone: Optional[str] = None
+    personalization_length: Optional[str] = None
+    personalization_language: Optional[str] = None
+    personalization_about: Optional[str] = None
+    personalization_style: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
@@ -35,6 +42,13 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     memory_enabled: Optional[bool] = None
     preferred_model: Optional[str] = None
+    personalization_nickname: Optional[str] = None
+    personalization_role: Optional[str] = None
+    personalization_tone: Optional[str] = None
+    personalization_length: Optional[str] = None
+    personalization_language: Optional[str] = None
+    personalization_about: Optional[str] = None
+    personalization_style: Optional[str] = None
 
 
 class ProvidersResponse(BaseModel):
