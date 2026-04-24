@@ -496,22 +496,27 @@ async def send_message(
 
     # has_notification is set in _llm_background_task after response completes
 
-    # 3. Start background task and stream via SSE
+    # 3. Publish InboundEvent — the AgentWorker picks it up and streams via SSE.
     queue: asyncio.Queue = asyncio.Queue()
 
-    asyncio.ensure_future(
-        _llm_background_task(
-            chat_id=chat.id,
-            chat_public_id=chat_id,
-            user_id=user.id,
-            user_msg_id=user_msg.id,
-            user_msg_content=body.content,
-            mode=body.mode,
-            file_ids=body.file_ids,
-            user_memory_enabled=user.memory_enabled,
-            settings=settings,
-            queue=queue,
-            artifact_context=body.artifact_context,
+    from app.core.events import InboundEvent
+    from app.core.eventbus import get_eventbus
+
+    await get_eventbus().publish(
+        InboundEvent(
+            source="chat",
+            session_id=chat_id,
+            content=body.content,
+            reply_queue=queue,
+            payload={
+                "chat_id": chat.id,
+                "user_id": user.id,
+                "user_msg_id": user_msg.id,
+                "mode": body.mode,
+                "file_ids": body.file_ids,
+                "user_memory_enabled": user.memory_enabled,
+                "artifact_context": body.artifact_context,
+            },
         )
     )
 

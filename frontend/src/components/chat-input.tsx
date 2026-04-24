@@ -1,12 +1,13 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useState, useRef, type KeyboardEvent } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState, useRef, type KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { SendHorizonal, Zap, Scale, Brain, Paperclip, X as XIcon } from "lucide-react";
 import type { ChatMode } from "@/lib/api";
 import { uploadChatFile } from "@/lib/api";
 import { ModelPicker } from "@/components/model-picker";
+import { SLASH_COMMANDS } from "@/lib/slash-commands";
 
 const MODES: { value: ChatMode; label: string; icon: typeof Zap; description: string }[] = [
   { value: "fast", label: "Fast", icon: Zap, description: "Quick answers, fewer tools" },
@@ -40,8 +41,35 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     { id: string; filename: string; file_type: string; previewUrl?: string }[]
   >([]);
   const [uploading, setUploading] = useState(false);
+  const [selectedCmd, setSelectedCmd] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const commandMatches = useMemo(() => {
+    const m = /^\/(\S*)$/.exec(value);
+    if (!m) return null;
+    const query = m[1].toLowerCase();
+    const list = SLASH_COMMANDS.filter((c) => c.name.startsWith(query));
+    return list.length > 0 ? list : null;
+  }, [value]);
+
+  // Clamp at access time so the selection stays in range when the match list
+  // shrinks (e.g. user types another char that narrows the list).
+  const effectiveSelected = commandMatches
+    ? Math.min(selectedCmd, commandMatches.length - 1)
+    : 0;
+
+  const applyCommand = (name: string) => {
+    const next = `/${name} `;
+    setValue(next);
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(next.length, next.length);
+      }
+    }, 0);
+  };
 
   useImperativeHandle(ref, () => ({
     setInput(text: string, cursorOffset?: number) {
@@ -114,6 +142,28 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (commandMatches) {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        applyCommand(commandMatches[effectiveSelected].name);
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedCmd((effectiveSelected + 1) % commandMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedCmd((effectiveSelected - 1 + commandMatches.length) % commandMatches.length);
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        applyCommand(commandMatches[effectiveSelected].name);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -154,6 +204,32 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 </button>
               </div>
             ))}
+          </div>
+        )}
+        {commandMatches && (
+          <div className="relative">
+            <div className="absolute bottom-1 left-0 right-0 z-20 overflow-hidden rounded-xl border border-border/60 bg-popover shadow-lg">
+              <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Commands — <kbd className="rounded bg-muted px-1 py-0.5 text-[10px] font-normal">Tab</kbd> to complete
+              </div>
+              {commandMatches.map((c, i) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyCommand(c.name);
+                  }}
+                  onMouseEnter={() => setSelectedCmd(i)}
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                    i === effectiveSelected ? "bg-accent" : "hover:bg-accent/50"
+                  }`}
+                >
+                  <span className="font-mono text-primary">/{c.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">{c.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
         <div className="flex items-center gap-2">

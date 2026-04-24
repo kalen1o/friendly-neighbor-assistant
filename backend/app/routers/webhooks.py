@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import secrets
@@ -187,9 +186,20 @@ async def inbound_webhook(
     if not text.strip():
         return JSONResponse({"status": "ok", "message": "empty message ignored"})
 
-    # Run agent in background
-    asyncio.create_task(
-        _process_inbound_message(integration.id, integration.user_id, text, settings)
+    # Publish InboundEvent — the AgentWorker runs the agent and POSTs the reply.
+    from app.core.events import InboundEvent
+    from app.core.eventbus import get_eventbus
+
+    await get_eventbus().publish(
+        InboundEvent(
+            source="webhook",
+            session_id=str(integration.id),
+            content=text,
+            payload={
+                "integration_id": integration.id,
+                "user_id": integration.user_id,
+            },
+        )
     )
     return JSONResponse({"status": "ok"})
 

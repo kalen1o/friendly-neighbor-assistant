@@ -54,9 +54,55 @@ def parse_artifacts(text: str) -> Tuple[str, List[dict]]:
         artifacts.append(art)
 
     cleaned = _ARTIFACT_PATTERN.sub("", text).strip()
+    cleaned = _strip_orphan_closers(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 
     return cleaned, artifacts
+
+
+_CODE_LINE_STARTS = frozenset("}])\"<\\'/")
+_CODE_AFTER_PROSE = re.compile(
+    r"(?<=[.!?])\s+(?=(?:key=|className=|<[a-zA-Z/!]|[{}()\[\]]))"
+)
+
+
+def _strip_orphan_closers(text: str) -> str:
+    """Remove stray `</artifact>` tags that survived primary parsing.
+
+    Happens when an LLM emits a valid artifact, then keeps generating
+    code residue and a duplicate close tag. We walk backward line by line
+    from the orphan close, dropping code-like lines, then trim any
+    inline code tail that follows a sentence boundary.
+    """
+    # Bounded loop — defensive against pathological input.
+    for _ in range(3):
+        if "</artifact>" not in text:
+            return text
+        idx = text.rfind("</artifact>")
+        before, after = text[:idx], text[idx + len("</artifact>"):]
+
+        lines = before.rstrip().split("\n")
+        while lines:
+            stripped = lines[-1].lstrip()
+            if not stripped:
+                lines.pop()
+                continue
+            if stripped[0] in _CODE_LINE_STARTS:
+                lines.pop()
+                continue
+            break
+
+        # The last remaining line may be prose with code tacked on the end
+        # (e.g. "Fixed now. key={i} className=...</span>"). Cut at the
+        # first code-ish token that follows sentence punctuation.
+        if lines:
+            m = _CODE_AFTER_PROSE.search(lines[-1])
+            if m:
+                lines[-1] = lines[-1][: m.start()].rstrip()
+
+        rebuilt = "\n".join(lines).rstrip()
+        text = rebuilt + ("\n\n" + after.lstrip() if after.strip() else "")
+    return text.strip()
 
 
 # Packages bundled with Sandpack templates — never flag as missing

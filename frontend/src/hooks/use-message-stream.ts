@@ -363,18 +363,19 @@ export function useMessageStream(chatId: string) {
       listArtifacts(chatId)
         .then((arts) => {
           if (arts.length === 0) return;
-          // Keep only the latest artifact
           const latest = arts[arts.length - 1];
-          setArtifacts([
-            {
-              id: latest.id,
-              type: "project" as const,
-              title: latest.title,
-              template: latest.template ?? "react",
-              files: latest.files ?? {},
-              dependencies: latest.dependencies ?? {},
-            },
-          ]);
+          const latestData = {
+            id: latest.id,
+            type: "project" as const,
+            title: latest.title,
+            template: latest.template ?? "react",
+            files: latest.files ?? {},
+            dependencies: latest.dependencies ?? {},
+          };
+          setArtifacts([latestData]);
+          // Auto-open the panel on reload — matches the streaming-time UX
+          // where the panel opens automatically when an artifact arrives.
+          setActiveArtifact(latestData);
         })
         .catch(() => {});
     } catch (e) {

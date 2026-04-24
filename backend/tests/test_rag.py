@@ -9,9 +9,30 @@ from app.rag.chunking import chunk_text, chunk_text_semantic
 from app.skills.executors import execute_knowledge_base
 
 
-def test_rag_settings_defaults():
-    """RAG settings have correct defaults."""
-    s = Settings(database_url="sqlite+aiosqlite:///:memory:", jwt_secret="test")
+def test_rag_settings_defaults(monkeypatch):
+    """RAG settings have correct defaults.
+
+    Ignore any RAG_* / COHERE_* values present in `.env` or the process
+    environment — this test is about the defaults declared on the model.
+    """
+    for k in (
+        "RAG_HYBRID_SEARCH_ENABLED",
+        "RAG_FULLTEXT_WEIGHT",
+        "RAG_RERANK_ENABLED",
+        "COHERE_API_KEY",
+        "RAG_TOP_K",
+        "RAG_MIN_SCORE",
+        "RAG_RERANK_TOP_N",
+        "RAG_CHUNK_SIZE",
+        "RAG_CHUNK_OVERLAP",
+        "RAG_CHUNK_STRATEGY",
+    ):
+        monkeypatch.delenv(k, raising=False)
+    s = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        jwt_secret="test",
+        _env_file=None,  # type: ignore[call-arg]
+    )
     assert s.rag_hybrid_search_enabled is True
     assert s.rag_fulltext_weight == 0.4
     assert s.rag_rerank_enabled is False

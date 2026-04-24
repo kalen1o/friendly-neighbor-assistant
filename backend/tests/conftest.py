@@ -58,7 +58,13 @@ async def db(db_engine):
 
 
 @pytest.fixture
-async def client(db_engine):
+def test_settings(tmp_path):
+    """Per-test Settings with a writable upload_dir rooted at tmp_path."""
+    return _test_settings.model_copy(update={"upload_dir": str(tmp_path / "uploads")})
+
+
+@pytest.fixture
+async def client(db_engine, test_settings):
     session_factory = async_sessionmaker(
         db_engine, class_=AsyncSession, expire_on_commit=False
     )
@@ -68,7 +74,7 @@ async def client(db_engine):
             yield session
 
     def override_get_settings():
-        return _test_settings
+        return test_settings
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_settings] = override_get_settings
@@ -84,7 +90,7 @@ async def client(db_engine):
         session.add(user)
         await session.commit()
 
-    token = create_access_token("user-test0001", _test_settings)
+    token = create_access_token("user-test0001", test_settings)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -98,7 +104,7 @@ async def client(db_engine):
 
 
 @pytest.fixture
-async def anon_client(db_engine):
+async def anon_client(db_engine, test_settings):
     """Unauthenticated client for testing auth endpoints."""
     session_factory = async_sessionmaker(
         db_engine, class_=AsyncSession, expire_on_commit=False
@@ -109,7 +115,7 @@ async def anon_client(db_engine):
             yield session
 
     def override_get_settings():
-        return _test_settings
+        return test_settings
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_settings] = override_get_settings

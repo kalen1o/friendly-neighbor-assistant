@@ -109,7 +109,6 @@ async def _run_scheduled_task(task_public_id: str):
         from sqlalchemy import select
         from app.models.scheduled_task import ScheduledTask
         from app.models.chat import Chat, Message
-        from app.agent.agent import build_agent_context, create_tool_executor
         from app.llm.provider import get_llm_response
         from sqlalchemy import func as sa_func
 

@@ -5,8 +5,9 @@ import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { Share2, Search, Download, GripVertical, AlertCircle, RefreshCw, X } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
-import { ChatMessages, EmptyState } from "@/components/chat-messages";
+import { ChatMessages, EmptyState, nextMsgId } from "@/components/chat-messages";
 import { ChatInput, type ChatInputHandle, type PendingFile } from "@/components/chat-input";
+import { parseSlashCommand, executeSlashCommand } from "@/lib/slash-commands";
 import { Button } from "@/components/ui/button";
 import { ShareDialog } from "@/components/share-dialog";
 import { ExportDialog } from "@/components/export-dialog";
@@ -38,7 +39,7 @@ function MobileHeaderActions({ show, children }: { show: boolean; children: Reac
 
 export default function ChatPage() {
   const params = useParams();
-  const { requireAuth } = useAuth();
+  const { requireAuth, user } = useAuth();
   const chatId = params.id as string;
 
   const {
@@ -97,6 +98,22 @@ export default function ChatPage() {
       chatInputRef.current?.setInput(content);
       return;
     }
+
+    const cmd = parseSlashCommand(content);
+    if (cmd) {
+      const userMsgId = nextMsgId();
+      setMessages((prev) => [
+        ...prev,
+        { id: userMsgId, role: "user", content: content.trim() },
+      ]);
+      const response = await executeSlashCommand(cmd, { chatId, chatModelId, user });
+      setMessages((prev) => [
+        ...prev,
+        { id: nextMsgId(), role: "assistant", content: response },
+      ]);
+      return;
+    }
+
     doSend(content, mode, files);
   };
 

@@ -519,7 +519,6 @@ async def _filter_tool_leaks(source: AsyncIterator[str]) -> AsyncIterator[str]:
     Some models (GLM, DeepSeek, Qwen) leak internal markup like
     <tool_call>...</tool_call> or <｜end▁of▁thinking｜> into the text stream.
     """
-    import re
     buffer = ""
     in_tool_leak = False
 

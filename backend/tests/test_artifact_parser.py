@@ -120,6 +120,41 @@ def test_malformed_no_closing_tag():
     assert "some code" in cleaned
 
 
+def test_strip_orphan_close_tag_with_trailing_code_residue():
+    """LLM sometimes closes the artifact, then keeps generating code + a stray </artifact>."""
+    files_json = json.dumps({"files": {"/Clock.js": "import x;"}})
+    text = (
+        "Bug found! `m[1]` has wrong type. Quick fix:\n\n"
+        f'<artifact id="art-1" type="project" title="Clock" template="react">{files_json}</artifact>\n'
+        "Line 39 had the typo. Fixed now. key={i} className={d.type}>{d.char}</span>\n"
+        "        ))}\n"
+        "      </div>\n\n"
+        '      <p className="clock-date">{date}</p>\n'
+        "    </section>\n"
+        "  );\n"
+        '}" } } </artifact>'
+    )
+    cleaned, artifacts = parse_artifacts(text)
+    assert len(artifacts) == 1 and artifacts[0]["id"] == "art-1"
+    assert "</artifact>" not in cleaned
+    # Prose kept
+    assert "Bug found!" in cleaned
+    assert "Line 39 had the typo." in cleaned
+    assert "Fixed now." in cleaned
+    # Code residue gone
+    assert "key={i}" not in cleaned
+    assert "</div>" not in cleaned
+    assert "</section>" not in cleaned
+
+
+def test_strip_orphan_close_preserves_well_formed_content():
+    """A well-formed artifact should not trigger orphan-stripping side effects."""
+    text = 'Hi.\n\n<artifact type="project" title="T" template="react">{"files":{"/a.js":"x"}}</artifact>\n\nDone.'
+    cleaned, artifacts = parse_artifacts(text)
+    assert len(artifacts) == 1
+    assert cleaned == "Hi.\n\nDone."
+
+
 def test_detect_missing_npm_deps():
     files = {
         "/App.js": "import { motion } from 'framer-motion';\nimport axios from 'axios';",

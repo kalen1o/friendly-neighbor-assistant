@@ -314,11 +314,61 @@ User <-> Next.js UI <-> FastAPI Backend
 
 ## Roadmap
 
-The roadmap, completed milestones, planned features, and the multi-agent evolution track are maintained in a single document:
+_Last updated: 2026-04-24_
 
-➡ **[`docs/superpowers/specs/2026-04-15-artifact-roadmap.md`](docs/superpowers/specs/2026-04-15-artifact-roadmap.md)**
+### Shipped
 
-Update that file whenever scope, status, or priorities change — do not duplicate roadmap content here.
+<details>
+<summary><b>Recent milestones</b> — click to expand</summary>
+
+**Event-Driven Architecture (Apr 24)** — `EventBus` (`asyncio.Queue`-backed pub/sub) sits between ingress and agent execution. Chat (`POST /api/chats/{id}/messages`) and inbound webhooks publish `InboundEvent`; `AgentWorker` subscribes and routes to the existing `_llm_background_task` / `_process_inbound_message`. SSE streaming preserved by carrying the per-request `asyncio.Queue` on the event itself — the bus dispatches intent, the queue carries tokens. Lifespan-managed startup/shutdown in `main.py`, exception-isolated handler dispatch (slow or crashing handlers don't block the bus), 6 targeted tests in `test_eventbus.py`. Core in `backend/app/core/`. Scheduler remains direct-invocation for now (different ingress shape — cron trigger, not message).
+
+**Agent Reliability & Deterministic Skills (Apr 17)** — hardened the tool loop after a GLM-5.1 session spun 5+ rounds of web scraping, hit a rate limit, and returned empty.
+- Per-request URL dedup cache threaded through `tool_search_web` — duplicate fetches short-circuit instead of re-downloading.
+- Spinning detection — snapshot `fetch_cache.keys()` before/after each round; if no new URLs were fetched, inject a forced-synthesis system message and strip `tools` from the next call.
+- Empty-response fallback — yields a source-list message referencing up to 5 collected URLs instead of a silent empty bubble.
+- New `lunar_convert` skill — deterministic Vietnamese âm lịch ↔ dương lịch via the `lunarcalendar` package (Ho Ngoc Duc algorithm). Three directions, 11 pinned tests, covers 1900–2199. Pattern established: deterministic domains get a Python executor, not scraping.
+
+**RAG Enhancements (Apr 13)** — hybrid search (vector + FTS with RRF fusion), Cohere `rerank-v3.5`, `[N]` inline citations with clickable source badges, header-aware semantic chunking, all tunable via env vars.
+
+**Multi-File Artifacts — Phase 1: Sandpack (Apr 14–15)** — unified `type="project"` JSON manifest, Sandpack rendering for react/react-ts/vanilla, file explorer + tabbed Code/Preview, streaming file delivery, edit-and-iterate, dependency auto-detection, "Fix this" error recovery.
+
+**Multi-File Artifacts — Phase 2: WebContainers (Apr 16)** — full-stack artifacts (Next.js, Express/Fastify, Vite) in an isolated `/sandbox` route with COOP/COEP headers, xterm terminal, adaptive preview/terminal-first layout per template, postMessage parent↔sandbox protocol, standalone CodeMirror editor, auto-scaffold missing Vite files. Sandpack retained as fast path (~100ms vs ~2–5s boot).
+
+**Artifact Enhancements — Phase 4 (Apr 16)** — ZIP export via `jszip`, artifact versioning with revert dropdown, responsive file explorer (collapses to `<select>` on narrow screens), streaming progress bar with truncation warning, evaluator agent that validates entry files / local imports / truncated code and auto-fixes deps.
+
+**Other shipped features** — multi-step workflow engine with parallel execution and retry, webhook integrations (Slack/Discord/generic), OAuth/SSO (Google, GitHub), multi-model switching, background LLM task status tracking, conversation folders, admin dashboard with analytics, vision / file attachments, shared LLM HTTP connection pool, Sandpack theme sync with app light/dark mode, scheduled agents (APScheduler + Redis, cron, dedicated chat + webhook output — shipped Apr 16).
+
+</details>
+
+### In progress
+
+- **Phase 3: E2B Sandboxes (multi-language artifacts)** — Python, Go, Rust, data science notebooks via E2B cloud sandboxes. New `template="python"` values; backend creates the sandbox, mounts files, streams output back over SSE. Gated on actual user demand for non-JS runtimes.
+
+### Planned
+
+| Feature | Effort | Impact |
+|---|---|---|
+| **EDA follow-ups** — (a) migrate `scheduler/engine.py` to publish `InboundEvent(source="scheduled")` for full unification, (b) externalize the bus to Redis Streams / NATS when multi-process horizontal scaling is needed, (c) add an outbound-webhook publisher that subscribes to `OutboundEvent` instead of being called inline from handlers. | Low–Medium per item | Low today, Medium once horizontal scaling is on deck |
+| **Conversation branching** — fork at any message to explore alternatives | Medium | Nice UX for exploration |
+| **RAG auto-ingest from MCP** — automatically index documents from connected MCP sources | Low | Compounds RAG value |
+| **Skill chaining** — let skills call other skills (tool → workflow escalation) | Low | Unlocks complex workflows |
+| **Site-specific HTML extractors** — targeted BeautifulSoup selectors for top scraped hosts (calendar/news/docs), generic stripper as fallback | Low | Fewer scraping failures, fewer tool-loop rounds |
+| **Deterministic-skill library expansion** — unit/timezone/currency conversion, stock-ticker and package-version lookup. Same pattern as `lunar_convert`: Python executor, tight description, pinned tests | Low per skill | Compounds — each one replaces N tool rounds with 1 deterministic call |
+| **CI/CD & deployment pipeline** — GitHub Actions for lint/test/build, container publishing, staging + production deploy targets | Medium | Ships more safely and faster |
+| **Voice input/output** — Whisper STT + ElevenLabs/browser TTS | Medium | Accessibility + mobile UX |
+
+### Multi-Agent Evolution (Level 3 → Level 4)
+
+Incremental path to multi-agent orchestration. Each item is opt-in per skill, so the baseline single-LLM flow stays the fast path.
+
+| Feature | Effort | Impact |
+|---|---|---|
+| **Evaluator-optimizer** — reviewer agent checks response quality before sending (same LLM, different prompt, cheaper model to bound cost). Opt-in via `evaluate: true` in skill frontmatter. | Low | Higher-quality responses for high-stakes skills |
+| **Plan-validate-execute** — planner generates steps, validator checks tools / reasonableness, executor runs the validated plan | Medium | Reduces GLM-style spinning on multi-step questions |
+| **Specialist worker agents** — route to domain-specific agents (Research, Code, Writing, Admin) via an `agent:` field in skill frontmatter | Medium | Better-tuned behavior per domain |
+| **Coder-reviewer for artifacts** — reviewer checks generated React/HTML/Next.js before rendering | Medium | Catches broken artifacts before users see them |
+| **Orchestrator-workers** — central orchestrator decomposes complex requests, delegates to specialists in parallel where possible, synthesizes final output | High | Unlocks genuinely multi-step agent workflows |
 
 ## License
 

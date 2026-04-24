@@ -64,6 +64,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass  # Don't block startup
 
+    # Start event bus + agent worker before anything that publishes events.
+    from app.core.eventbus import EventBus, set_eventbus
+    from app.core.agent_worker import AgentWorker
+
+    bus = EventBus()
+    await bus.start()
+    set_eventbus(bus)
+    agent_worker = AgentWorker(bus)
+    await agent_worker.start()
+
     # Start scheduled agents
     from app.scheduler.engine import start_scheduler, stop_scheduler
     try:
@@ -78,6 +88,9 @@ async def lifespan(app: FastAPI):
         await stop_scheduler()
     except Exception:
         pass
+    await agent_worker.stop()
+    await bus.stop()
+    set_eventbus(None)
     await close_redis()
     await dispose_engine()
 
