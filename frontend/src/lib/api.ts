@@ -438,6 +438,8 @@ export interface SSECallbacks {
   onArtifactStart?: (data: { id?: string; title: string; template: string }) => void;
   onArtifactFile?: (data: { path: string; code: string }) => void;
   onArtifactEnd?: (data: { id?: string; files: Record<string, string>; dependencies: Record<string, string>; deleted_files?: string[] }) => void;
+  onArtifactToolEdit?: (data: { artifact_id: string; path: string; code: string }) => void;
+  onArtifactEditWarning?: (data: { artifact_id: string; files_changed: number; files_total: number }) => void;
   onArtifactWarnings?: (data: { artifact_id: string; warnings: string[] }) => void;
   onWorkflow?: (steps: WorkflowStep[]) => void;
   onWorkflowStep?: (step: WorkflowStep) => void;
@@ -570,6 +572,16 @@ export function sendMessage(
             case "artifact_end":
               try {
                 callbacks.onArtifactEnd?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact_tool_edit":
+              try {
+                callbacks.onArtifactToolEdit?.(JSON.parse(data));
+              } catch {}
+              break;
+            case "artifact_edit_warning":
+              try {
+                callbacks.onArtifactEditWarning?.(JSON.parse(data));
               } catch {}
               break;
             case "artifact_warnings":
@@ -985,6 +997,7 @@ export interface ArtifactData {
 
 export interface ArtifactOut extends ArtifactData {
   message_id: string;
+  message_public_id: string | null;
   chat_id: string;
   artifact_type: string;
   created_at: string;
@@ -993,8 +1006,15 @@ export interface ArtifactOut extends ArtifactData {
 
 // ── Artifact API ──
 
-export async function listArtifacts(chatId: string): Promise<ArtifactOut[]> {
-  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/artifacts`);
+export async function stopGeneration(chatId: string): Promise<{ stopped: boolean; message_id?: string }> {
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/stop`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to stop generation");
+  return res.json();
+}
+
+export async function listArtifacts(chatId: string, limit?: number): Promise<ArtifactOut[]> {
+  const qs = limit !== undefined ? `?limit=${limit}` : "";
+  const res = await authFetch(`${API_BASE}/api/chats/${chatId}/artifacts${qs}`);
   if (!res.ok) throw new Error("Failed to list artifacts");
   return res.json();
 }
@@ -1029,6 +1049,31 @@ export async function revertArtifact(artifactId: string, versionNumber: number):
     method: "POST",
   });
   if (!res.ok) throw new Error("Failed to revert artifact");
+  return res.json();
+}
+
+export interface ArtifactFileDiff {
+  path: string;
+  status: "added" | "removed" | "modified";
+  diff?: string;     // unified diff for modified files
+  content?: string;  // full body for added/removed files
+}
+
+export interface ArtifactDiffData {
+  from_version: number;
+  to_version: number;
+  files: ArtifactFileDiff[];
+}
+
+export async function diffArtifactVersions(
+  artifactId: string,
+  vFrom: number,
+  vTo: number,
+): Promise<ArtifactDiffData> {
+  const res = await authFetch(
+    `${API_BASE}/api/artifacts/${artifactId}/versions/${vFrom}/diff/${vTo}`,
+  );
+  if (!res.ok) throw new Error("Failed to diff versions");
   return res.json();
 }
 
@@ -1248,6 +1293,21 @@ export interface SystemAnalytics {
   daily: { date: string; messages: number; tokens: number; cost: number }[];
 }
 
+export interface ArtifactEditPathStats {
+  path: string;
+  edits: number;
+  avg_bytes_emitted: number;
+  total_bytes_emitted: number;
+  avg_files_changed: number;
+}
+
+export interface ArtifactEditAnalytics {
+  days: number;
+  total_edits: number;
+  tool_adoption_pct: number;
+  by_path: ArtifactEditPathStats[];
+}
+
 export interface AuditEntry {
   id: number;
   user_email: string | null;
@@ -1314,6 +1374,12 @@ export async function adminDeleteUser(userId: string): Promise<void> {
 export async function adminGetAnalytics(days = 30): Promise<SystemAnalytics> {
   const res = await authFetch(`${API_BASE}/api/admin/analytics?days=${days}`);
   if (!res.ok) throw new Error("Failed to get analytics");
+  return res.json();
+}
+
+export async function adminGetArtifactEditAnalytics(days = 7): Promise<ArtifactEditAnalytics> {
+  const res = await authFetch(`${API_BASE}/api/admin/analytics/artifact-edits?days=${days}`);
+  if (!res.ok) throw new Error("Failed to get artifact-edit analytics");
   return res.json();
 }
 

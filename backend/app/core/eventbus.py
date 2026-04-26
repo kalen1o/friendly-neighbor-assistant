@@ -23,12 +23,15 @@ class EventBus(Worker):
     Handlers are fired via `asyncio.create_task` so a slow handler (like
     running an LLM turn) does not block the bus.
     """
+
     def __init__(self) -> None:
         super().__init__()
         self._queue: asyncio.Queue[Event] = asyncio.Queue()
         self._subs: dict[type, list[Handler]] = defaultdict(list)
 
-    def subscribe(self, event_class: type[E], handler: Callable[[E], Awaitable[None]]) -> None:
+    def subscribe(
+        self, event_class: type[E], handler: Callable[[E], Awaitable[None]]
+    ) -> None:
         self._subs[event_class].append(handler)  # type: ignore[arg-type]
         logger.debug("Subscribed %s to %s", handler.__name__, event_class.__name__)
 
@@ -70,7 +73,9 @@ class EventBus(Worker):
         try:
             await handler(event)
         except Exception:
-            logger.exception("Handler %s failed for %s", handler.__name__, type(event).__name__)
+            logger.exception(
+                "Handler %s failed for %s", handler.__name__, type(event).__name__
+            )
 
 
 _bus: Optional[EventBus] = None

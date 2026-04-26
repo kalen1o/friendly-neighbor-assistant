@@ -62,6 +62,7 @@ export default function ChatPage() {
     setChatModelId,
     loadOlderMessages,
     doSend,
+    stop,
     fixArtifactError,
     lastError,
     retryLastSend,
@@ -338,6 +339,7 @@ export default function ChatPage() {
             ref={chatInputRef}
             onSend={handleSend}
             disabled={isStreaming}
+            onStop={stop}
             transparent={isEmpty}
             chatModelId={chatModelId}
             onModelChange={async (modelId) => {

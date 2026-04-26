@@ -24,6 +24,7 @@ class InboundEvent(Event):
     `reply_queue` is the streaming side-channel for SSE consumers — the bus
     itself does not carry token chunks, only the dispatch intent.
     """
+
     source: InboundSource = "chat"
     session_id: str = ""
     content: str = ""
@@ -39,6 +40,7 @@ class OutboundEvent(Event):
     Nothing subscribes to this yet; it's a hook for future cross-cutting
     consumers (observability, outbound-webhook publisher, metrics).
     """
+
     source: InboundSource = "chat"
     session_id: str = ""
     content: str = ""

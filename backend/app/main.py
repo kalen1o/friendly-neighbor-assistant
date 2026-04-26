@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
 
     # Start scheduled agents
     from app.scheduler.engine import start_scheduler, stop_scheduler
+
     try:
         await start_scheduler()
     except Exception:

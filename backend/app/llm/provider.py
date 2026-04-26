@@ -108,9 +108,9 @@ SYSTEM_PROMPT = (
     '- Whenever the context contains "[Active artifact context —" with an Id, you are almost always modifying that artifact. '
     'You MUST include that exact id on the artifact tag: <artifact id="art-xyz" type="project" title="..." template="...">. '
     "Forgetting the id will create a duplicate artifact and lose the user's project — this is a hard requirement, not a suggestion.\n"
-    '- In edit mode, emit ONLY the files you are changing. Unchanged files are preserved automatically — do not repeat them.\n'
+    "- In edit mode, emit ONLY the files you are changing. Unchanged files are preserved automatically — do not repeat them.\n"
     '- To delete a file, add "deleted_files": ["/path/to/file"] in the manifest alongside "files".\n'
-    '- Keep the same id, template, and title unless the user explicitly asks to rename.\n'
+    "- Keep the same id, template, and title unless the user explicitly asks to rename.\n"
     "- Edit mode example — renaming a button label in one file of a multi-file project:\n"
     '  <artifact id="art-abc123" type="project" title="Landing Page" template="react">\n'
     "  {\n"
@@ -364,7 +364,9 @@ async def _anthropic_stream_with_tools(
         # If no new URLs were fetched, the model is spinning — strip tools and
         # force a final synthesis next round.
         urls_after = set(fetch_cache.keys()) if fetch_cache is not None else set()
-        stuck = fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
+        stuck = (
+            fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
+        )
         if stuck:
             logger.info(
                 "Anthropic tool round %d: no new URLs — forcing synthesis",
@@ -749,7 +751,9 @@ async def _openai_stream_with_tools(
         # If this round fetched no new URLs, the model is spinning.
         # Nudge it to synthesize and strip tools for the next call.
         urls_after = set(fetch_cache.keys()) if fetch_cache is not None else set()
-        stuck = fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
+        stuck = (
+            fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
+        )
         if stuck:
             logger.info(
                 "Tool round %d: no new URLs fetched — forcing synthesis next round",

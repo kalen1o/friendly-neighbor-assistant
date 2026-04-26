@@ -5,9 +5,9 @@ Counters auto-expire after 90 days.
 """
 
 import logging
-from datetime import datetime
 
 from app.cache.redis import get_redis
+from app.utils.time import utcnow_naive
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ COUNTER_TTL = 90 * 86400  # 90 days
 
 
 def _month_key(user_id: int) -> str:
-    return f"usage:{user_id}:{datetime.utcnow().strftime('%Y-%m')}"
+    return f"usage:{user_id}:{utcnow_naive().strftime('%Y-%m')}"
 
 
 async def track_message(
@@ -65,7 +65,7 @@ async def get_usage(user_id: int) -> dict:
         key = _month_key(user_id)
         data = await client.hgetall(key)
         return {
-            "period": datetime.utcnow().strftime("%Y-%m"),
+            "period": utcnow_naive().strftime("%Y-%m"),
             "messages": int(data.get("messages", 0)),
             "tokens_input": int(data.get("tokens_input", 0)),
             "tokens_output": int(data.get("tokens_output", 0)),
@@ -79,7 +79,7 @@ async def get_usage(user_id: int) -> dict:
 
 def _empty_usage() -> dict:
     return {
-        "period": datetime.utcnow().strftime("%Y-%m"),
+        "period": utcnow_naive().strftime("%Y-%m"),
         "messages": 0,
         "tokens_input": 0,
         "tokens_output": 0,

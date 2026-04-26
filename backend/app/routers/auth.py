@@ -1,6 +1,8 @@
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
+
+from app.utils.time import utcnow_naive
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -54,7 +56,7 @@ async def _create_tokens_and_set_cookies(
     refresh_record = RefreshToken(
         token_hash=hash_refresh_token(raw_refresh),
         user_id=user.id,
-        expires_at=datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days),
+        expires_at=utcnow_naive() + timedelta(days=settings.jwt_refresh_expire_days),
     )
     db.add(refresh_record)
     await db.commit()
@@ -193,7 +195,7 @@ async def refresh(
             detail="Invalid refresh token",
         )
 
-    if record.expires_at < datetime.utcnow():
+    if record.expires_at < utcnow_naive():
         # Expired — revoke and reject
         record.revoked = True
         await db.commit()
@@ -270,7 +272,9 @@ async def update_me(
     ):
         value = getattr(body, field)
         if value is not None:
-            setattr(user, field, value.strip() or None if isinstance(value, str) else value)
+            setattr(
+                user, field, value.strip() or None if isinstance(value, str) else value
+            )
     await db.commit()
     await db.refresh(user)
     return user
@@ -400,7 +404,7 @@ async def _oauth_login_redirect(
     rt = RefreshToken(
         token_hash=hash_refresh_token(raw_refresh),
         user_id=user.id,
-        expires_at=datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days),
+        expires_at=utcnow_naive() + timedelta(days=settings.jwt_refresh_expire_days),
     )
     db.add(rt)
     await db.commit()

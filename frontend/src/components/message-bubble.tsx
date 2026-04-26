@@ -39,11 +39,18 @@ interface MessageBubbleProps {
 }
 
 function processCitations(content: string, messageId?: string): string {
-  // Convert [1], [2] etc. into clickable markdown links scoped to this message
+  // Convert [1], [2] etc. into clickable markdown links scoped to this message.
+  // Skip regions inside fenced code blocks and inline code so array subscripts
+  // like `m[1]` don't become citation links.
   const prefix = messageId || "msg";
-  return content.replace(/\[(\d+)\]/g, (_match, num: string) => {
-    return `[${num}](#${prefix}-source-${num})`;
-  });
+  return content.replace(
+    /(```[\s\S]*?```|`[^`\n]*`)|\[(\d+)\]/g,
+    (match, code: string | undefined, num: string | undefined) => {
+      if (code) return code;
+      if (num) return `[${num}](#${prefix}-source-${num})`;
+      return match;
+    },
+  );
 }
 
 const mdComponents: Components = {

@@ -17,6 +17,7 @@ class Worker(ABC):
     Subclasses override `run()`. Call `start()` to launch and `stop()` to
     cancel cleanly.
     """
+
     def __init__(self) -> None:
         self._task: asyncio.Task | None = None
 
@@ -55,6 +56,7 @@ class SubscriberWorker:
     Not a long-running task — the bus dispatches to our handlers directly.
     Subclasses register subscriptions in `start()` via `_subscribe()`.
     """
+
     def __init__(self, bus: "EventBus") -> None:
         self._bus = bus
         self._handlers: list[Callable] = []

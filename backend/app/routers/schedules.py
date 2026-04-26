@@ -9,7 +9,11 @@ from app.db.session import get_db
 from app.models.scheduled_task import ScheduledTask
 from app.models.chat import Chat
 from app.models.user import User
-from app.schemas.scheduled_task import ScheduledTaskCreate, ScheduledTaskUpdate, ScheduledTaskOut
+from app.schemas.scheduled_task import (
+    ScheduledTaskCreate,
+    ScheduledTaskUpdate,
+    ScheduledTaskOut,
+)
 from app.scheduler.engine import update_job, remove_job, _run_scheduled_task
 
 router = APIRouter(tags=["schedules"])
@@ -66,7 +70,10 @@ async def create_schedule(
     # Validate cron expression (basic check)
     parts = body.cron_expression.strip().split()
     if len(parts) != 5:
-        raise HTTPException(status_code=400, detail="Invalid cron expression. Expected 5 fields: minute hour day month weekday")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid cron expression. Expected 5 fields: minute hour day month weekday",
+        )
 
     task = ScheduledTask(
         user_id=user.id,
@@ -170,6 +177,7 @@ async def run_schedule_now(
 
     # Run in background
     import asyncio
+
     asyncio.ensure_future(_run_scheduled_task(task.public_id))
 
     return _task_to_out(task)

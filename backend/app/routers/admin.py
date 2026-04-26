@@ -16,6 +16,8 @@ from app.models.chat import Chat, Message
 from app.models.user import User
 from app.models.user_quota import UserQuota
 from app.schemas.admin import (
+    ArtifactEditAnalytics,
+    ArtifactEditPathStats,
     AuditEntry,
     AuditPage,
     SystemAnalytics,
@@ -290,6 +292,78 @@ async def system_analytics(
         total_tokens=total_tokens,
         total_cost=total_cost,
         daily=daily,
+    )
+
+
+@router.get("/analytics/artifact-edits", response_model=ArtifactEditAnalytics)
+async def artifact_edit_analytics(
+    days: int = Query(default=7, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Aggregate artifact_edit audit entries by `edit_path` (tool vs whole_file_emission).
+
+    Used by the admin dashboard tile to answer "is the tool-based editing
+    migration paying off?" without running raw SQL. Shows adoption ratio +
+    the key per-path waste metric (avg bytes emitted).
+
+    `details` is a text column containing JSON, so aggregation happens
+    Python-side for dialect portability (Postgres in prod, SQLite in tests).
+    """
+    import json as _json
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        await db.execute(
+            select(AuditLog.details).where(
+                AuditLog.action == "artifact_edit",
+                AuditLog.created_at >= since,
+            )
+        )
+    ).all()
+
+    # Aggregate Python-side.
+    buckets: dict[str, dict[str, int]] = {}
+    total_edits = 0
+    for (raw,) in rows:
+        if not raw:
+            continue
+        try:
+            d = _json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        path = d.get("edit_path")
+        if not path:
+            continue
+        total_edits += 1
+        b = buckets.setdefault(
+            path, {"edits": 0, "bytes_emitted": 0, "files_changed": 0}
+        )
+        b["edits"] += 1
+        b["bytes_emitted"] += int(d.get("bytes_emitted") or 0)
+        b["files_changed"] += int(d.get("files_changed") or 0)
+
+    by_path = [
+        ArtifactEditPathStats(
+            path=path,
+            edits=b["edits"],
+            avg_bytes_emitted=(b["bytes_emitted"] / b["edits"]) if b["edits"] else 0.0,
+            total_bytes_emitted=b["bytes_emitted"],
+            avg_files_changed=(b["files_changed"] / b["edits"]) if b["edits"] else 0.0,
+        )
+        for path, b in sorted(buckets.items(), key=lambda kv: -kv[1]["edits"])
+    ]
+
+    tool_edits = buckets.get("tool", {}).get("edits", 0)
+    tool_adoption_pct = (
+        round((tool_edits / total_edits) * 100, 1) if total_edits else 0.0
+    )
+
+    return ArtifactEditAnalytics(
+        days=days,
+        total_edits=total_edits,
+        tool_adoption_pct=tool_adoption_pct,
+        by_path=by_path,
     )
 
 

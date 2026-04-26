@@ -13,6 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.agent.artifact_parser import parse_artifacts
 from app.agent.artifact_stream_parser import ArtifactStreamParser
+from app.auth.admin import log_audit as _log_audit
 from app.auth.dependencies import get_current_user
 from app.cache.per_user import PerUserCache
 from app.config import Settings, get_settings
@@ -471,6 +472,49 @@ async def delete_all_chats(
     await db.commit()
 
 
+@router.post("/{chat_id}/stop", status_code=200)
+async def stop_generation(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Cancel the currently-generating assistant turn for this chat.
+
+    Cancels the in-flight `asyncio.Task` via the task registry (so the LLM
+    stream is actually aborted server-side, not just in the client), then
+    flips the assistant message row to `error` as a terminal state.
+    """
+    from app.core import task_registry
+
+    result = await db.execute(
+        select(Chat).where(Chat.public_id == chat_id, Chat.user_id == user.id)
+    )
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    cancelled = task_registry.cancel(chat_id)
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.chat_id == chat.id, Message.status == "generating")
+        .order_by(Message.id.desc())
+        .limit(1)
+    )
+    msg = result.scalar_one_or_none()
+    if msg is None:
+        return {"stopped": cancelled, "task_cancelled": cancelled}
+
+    msg.status = "error"
+    msg.content = (msg.content or "") + "\n\n[Stopped by user]"
+    await db.commit()
+    return {
+        "stopped": True,
+        "task_cancelled": cancelled,
+        "message_id": msg.public_id,
+    }
+
+
 @router.post("/{chat_id}/messages")
 async def send_message(
     chat_id: str,
@@ -528,6 +572,506 @@ async def send_message(
             yield event
 
     return EventSourceResponse(event_generator())
+
+
+async def _resolve_llm_model_config(
+    chat: Chat,
+    user_id: int,
+    settings: Settings,
+    db: AsyncSession,
+):
+    """Pick the ModelConfig for this turn using the 4-level fallback chain.
+
+    Returns None if the chain falls through to the env/project default,
+    in which case `stream_with_tools` picks up settings directly.
+
+    Order:
+      1. Per-chat project model slug  → provider API key + base_url
+      2. Per-chat user model (FK)     → user's encrypted API key
+      3. User's default model         → user's encrypted API key
+      4. None                         → env project default
+    """
+    # 1. Per-chat project model slug.
+    if chat.selected_model_slug and chat.selected_model_slug.startswith("project-"):
+        from app.routers.models import _project_defaults
+        from app.llm.model_config import ModelConfig
+
+        matched = next(
+            (
+                m
+                for m in _project_defaults(settings)
+                if m.id == chat.selected_model_slug
+            ),
+            None,
+        )
+        if matched:
+            api_key = (
+                settings.anthropic_api_key
+                if matched.provider == "anthropic"
+                else settings.openai_api_key
+            )
+            return ModelConfig(
+                provider=matched.provider,
+                model_id=matched.model_id,
+                api_key=api_key,
+                base_url=matched.base_url,
+            )
+
+    # 2. Per-chat user model.
+    if chat.user_model_id and settings.encryption_key:
+        um_result = await db.execute(
+            select(UserModel).where(UserModel.id == chat.user_model_id)
+        )
+        user_model = um_result.scalar_one_or_none()
+        if user_model:
+            return resolve_model_config(user_model, settings, settings.encryption_key)
+
+    # 3. User's default model.
+    if settings.encryption_key:
+        default_result = await db.execute(
+            select(UserModel).where(
+                UserModel.user_id == user_id,
+                UserModel.is_default == True,  # noqa: E712
+            )
+        )
+        default_model = default_result.scalar_one_or_none()
+        if default_model:
+            return resolve_model_config(
+                default_model, settings, settings.encryption_key
+            )
+
+    # 4. Fall through to env/project default (provider handles it).
+    return None
+
+
+def _inject_artifact_context(
+    llm_messages: list,
+    artifact_context: Optional[dict],
+    settings: Settings,
+) -> None:
+    """Append artifact-aware context to the last user message in-place.
+
+    Two modes:
+      - Tool-editing ON + `artifact_context.id` present → file-tree only,
+        tells the LLM to read/edit via the tool API.
+      - Otherwise (new artifact, no id, or tool-editing OFF) → dump full
+        file bodies with an edit-id hint. Legacy whole-file path.
+    """
+    if not artifact_context or not artifact_context.get("files"):
+        return
+
+    art_ctx = artifact_context
+    use_tools = settings.artifact_tool_editing and bool(art_ctx.get("id"))
+
+    if use_tools:
+        ctx_lines = [
+            "\n\n[Active artifact — edit with tools, NOT with <artifact> tags.]\n",
+            f"Id: {art_ctx['id']}",
+            f"Title: {art_ctx.get('title', 'Untitled')}",
+            f"Template: {art_ctx.get('template', 'react')}",
+            "Files:",
+        ]
+        for path, code in art_ctx["files"].items():
+            ctx_lines.append(
+                f"  {path} ({code.count(chr(10)) + 1} lines, {len(code)} chars)"
+            )
+        ctx_lines.append(
+            "\nTo modify this artifact: call `read_artifact_file(path)` "
+            "to see a file's contents, then `edit_artifact_file(path, "
+            "old_string, new_string)` with the exact substring you want to "
+            "replace. Do NOT emit <artifact> tags — they would duplicate "
+            "this project. Only emit an <artifact> tag if the user asks for "
+            "a completely separate, new project."
+        )
+    else:
+        ctx_lines = [
+            "\n\n[Active artifact context — the user is viewing this project:]\n"
+        ]
+        if art_ctx.get("id"):
+            ctx_lines.append(f"Id: {art_ctx['id']}")
+        ctx_lines.append(f"Title: {art_ctx.get('title', 'Untitled')}")
+        ctx_lines.append(f"Template: {art_ctx.get('template', 'react')}")
+        ctx_lines.append("Current files:")
+        for path, code in art_ctx["files"].items():
+            ctx_lines.append(f"\n--- {path} ---\n{code}")
+        if art_ctx.get("id"):
+            ctx_lines.append(
+                "\nIf the user is asking you to modify this artifact, "
+                f'echo the id "{art_ctx["id"]}" on the artifact tag and '
+                "emit only the files you change."
+            )
+
+    ctx_str = "\n".join(ctx_lines)
+    llm_messages[-1] = {
+        "role": "user",
+        "content": llm_messages[-1]["content"] + ctx_str,
+    }
+
+
+async def _save_and_emit_artifacts(
+    *,
+    found_artifacts: list,
+    artifact_context: Optional[dict],
+    chat: Chat,
+    user_id: int,
+    chat_public_id: str,
+    assistant_msg,
+    queue: asyncio.Queue,
+    db: AsyncSession,
+    tool_executor,
+) -> None:
+    """Persist artifacts emitted in the LLM response + emit SSE + write metrics.
+
+    Responsibilities (each one a single-turn concern, grouped because they
+    share the found_artifacts list + existing_artifact lookup):
+
+    - **Mixed-mode guard**: drop whole-file emissions for an artifact the
+      LLM already tool-edited this turn (avoids stale overwrites).
+    - **Draft+polished collapse**: when the LLM emits multiple artifacts,
+      prefer the one matching `artifact_context.id`, else the fullest.
+    - **Phase 1 no-op filter**: drop files byte-identical to storage.
+    - **Merge + auto-detect deps + template + evaluator pipeline.**
+    - **Version row** per save so Revert keeps working.
+    - **SSE emits**: `artifact`, `artifact_warnings` from evaluator,
+      `artifact_edit_warning` (Phase 5 UX guardrail when ≥50% rewritten).
+    - **Audit log per artifact** with Phase 2 metrics.
+    - **Tool-edit post-turn bookkeeping**: rebind `message_id` to THIS
+      assistant turn so the frontend auto-open gate works after reload.
+    """
+    from app.agent.artifact_parser import detect_dependencies, detect_template
+    from app.agent.artifact_evaluator import evaluate_artifact
+    from app.models.artifact import ArtifactVersion
+
+    # Mixed-mode guard: if the LLM already tool-edited this artifact, a
+    # regex-parsed <artifact> in the same turn is stale relative to the
+    # DB state the tool calls produced.
+    tool_edit_count_so_far = getattr(tool_executor, "artifact_edit_counter", {}).get(
+        "count", 0
+    )
+    if tool_edit_count_so_far > 0 and artifact_context:
+        ctx_id = artifact_context.get("id")
+        dropped = [a for a in found_artifacts if a.get("id") == ctx_id]
+        if dropped:
+            logger.info(
+                "Dropping %d whole-artifact emission(s) for %s — "
+                "tool edits already applied this turn",
+                len(dropped),
+                ctx_id,
+            )
+            found_artifacts = [a for a in found_artifacts if a.get("id") != ctx_id]
+
+    # Draft + polished collapse: prefer the one matching active ctx.id,
+    # else the one with the most files, else the last.
+    if len(found_artifacts) > 1:
+        ctx_id_collapse = (
+            (artifact_context or {}).get("id") if artifact_context else None
+        )
+        picked = None
+        if ctx_id_collapse:
+            for a in found_artifacts:
+                if a.get("id") == ctx_id_collapse:
+                    picked = a
+                    break
+        if picked is None:
+            picked = max(
+                found_artifacts,
+                key=lambda a: len(a.get("files") or {}),
+            )
+        logger.info(
+            "Collapsing %d artifacts → id=%s files=%d (chat=%s)",
+            len(found_artifacts),
+            picked.get("id"),
+            len(picked.get("files") or {}),
+            chat_public_id,
+        )
+        found_artifacts = [picked]
+
+    for art_data in found_artifacts:
+        emitted_files = art_data.get("files", {})
+        deleted_files = art_data.get("deleted_files") or []
+        emitted_deps = art_data.get("dependencies", {})
+        # Phase 2 metrics — snapshot before the no-op filter runs so we
+        # can report how much the LLM actually emitted vs. what was useful.
+        edit_metrics = {
+            "edit_path": "whole_file_emission",
+            "files_emitted": len(emitted_files),
+            "bytes_emitted": sum(len(c) for c in emitted_files.values()),
+            "files_identical": 0,
+            "files_changed": 0,
+            "bytes_changed": 0,
+            "is_edit": False,
+        }
+
+        # Safety net: LLM sometimes forgets to echo the id on edits.
+        # If there's an artifact_context.id AND the emission has no id,
+        # AND the emitted template matches the context, treat it as an edit.
+        ctx_id = (artifact_context or {}).get("id") if artifact_context else None
+        ctx_template = (
+            (artifact_context or {}).get("template") if artifact_context else None
+        )
+        requested_id = art_data.get("id")
+        inferred = False
+        if (
+            not requested_id
+            and ctx_id
+            and (
+                not art_data.get("template") or art_data.get("template") == ctx_template
+            )
+        ):
+            requested_id = ctx_id
+            inferred = True
+
+        logger.info(
+            "Artifact emitted: id=%s%s title=%r template=%s files=%d deleted=%d ctx_id=%s",
+            requested_id,
+            " (inferred from ctx)" if inferred else "",
+            art_data.get("title"),
+            art_data.get("template"),
+            len(emitted_files),
+            len(deleted_files),
+            ctx_id,
+        )
+
+        existing_artifact: Optional[Artifact] = None
+        if requested_id:
+            r = await db.execute(
+                select(Artifact).where(
+                    Artifact.public_id == requested_id,
+                    Artifact.chat_id == chat.id,
+                    Artifact.user_id == user_id,
+                )
+            )
+            existing_artifact = r.scalar_one_or_none()
+
+        if existing_artifact is not None:
+            edit_metrics["is_edit"] = True
+            # Phase 1 defensive filter: drop emitted files byte-identical
+            # to the stored version.
+            existing_files = existing_artifact.files or {}
+            identical_paths = [
+                p
+                for p, code in emitted_files.items()
+                if p in existing_files and existing_files[p] == code
+            ]
+            if identical_paths:
+                for p in identical_paths:
+                    emitted_files.pop(p, None)
+                logger.info(
+                    "artifact_edit.noop_filter: chat=%s dropped %d/%d identical files (%s)",
+                    chat_public_id,
+                    len(identical_paths),
+                    len(identical_paths) + len(emitted_files),
+                    ",".join(identical_paths[:5])
+                    + ("..." if len(identical_paths) > 5 else ""),
+                )
+            edit_metrics["files_identical"] = len(identical_paths)
+            edit_metrics["files_changed"] = len(emitted_files)
+            edit_metrics["bytes_changed"] = sum(len(c) for c in emitted_files.values())
+
+            merged_files = {**existing_files, **emitted_files}
+            for p in deleted_files:
+                merged_files.pop(p, None)
+            merged_deps = {**(existing_artifact.dependencies or {}), **emitted_deps}
+            final_files = merged_files
+            final_deps = merged_deps
+            final_template = art_data.get("template") or existing_artifact.template
+            final_title = art_data.get("title") or existing_artifact.title
+        else:
+            final_files = emitted_files
+            final_deps = emitted_deps
+            final_template = art_data.get("template", "react")
+            final_title = art_data.get("title", "Untitled")
+            edit_metrics["files_changed"] = len(emitted_files)
+            edit_metrics["bytes_changed"] = edit_metrics["bytes_emitted"]
+
+        missing_deps = detect_dependencies(final_files, final_deps)
+        if missing_deps:
+            final_deps = {**final_deps, **missing_deps}
+
+        if existing_artifact is None:
+            detected_template = detect_template(final_files)
+            if detected_template != final_template:
+                final_template = detected_template
+
+        final_files, final_deps, art_warnings = evaluate_artifact(
+            final_files,
+            final_deps,
+            final_template,
+        )
+        art_data["files"] = final_files
+        art_data["dependencies"] = final_deps
+        art_data["template"] = final_template
+
+        if existing_artifact is not None:
+            existing_artifact.title = final_title
+            existing_artifact.template = final_template
+            existing_artifact.files = final_files
+            existing_artifact.dependencies = final_deps
+            existing_artifact.message_id = assistant_msg.id
+            await db.commit()
+            await db.refresh(existing_artifact)
+
+            max_version = (
+                await db.execute(
+                    select(func.max(ArtifactVersion.version_number)).where(
+                        ArtifactVersion.artifact_id == existing_artifact.id
+                    )
+                )
+            ).scalar() or 0
+            v = ArtifactVersion(
+                artifact_id=existing_artifact.id,
+                version_number=max_version + 1,
+                title=existing_artifact.title,
+                files=existing_artifact.files,
+            )
+            db.add(v)
+            await db.commit()
+            artifact = existing_artifact
+        else:
+            artifact = Artifact(
+                message_id=assistant_msg.id,
+                chat_id=chat.id,
+                user_id=user_id,
+                title=final_title,
+                artifact_type="project",
+                template=final_template,
+                files=final_files,
+                dependencies=final_deps,
+            )
+            db.add(artifact)
+            await db.commit()
+            await db.refresh(artifact)
+
+            v = ArtifactVersion(
+                artifact_id=artifact.id,
+                version_number=1,
+                title=artifact.title,
+                files=artifact.files,
+            )
+            db.add(v)
+            await db.commit()
+
+        await queue.put(
+            {
+                "event": "artifact",
+                "data": json.dumps(
+                    {
+                        "id": artifact.public_id,
+                        "type": "project",
+                        "title": artifact.title,
+                        "template": artifact.template,
+                        "files": artifact.files,
+                        "dependencies": artifact.dependencies,
+                    }
+                ),
+            }
+        )
+
+        if art_warnings:
+            await queue.put(
+                {
+                    "event": "artifact_warnings",
+                    "data": json.dumps(
+                        {
+                            "artifact_id": artifact.public_id,
+                            "warnings": art_warnings,
+                        }
+                    ),
+                }
+            )
+
+        # Phase 5 guardrail: warn user when an edit rewrites a big share of files.
+        if edit_metrics["is_edit"] and existing_artifact is not None:
+            total_existing = len(existing_artifact.files or {}) or 1
+            changed = edit_metrics["files_changed"]
+            if changed >= 3 and changed / total_existing >= 0.5:
+                await queue.put(
+                    {
+                        "event": "artifact_edit_warning",
+                        "data": json.dumps(
+                            {
+                                "artifact_id": artifact.public_id,
+                                "files_changed": changed,
+                                "files_total": total_existing,
+                            }
+                        ),
+                    }
+                )
+
+        # Phase 2: audit row per save (admin dashboard reads this).
+        try:
+            await _log_audit(
+                db,
+                "artifact_edit" if edit_metrics["is_edit"] else "artifact_create",
+                user_id=user_id,
+                resource_type="artifact",
+                resource_id=artifact.public_id,
+                details=edit_metrics,
+            )
+            await db.commit()
+        except Exception:
+            logger.exception("artifact_edit metrics logging failed")
+
+    # Phase 3: if the LLM used tools instead of whole-file emission, log
+    # the tool path as a distinct edit, rebind the artifact's message_id
+    # to THIS assistant message (so the frontend auto-open gate matches),
+    # and snapshot the post-turn state as a new ArtifactVersion row so
+    # "revert to latest" actually reverts to where we are now.
+    tool_edit_count = getattr(tool_executor, "artifact_edit_counter", {}).get(
+        "count", 0
+    )
+    if tool_edit_count > 0 and artifact_context:
+        from app.models.artifact import ArtifactVersion
+
+        ctx_id = artifact_context.get("id")
+        try:
+            if ctx_id and assistant_msg is not None:
+                r = await db.execute(
+                    select(Artifact).where(
+                        Artifact.public_id == ctx_id,
+                        Artifact.chat_id == chat.id,
+                        Artifact.user_id == user_id,
+                    )
+                )
+                tool_edited = r.scalar_one_or_none()
+                if tool_edited is not None:
+                    tool_edited.message_id = assistant_msg.id
+
+                    # One version per turn (matches whole-file semantics).
+                    # Without this, tool edits silently skip history — users
+                    # click "latest version" and get a stale state instead.
+                    max_version = (
+                        await db.execute(
+                            select(func.max(ArtifactVersion.version_number)).where(
+                                ArtifactVersion.artifact_id == tool_edited.id
+                            )
+                        )
+                    ).scalar() or 0
+                    db.add(
+                        ArtifactVersion(
+                            artifact_id=tool_edited.id,
+                            version_number=max_version + 1,
+                            title=tool_edited.title,
+                            files=tool_edited.files,
+                        )
+                    )
+                    await db.commit()
+
+            await _log_audit(
+                db,
+                "artifact_edit",
+                user_id=user_id,
+                resource_type="artifact",
+                resource_id=ctx_id or "",
+                details={
+                    "edit_path": "tool",
+                    "files_changed": tool_edit_count,
+                    "is_edit": True,
+                },
+            )
+            await db.commit()
+        except Exception:
+            logger.exception("artifact_tool_edit post-turn bookkeeping failed")
 
 
 async def _llm_background_task(
@@ -589,65 +1133,10 @@ async def _llm_background_task(
 
             personalization_prompt = build_personalization_prompt(user)
 
-            # Resolve which model to use: per-chat > user default > project default
-            resolved_model_config = None
-
-            # 1. Per-chat project model slug (uses project API keys)
-            if chat.selected_model_slug and chat.selected_model_slug.startswith(
-                "project-"
-            ):
-                from app.routers.models import _project_defaults
-                from app.llm.model_config import ModelConfig
-
-                # Look up the project model by slug to get its base_url
-                project_models = _project_defaults(settings)
-                matched = next(
-                    (m for m in project_models if m.id == chat.selected_model_slug),
-                    None,
-                )
-                if matched:
-                    api_key = (
-                        settings.anthropic_api_key
-                        if matched.provider == "anthropic"
-                        else settings.openai_api_key
-                    )
-                    resolved_model_config = ModelConfig(
-                        provider=matched.provider,
-                        model_id=matched.model_id,
-                        api_key=api_key,
-                        base_url=matched.base_url,
-                    )
-
-            # 2. Per-chat user model (uses user's encrypted API key)
-            if (
-                resolved_model_config is None
-                and chat.user_model_id
-                and settings.encryption_key
-            ):
-                um_result = await db.execute(
-                    select(UserModel).where(UserModel.id == chat.user_model_id)
-                )
-                user_model = um_result.scalar_one_or_none()
-                if user_model:
-                    resolved_model_config = resolve_model_config(
-                        user_model, settings, settings.encryption_key
-                    )
-
-            # 3. User default model
-            if resolved_model_config is None and settings.encryption_key:
-                default_result = await db.execute(
-                    select(UserModel).where(
-                        UserModel.user_id == user_id,
-                        UserModel.is_default == True,  # noqa: E712
-                    )
-                )
-                default_model = default_result.scalar_one_or_none()
-                if default_model:
-                    resolved_model_config = resolve_model_config(
-                        default_model, settings, settings.encryption_key
-                    )
-
-            # 4. If still None → project default from .env (provider.py handles this)
+            # 4-level fallback chain: per-chat project → per-chat user → user default → env
+            resolved_model_config = await _resolve_llm_model_config(
+                chat, user_id, settings, db
+            )
 
             # Quota enforcement
             try:
@@ -734,6 +1223,44 @@ async def _llm_background_task(
                 registry, db, settings, on_action=_workflow_progress
             )
 
+            # Phase 3: Artifact editing tools — only when an active artifact
+            # context exists AND the flag is on. The base executor remains the
+            # skill-registry dispatcher; we wrap it so artifact-tool calls route
+            # to the contextual handler instead.
+            artifact_tools_enabled = (
+                settings.artifact_tool_editing
+                and artifact_context
+                and artifact_context.get("id")
+            )
+            if artifact_tools_enabled:
+                from app.agent.artifact_tools import (
+                    ARTIFACT_TOOL_DEFINITIONS,
+                    ARTIFACT_TOOL_NAMES,
+                    make_artifact_tool_executor,
+                )
+
+                art_handler = make_artifact_tool_executor(
+                    db,
+                    artifact_public_id=artifact_context["id"],
+                    chat_id=chat.id,
+                    user_id=user_id,
+                    sse_queue=queue,
+                )
+                tool_defs = [*tool_defs, *ARTIFACT_TOOL_DEFINITIONS]
+
+                base_executor = tool_executor
+
+                async def combined_executor(tool_name, arguments):
+                    if tool_name in ARTIFACT_TOOL_NAMES:
+                        return await art_handler(tool_name, arguments)
+                    return await base_executor(tool_name, arguments)
+
+                # Preserve attributes the provider reads (collected_sources, fetch_cache).
+                combined_executor.collected_sources = base_executor.collected_sources
+                combined_executor.fetch_cache = base_executor.fetch_cache
+                combined_executor.artifact_edit_counter = art_handler.edit_counter
+                tool_executor = combined_executor
+
             # Check if any enabled knowledge skill specifies a model override
             enabled_names = [s.name for s in registry.get_enabled_skills()]
             skill_model_str = registry.get_skill_model(enabled_names)
@@ -785,7 +1312,9 @@ async def _llm_background_task(
 
             # Inject personalization preferences as context
             if personalization_prompt:
-                llm_messages.insert(0, {"role": "user", "content": personalization_prompt})
+                llm_messages.insert(
+                    0, {"role": "user", "content": personalization_prompt}
+                )
                 llm_messages.insert(
                     1,
                     {
@@ -955,29 +1484,8 @@ async def _llm_background_task(
             except Exception:
                 logger.exception("Auto KB injection failed, continuing without")
 
-            # Inject active artifact context if provided
-            if artifact_context and artifact_context.get("files"):
-                art_ctx = artifact_context
-                ctx_lines = [
-                    "\n\n[Active artifact context — the user is viewing this project:]\n"
-                ]
-                if art_ctx.get("id"):
-                    ctx_lines.append(f"Id: {art_ctx['id']}")
-                ctx_lines.append(f"Title: {art_ctx.get('title', 'Untitled')}")
-                ctx_lines.append(f"Template: {art_ctx.get('template', 'react')}")
-                ctx_lines.append("Current files:")
-                for path, code in art_ctx["files"].items():
-                    ctx_lines.append(f"\n--- {path} ---\n{code}")
-                if art_ctx.get("id"):
-                    ctx_lines.append(
-                        "\nIf the user is asking you to modify this artifact, "
-                        f'echo the id "{art_ctx["id"]}" on the artifact tag and emit only the files you change.'
-                    )
-                ctx_str = "\n".join(ctx_lines)
-                llm_messages[-1] = {
-                    "role": "user",
-                    "content": llm_messages[-1]["content"] + ctx_str,
-                }
+            # Inject active artifact context if provided.
+            _inject_artifact_context(llm_messages, artifact_context, settings)
 
             # 4. pre_llm hooks
             hook_ctx.llm_messages = llm_messages
@@ -1048,11 +1556,13 @@ async def _llm_background_task(
                         if evt_type == "artifact_start":
                             _pending_art_meta = art_event["data"]
                         elif evt_type == "artifact_end":
-                            streamed_artifacts.append({
-                                **_pending_art_meta,
-                                "type": "project",
-                                **art_event["data"],
-                            })
+                            streamed_artifacts.append(
+                                {
+                                    **_pending_art_meta,
+                                    "type": "project",
+                                    **art_event["data"],
+                                }
+                            )
                             _pending_art_meta = {}
 
                     # Create assistant message on first text chunk
@@ -1133,9 +1643,10 @@ async def _llm_background_task(
 
                 # Strip leaked tool call syntax from response
                 import re as _re
+
                 cleaned_response = _re.sub(
-                    r'<tool_call>.*?(?:<｜end▁of▁thinking｜>|$)',
-                    '',
+                    r"<tool_call>.*?(?:<｜end▁of▁thinking｜>|$)",
+                    "",
                     cleaned_response,
                     flags=_re.DOTALL,
                 ).strip()
@@ -1180,8 +1691,6 @@ async def _llm_background_task(
                     pass  # Don't break chat flow for webhook failures
 
                 # Audit logging
-                from app.auth.admin import log_audit as _log_audit
-
                 await _log_audit(
                     db,
                     "send_message",
@@ -1190,194 +1699,19 @@ async def _llm_background_task(
                     resource_id=chat_public_id,
                 )
 
-                # Save and emit artifacts
-                from app.agent.artifact_parser import detect_dependencies, detect_template
-                from app.agent.artifact_evaluator import evaluate_artifact
-                from app.models.artifact import ArtifactVersion
-
-                # Some models emit a draft + polished pair in one response.
-                # Prefer the one that echoes the active artifact's id (that's
-                # the real edit), otherwise prefer the artifact with the most
-                # files (the fuller version), otherwise fall back to the last.
-                if len(found_artifacts) > 1:
-                    ctx_id_collapse = (
-                        (artifact_context or {}).get("id") if artifact_context else None
-                    )
-                    picked = None
-                    if ctx_id_collapse:
-                        for a in found_artifacts:
-                            if a.get("id") == ctx_id_collapse:
-                                picked = a
-                                break
-                    if picked is None:
-                        picked = max(
-                            found_artifacts,
-                            key=lambda a: len(a.get("files") or {}),
-                        )
-                    logger.info(
-                        "Collapsing %d artifacts → id=%s files=%d (chat=%s)",
-                        len(found_artifacts),
-                        picked.get("id"),
-                        len(picked.get("files") or {}),
-                        chat_public_id,
-                    )
-                    found_artifacts = [picked]
-
-                for art_data in found_artifacts:
-                    emitted_files = art_data.get("files", {})
-                    deleted_files = art_data.get("deleted_files") or []
-                    emitted_deps = art_data.get("dependencies", {})
-
-                    # Safety net: LLM sometimes forgets to echo the id on edits.
-                    # If there's an artifact_context.id AND the emission has no id,
-                    # AND the emitted template matches the context, treat it as an edit.
-                    ctx_id = (artifact_context or {}).get("id") if artifact_context else None
-                    ctx_template = (artifact_context or {}).get("template") if artifact_context else None
-                    requested_id = art_data.get("id")
-                    inferred = False
-                    if not requested_id and ctx_id and (
-                        not art_data.get("template") or art_data.get("template") == ctx_template
-                    ):
-                        requested_id = ctx_id
-                        inferred = True
-
-                    logger.info(
-                        "Artifact emitted: id=%s%s title=%r template=%s files=%d deleted=%d ctx_id=%s",
-                        requested_id,
-                        " (inferred from ctx)" if inferred else "",
-                        art_data.get("title"),
-                        art_data.get("template"),
-                        len(emitted_files),
-                        len(deleted_files),
-                        ctx_id,
-                    )
-
-                    # Look up existing artifact if the LLM echoed back an id it owns.
-                    existing_artifact: Optional[Artifact] = None
-                    if requested_id:
-                        r = await db.execute(
-                            select(Artifact).where(
-                                Artifact.public_id == requested_id,
-                                Artifact.chat_id == chat.id,
-                                Artifact.user_id == user_id,
-                            )
-                        )
-                        existing_artifact = r.scalar_one_or_none()
-
-                    if existing_artifact is not None:
-                        # Edit mode: merge emitted files over existing, drop deleted, keep others.
-                        merged_files = {**existing_artifact.files, **emitted_files}
-                        for p in deleted_files:
-                            merged_files.pop(p, None)
-                        merged_deps = {**(existing_artifact.dependencies or {}), **emitted_deps}
-                        final_files = merged_files
-                        final_deps = merged_deps
-                        final_template = art_data.get("template") or existing_artifact.template
-                        final_title = art_data.get("title") or existing_artifact.title
-                    else:
-                        final_files = emitted_files
-                        final_deps = emitted_deps
-                        final_template = art_data.get("template", "react")
-                        final_title = art_data.get("title", "Untitled")
-
-                    # Auto-detect missing dependencies from the full resulting file set.
-                    missing_deps = detect_dependencies(final_files, final_deps)
-                    if missing_deps:
-                        final_deps = {**final_deps, **missing_deps}
-
-                    # Auto-detect template (only when there isn't an existing one to respect).
-                    if existing_artifact is None:
-                        detected_template = detect_template(final_files)
-                        if detected_template != final_template:
-                            final_template = detected_template
-
-                    # Run evaluator pipeline on the full file set.
-                    final_files, final_deps, art_warnings = evaluate_artifact(
-                        final_files, final_deps, final_template,
-                    )
-                    art_data["files"] = final_files
-                    art_data["dependencies"] = final_deps
-                    art_data["template"] = final_template
-
-                    if existing_artifact is not None:
-                        # Update in place and append a new version row.
-                        existing_artifact.title = final_title
-                        existing_artifact.template = final_template
-                        existing_artifact.files = final_files
-                        existing_artifact.dependencies = final_deps
-                        existing_artifact.message_id = assistant_msg.id
-                        await db.commit()
-                        await db.refresh(existing_artifact)
-
-                        max_version = (
-                            await db.execute(
-                                select(func.max(ArtifactVersion.version_number)).where(
-                                    ArtifactVersion.artifact_id == existing_artifact.id
-                                )
-                            )
-                        ).scalar() or 0
-                        v = ArtifactVersion(
-                            artifact_id=existing_artifact.id,
-                            version_number=max_version + 1,
-                            title=existing_artifact.title,
-                            files=existing_artifact.files,
-                        )
-                        db.add(v)
-                        await db.commit()
-                        artifact = existing_artifact
-                    else:
-                        artifact = Artifact(
-                            message_id=assistant_msg.id,
-                            chat_id=chat.id,
-                            user_id=user_id,
-                            title=final_title,
-                            artifact_type="project",
-                            template=final_template,
-                            files=final_files,
-                            dependencies=final_deps,
-                        )
-                        db.add(artifact)
-                        await db.commit()
-                        await db.refresh(artifact)
-
-                        v = ArtifactVersion(
-                            artifact_id=artifact.id,
-                            version_number=1,
-                            title=artifact.title,
-                            files=artifact.files,
-                        )
-                        db.add(v)
-                        await db.commit()
-
-                    await queue.put(
-                        {
-                            "event": "artifact",
-                            "data": json.dumps(
-                                {
-                                    "id": artifact.public_id,
-                                    "type": "project",
-                                    "title": artifact.title,
-                                    "template": artifact.template,
-                                    "files": artifact.files,
-                                    "dependencies": artifact.dependencies,
-                                }
-                            ),
-                        }
-                    )
-
-                    # Emit warnings from evaluator
-                    if art_warnings:
-                        await queue.put(
-                            {
-                                "event": "artifact_warnings",
-                                "data": json.dumps(
-                                    {
-                                        "artifact_id": artifact.public_id,
-                                        "warnings": art_warnings,
-                                    }
-                                ),
-                            }
-                        )
+                # Save whole-artifact emissions + tool-edit bookkeeping
+                # + observability audit rows. ~300 lines of its own.
+                await _save_and_emit_artifacts(
+                    found_artifacts=found_artifacts,
+                    artifact_context=artifact_context,
+                    chat=chat,
+                    user_id=user_id,
+                    chat_public_id=chat_public_id,
+                    assistant_msg=assistant_msg,
+                    queue=queue,
+                    db=db,
+                    tool_executor=tool_executor,
+                )
 
                 # 6. post_message hooks (latency calculated here)
                 hook_ctx.response = full_response

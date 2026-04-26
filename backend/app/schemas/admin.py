@@ -30,6 +30,21 @@ class SystemAnalytics(BaseModel):
     daily: List[dict]
 
 
+class ArtifactEditPathStats(BaseModel):
+    path: str  # "tool" or "whole_file_emission"
+    edits: int
+    avg_bytes_emitted: float
+    total_bytes_emitted: int
+    avg_files_changed: float
+
+
+class ArtifactEditAnalytics(BaseModel):
+    days: int
+    total_edits: int
+    tool_adoption_pct: float  # 0-100, 0 if no edits
+    by_path: List[ArtifactEditPathStats]
+
+
 class AuditEntry(BaseModel):
     id: int
     user_email: Optional[str]

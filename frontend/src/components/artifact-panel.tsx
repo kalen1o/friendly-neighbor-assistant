@@ -11,7 +11,9 @@ import {
   ChevronDown,
   History,
   RefreshCw,
+  FileDiff,
 } from "lucide-react";
+import { ArtifactDiffDialog } from "@/components/artifact-diff-dialog";
 import {
   SandpackProvider,
   SandpackCodeEditor,
@@ -238,7 +240,8 @@ function SandpackContent({
   onFixError,
   warnings,
   onReload,
-}: ArtifactPanelProps & { onReload: () => void }) {
+  onCompareClick,
+}: ArtifactPanelProps & { onReload: () => void; onCompareClick: () => void }) {
   const { sandpack, listen } = useSandpack();
   const [tab, setTab] = useState<"code" | "preview">("preview");
   const fileCount = Object.keys(artifact.files).length;
@@ -342,6 +345,7 @@ function SandpackContent({
               sandpack.updateFile(path, code);
             });
           }}
+          onCompareClick={onCompareClick}
         />
         <Button
           variant="ghost"
@@ -446,9 +450,11 @@ import {
 function VersionDropdown({
   artifactId,
   onRevert,
+  onCompareClick,
 }: {
   artifactId: string;
   onRevert: (files: Record<string, string>, title: string) => void;
+  onCompareClick: () => void;
 }) {
   const [versions, setVersions] = useState<ArtifactVersionData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -485,55 +491,70 @@ function VersionDropdown({
         if (open) fetchVersions();
       }}
     >
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            title="Version history"
-          />
-        }
-      >
-        <History className="h-3.5 w-3.5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Version History</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {loading ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
-              Loading...
-            </p>
-          ) : versions.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
-              No versions yet
-            </p>
-          ) : (
-            versions.map((v) => (
-              <DropdownMenuItem
-                key={v.version_number}
-                onSelect={() => handleRevert(v.version_number)}
-              >
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] px-1.5 shrink-0"
-                >
-                  v{v.version_number}
-                </Badge>
-                <span className="truncate flex-1">{v.title}</span>
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  {new Date(v.created_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title="Version history"
+            />
+          }
+        >
+          <History className="h-3.5 w-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Version History</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {loading ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                Loading...
+              </p>
+            ) : versions.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                No versions yet
+              </p>
+            ) : (
+              <>
+                {/* At least 2 versions to meaningfully diff. */}
+                {versions.length >= 2 && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={onCompareClick}
+                      className="gap-2 text-xs"
+                    >
+                      <FileDiff className="h-3.5 w-3.5 text-amber-500" />
+                      <span className="flex-1">Compare versions…</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {versions.map((v) => (
+                  <DropdownMenuItem
+                    key={v.version_number}
+                    onClick={() => handleRevert(v.version_number)}
+                  >
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 shrink-0"
+                    >
+                      v{v.version_number}
+                    </Badge>
+                    <span className="truncate flex-1">{v.title}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {new Date(v.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
   );
 }
 
@@ -609,7 +630,8 @@ function WebContainerContent({
   artifact,
   onClose,
   warnings,
-}: ArtifactPanelProps) {
+  onCompareClick,
+}: ArtifactPanelProps & { onCompareClick: () => void }) {
   const { resolvedTheme } = useTheme();
   const [tab, setTab] = useState<"code" | "preview">("preview");
   const [activeFile, setActiveFile] = useState(
@@ -714,6 +736,7 @@ function WebContainerContent({
         <VersionDropdown
           artifactId={artifact.id}
           onRevert={(newFiles) => setFiles(newFiles)}
+          onCompareClick={onCompareClick}
         />
         <Button
           variant="ghost"
@@ -779,6 +802,8 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
   const isStreaming = props.artifact.id.startsWith("streaming-");
   const [reloadCount, setReloadCount] = useState(0);
   const handleReload = () => setReloadCount((c) => c + 1);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const openCompare = () => setCompareOpen(true);
 
   if (isStreaming) {
     const fileCount = Object.keys(props.artifact.files).length;
@@ -832,7 +857,18 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
 
   // WebContainer templates
   if (WEBCONTAINER_TEMPLATES.has(props.artifact.template)) {
-    return <WebContainerContent {...props} />;
+    return (
+      <>
+        <WebContainerContent {...props} onCompareClick={openCompare} />
+        {compareOpen && (
+          <ArtifactDiffDialog
+            open={compareOpen}
+            onOpenChange={setCompareOpen}
+            artifactId={props.artifact.id}
+          />
+        )}
+      </>
+    );
   }
 
   // Sandpack templates (react, react-ts, vanilla)
@@ -860,7 +896,18 @@ export function ArtifactPanel(props: ArtifactPanelProps) {
       }}
       style={{ height: "100%", display: "flex", flexDirection: "column" }}
     >
-      <SandpackContent {...props} onReload={handleReload} />
+      <SandpackContent
+        {...props}
+        onReload={handleReload}
+        onCompareClick={openCompare}
+      />
+      {compareOpen && (
+        <ArtifactDiffDialog
+          open={compareOpen}
+          onOpenChange={setCompareOpen}
+          artifactId={props.artifact.id}
+        />
+      )}
     </SandpackProvider>
   );
 }

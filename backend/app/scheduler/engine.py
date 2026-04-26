@@ -52,7 +52,9 @@ def _add_job(task_public_id: str, cron_expression: str):
         return
     parts = cron_expression.strip().split()
     if len(parts) != 5:
-        logger.error("Invalid cron expression for task %s: %s", task_public_id, cron_expression)
+        logger.error(
+            "Invalid cron expression for task %s: %s", task_public_id, cron_expression
+        )
         return
 
     trigger = CronTrigger(
@@ -134,9 +136,7 @@ async def _run_scheduled_task(task_public_id: str):
                 task.chat_id = chat.id
                 await db.commit()
             else:
-                result = await db.execute(
-                    select(Chat).where(Chat.id == task.chat_id)
-                )
+                result = await db.execute(select(Chat).where(Chat.id == task.chat_id))
                 chat = result.scalar_one_or_none()
                 if not chat:
                     chat = Chat(
@@ -186,7 +186,9 @@ async def _run_scheduled_task(task_public_id: str):
                                 "task_name": task.name,
                                 "prompt": task.prompt,
                                 "response": response[:2000],
-                                "chat_id": chat.public_id if hasattr(chat, "public_id") else str(chat.id),
+                                "chat_id": chat.public_id
+                                if hasattr(chat, "public_id")
+                                else str(chat.id),
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                             },
                         )

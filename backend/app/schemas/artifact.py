@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class ArtifactOut(BaseModel):
     id: str = Field(validation_alias="public_id")
     message_id: str
+    message_public_id: Optional[str] = None
     chat_id: str
     title: str
     artifact_type: str
@@ -20,10 +21,13 @@ class ArtifactOut(BaseModel):
     model_config = {"from_attributes": True, "populate_by_name": True}
 
     @classmethod
-    def from_artifact(cls, artifact) -> "ArtifactOut":
+    def from_artifact(
+        cls, artifact, message_public_id: Optional[str] = None
+    ) -> "ArtifactOut":
         return cls(
             id=artifact.public_id,
             message_id=str(artifact.message_id),
+            message_public_id=message_public_id,
             chat_id=str(artifact.chat_id),
             title=artifact.title,
             artifact_type=artifact.artifact_type,
@@ -49,3 +53,20 @@ class ArtifactVersionOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ArtifactFileDiff(BaseModel):
+    """Per-file entry in an artifact version comparison."""
+
+    path: str
+    status: str  # "added" | "removed" | "modified"
+    # Unified diff for modified files. For added/removed we return the full
+    # file body instead (renderer can flag it entirely green/red).
+    diff: Optional[str] = None
+    content: Optional[str] = None
+
+
+class ArtifactDiffOut(BaseModel):
+    from_version: int
+    to_version: int
+    files: list[ArtifactFileDiff]

@@ -79,7 +79,7 @@ def _strip_orphan_closers(text: str) -> str:
         if "</artifact>" not in text:
             return text
         idx = text.rfind("</artifact>")
-        before, after = text[:idx], text[idx + len("</artifact>"):]
+        before, after = text[:idx], text[idx + len("</artifact>") :]
 
         lines = before.rstrip().split("\n")
         while lines:

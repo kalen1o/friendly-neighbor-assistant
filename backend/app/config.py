@@ -41,6 +41,11 @@ class Settings(BaseSettings):
 
     max_tool_rounds: int = 5
     max_output_tokens: int = 16384
+    # Phase 3: artifact edits happen via list/read/edit tools instead of
+    # whole-file <artifact> re-emission. Whole-file remains as the fallback
+    # for new artifacts and models that don't handle tools well. Set to
+    # `false` in .env as a kill-switch if a specific model misbehaves.
+    artifact_tool_editing: bool = True
     # Per-chunk read timeout for LLM streams. If no bytes arrive for this many
     # seconds, the stream is aborted with a TimeoutError. Prevents silent hangs
     # when an upstream provider holds the connection open without sending data.

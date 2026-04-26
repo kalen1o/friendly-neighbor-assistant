@@ -100,7 +100,7 @@ async def execute_datetime_info(
         zone = zoneinfo.ZoneInfo(timezone)
         now = datetime.datetime.now(zone)
     except Exception:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         timezone = "UTC"
 
     content = (
@@ -184,8 +184,18 @@ async def execute_summarize(
 # Can-Chi (Sexagenary cycle) — Vietnamese transliteration
 _CAN = ["Giáp", "Ất", "Bính", "Đinh", "Mậu", "Kỷ", "Canh", "Tân", "Nhâm", "Quý"]
 _CHI = [
-    "Tý", "Sửu", "Dần", "Mão", "Thìn", "Tỵ",
-    "Ngọ", "Mùi", "Thân", "Dậu", "Tuất", "Hợi",
+    "Tý",
+    "Sửu",
+    "Dần",
+    "Mão",
+    "Thìn",
+    "Tỵ",
+    "Ngọ",
+    "Mùi",
+    "Thân",
+    "Dậu",
+    "Tuất",
+    "Hợi",
 ]
 
 
@@ -303,7 +313,11 @@ async def execute_lunar_convert(
         return _fmt_result(solar, lunar, "solar_to_lunar")
 
     if direction == "lunar_to_solar":
-        if not (_LUNAR_YEAR_MIN <= year <= _LUNAR_YEAR_MAX) or not (1 <= month <= 12) or not (1 <= day <= 30):
+        if (
+            not (_LUNAR_YEAR_MIN <= year <= _LUNAR_YEAR_MAX)
+            or not (1 <= month <= 12)
+            or not (1 <= day <= 30)
+        ):
             return {
                 "content": "Invalid lunar date: year={}, month={}, day={}. Year must be {}–{}, day 1–30.".format(
                     year, month, day, _LUNAR_YEAR_MIN, _LUNAR_YEAR_MAX
@@ -324,9 +338,15 @@ async def execute_lunar_convert(
                     last_day_info = (
                         " Tháng {} âm lịch năm {} chỉ có {} ngày — ngày cuối là "
                         "{}/{}/{} âm = {:02d}/{:02d}/{} dương.".format(
-                            month, year, probe,
-                            probe, month, year,
-                            probe_solar.day, probe_solar.month, probe_solar.year,
+                            month,
+                            year,
+                            probe,
+                            probe,
+                            month,
+                            year,
+                            probe_solar.day,
+                            probe_solar.month,
+                            probe_solar.year,
                         )
                     )
                     break

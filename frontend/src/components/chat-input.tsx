@@ -3,7 +3,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useState, useRef, type KeyboardEvent } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { SendHorizonal, Zap, Scale, Brain, Paperclip, X as XIcon } from "lucide-react";
+import { SendHorizonal, Square, Zap, Scale, Brain, Paperclip, X as XIcon } from "lucide-react";
 import type { ChatMode } from "@/lib/api";
 import { uploadChatFile } from "@/lib/api";
 import { ModelPicker } from "@/components/model-picker";
@@ -28,13 +28,14 @@ interface ChatInputProps {
   transparent?: boolean;
   chatModelId?: string | null;
   onModelChange?: (modelId: string | null) => void;
+  onStop?: () => void;
 }
 
 export interface ChatInputHandle {
   setInput: (text: string, cursorOffset?: number) => void;
 }
 
-export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, chatModelId, onModelChange }, ref) {
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({ onSend, disabled, chatModelId, onModelChange, onStop }, ref) {
   const [value, setValue] = useState("");
   const [mode, setMode] = useState<ChatMode>("balanced");
   const [pendingFiles, setPendingFiles] = useState<
@@ -263,14 +264,26 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           >
             <Paperclip className="h-4 w-4" />
           </Button>
-          <Button
-            onClick={handleSend}
-            disabled={disabled || (!value.trim() && pendingFiles.length === 0)}
-            size="icon"
-            className="shrink-0 rounded-xl shadow-sm shadow-primary/20 transition-all hover:shadow-md hover:shadow-primary/25"
-          >
-            <SendHorizonal className="h-4 w-4" />
-          </Button>
+          {disabled && onStop ? (
+            <Button
+              onClick={onStop}
+              size="icon"
+              variant="destructive"
+              className="shrink-0 rounded-xl shadow-sm"
+              title="Stop generating"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={disabled || (!value.trim() && pendingFiles.length === 0)}
+              size="icon"
+              className="shrink-0 rounded-xl shadow-sm shadow-primary/20 transition-all hover:shadow-md hover:shadow-primary/25"
+            >
+              <SendHorizonal className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1">
           <ModelPicker

@@ -1,12 +1,13 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import Response
 from jose import JWTError, jwt
 
 from app.config import Settings
+from app.utils.time import utcnow_naive
 
 
 # ── Access tokens ──
@@ -14,7 +15,7 @@ from app.config import Settings
 
 def create_access_token(public_id: str, settings: Settings) -> str:
     """Create a short-lived JWT access token using the user's public_id."""
-    expire = datetime.utcnow() + timedelta(minutes=settings.jwt_access_expire_minutes)
+    expire = utcnow_naive() + timedelta(minutes=settings.jwt_access_expire_minutes)
     payload = {
         "sub": public_id,
         "exp": expire,

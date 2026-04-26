@@ -321,6 +321,25 @@ _Last updated: 2026-04-24_
 <details>
 <summary><b>Recent milestones</b> — click to expand</summary>
 
+**Admin Dashboard — Artifact Edit Efficiency Tile (Apr 24)** — surfaces the per-path metrics emitted on every edit. New `GET /api/admin/analytics/artifact-edits?days=N` endpoint aggregates `audit_logs.details` Python-side (portable across Postgres + SQLite). Dashboard tile on `/admin` shows tool-adoption %, per-path edit counts, avg bytes emitted, avg files changed, with colored progress bars (green = tool, amber = whole-file). Answers "is the migration paying off?" at a glance instead of requiring raw SQL. 7 targeted tests covering mixed rows, malformed JSON, day-window, non-admin rejection.
+
+**Artifact Edit via Tools — 5-Phase Production Rollout (Apr 24)** — replaced full-file re-emission with surgical edits via LLM tool calls. Default on.
+- **Phase 1 — Byte-identical filter** (`routers/chats.py`): emitted files byte-for-byte equal to the stored version are dropped from the merge; no duplicate version rows or evaluator work. Defensive net.
+- **Phase 2 — Observability**: every edit writes an `artifact_edit` or `artifact_create` audit row with `edit_path`, `files_emitted`, `bytes_emitted`, `files_changed`, `bytes_changed`, `files_identical`.
+- **Phase 3 — Tool-based editing** (`backend/app/agent/artifact_tools.py`): three contextual tools registered only when an `artifact_context` exists — `list_artifact_files` (file tree only, no body dump in prompt), `read_artifact_file(path)` (on-demand fetch), `edit_artifact_file(path, old_string, new_string)` (exact-match substring replace, uniqueness-enforced). System prompt swaps from full-file dump to a tree when tools are available. Live `artifact_tool_edit` SSE events update the panel file-in-place — no re-stream. Mixed-mode guard drops stale whole-file emissions when tool edits already applied. 7 unit tests.
+- **Phase 4 — Default on** (`config.py`): `artifact_tool_editing: bool = True`, overridable via `.env` kill-switch. Verified live with GLM: 5 consecutive edits on `edit_path: tool`, zero whole-file emissions.
+- **Phase 5 — UX guardrail**: when whole-file rewrites ≥50% of files (≥3), backend emits `artifact_edit_warning` → frontend shows a 15s toast with one-click **Revert** backed by the existing version history.
+
+**Stop Button with Real Task Cancellation (Apr 24)** — `POST /api/chats/{id}/stop` now cancels the in-flight `asyncio.Task` via a `task_registry` (`app/core/task_registry.py`) before flipping the DB status, so the LLM stream actually aborts server-side instead of burning tokens until the 2-minute idle timeout. `AgentWorker._handle_chat` registers on entry, unregisters in `finally`, re-raises `CancelledError` cleanly. Frontend Stop button swaps in for Send while streaming, calls `abortStream` + the endpoint, finalizes partial content as a saved message. 5 targeted tests.
+
+**Slash Commands + Autocomplete (Apr 24)** — `/help`, `/skills`, `/session` intercepted client-side in the chat handler. Type `/` in the chat input to see matching commands; Tab or Enter completes, ↑/↓ navigates. Rendered through the existing `MessageBubble` markdown pipeline — nothing persisted to the backend. `frontend/src/lib/slash-commands.ts`, `chat-input.tsx`.
+
+**Artifact Editing Polish (Apr 24)** — several correctness + UX fixes shipped together:
+- Orphan `</artifact>` closer stripper for malformed LLM emissions (double close tags). Line-walker drops code-like trailing lines + handles mid-line code residue. 2 regression tests.
+- Auto-open panel on reload only when the latest artifact belongs to the last assistant message — `message_public_id` added to `ArtifactOut`, matched client-side. Old chats with stale artifacts just show the card.
+- `listArtifacts?limit=N` + DESC sort. Reload fetches only the latest artifact instead of downloading every past version's file payload.
+- Citation links (`[N]` → clickable) now skip fenced code blocks and inline code. `m[1]` in a code fence no longer becomes a source link.
+
 **Event-Driven Architecture (Apr 24)** — `EventBus` (`asyncio.Queue`-backed pub/sub) sits between ingress and agent execution. Chat (`POST /api/chats/{id}/messages`) and inbound webhooks publish `InboundEvent`; `AgentWorker` subscribes and routes to the existing `_llm_background_task` / `_process_inbound_message`. SSE streaming preserved by carrying the per-request `asyncio.Queue` on the event itself — the bus dispatches intent, the queue carries tokens. Lifespan-managed startup/shutdown in `main.py`, exception-isolated handler dispatch (slow or crashing handlers don't block the bus), 6 targeted tests in `test_eventbus.py`. Core in `backend/app/core/`. Scheduler remains direct-invocation for now (different ingress shape — cron trigger, not message).
 
 **Agent Reliability & Deterministic Skills (Apr 17)** — hardened the tool loop after a GLM-5.1 session spun 5+ rounds of web scraping, hit a rate limit, and returned empty.
@@ -349,7 +368,10 @@ _Last updated: 2026-04-24_
 
 | Feature | Effort | Impact |
 |---|---|---|
-| **EDA follow-ups** — (a) migrate `scheduler/engine.py` to publish `InboundEvent(source="scheduled")` for full unification, (b) externalize the bus to Redis Streams / NATS when multi-process horizontal scaling is needed, (c) add an outbound-webhook publisher that subscribes to `OutboundEvent` instead of being called inline from handlers. | Low–Medium per item | Low today, Medium once horizontal scaling is on deck |
+| **E2E test for `POST /messages` through the bus** — one mocked-LLM integration test exercising route → publish → `AgentWorker` → `_llm_background_task` → SSE queue. Every piece has unit tests; the full path doesn't. Most-changed surface this session. | Low | High — catches regressions in the critical path |
+| **`_llm_background_task` refactor** — still 900+ lines, now the home of artifact tools, metrics, mixed-mode guards, Stop wiring. Every bug fix requires re-reading the whole thing. Do after the E2E test above lands. | High | Medium — compounding dev velocity |
+| **"Stopped by user" visual badge** — stopped assistant messages look identical to completed ones; a small destructive-tinted badge makes them recognizable at a glance. | Low | Small UX polish |
+| **EDA follow-ups** — (a) migrate `scheduler/engine.py` to publish `InboundEvent(source="scheduled")`, (b) externalize bus to Redis Streams / NATS when multi-process horizontal scaling is needed, (c) outbound-webhook publisher subscribing to `OutboundEvent`. | Low–Medium per item | Low today, Medium once horizontal scaling is on deck |
 | **Conversation branching** — fork at any message to explore alternatives | Medium | Nice UX for exploration |
 | **RAG auto-ingest from MCP** — automatically index documents from connected MCP sources | Low | Compounds RAG value |
 | **Skill chaining** — let skills call other skills (tool → workflow escalation) | Low | Unlocks complex workflows |

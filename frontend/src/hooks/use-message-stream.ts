@@ -6,7 +6,10 @@ import { nextMsgId, type DisplayMessage, type SkillUsage } from "@/components/ch
 import type { PendingFile } from "@/components/chat-input";
 import {
   getChat,
+  listArtifactVersions,
   listArtifacts,
+  revertArtifact,
+  stopGeneration,
   type Source,
   type MessageMetrics,
   type ChatMode,
@@ -14,7 +17,7 @@ import {
   type MessageOut,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { startStream, reattachStream, hasActiveStream, setViewingChat } from "@/lib/active-streams";
+import { abortStream, startStream, reattachStream, hasActiveStream, setViewingChat } from "@/lib/active-streams";
 
 export function useMessageStream(chatId: string) {
   const router = useRouter();
@@ -152,6 +155,42 @@ export function useMessageStream(chatId: string) {
     };
   }, [stopTypewriter, stopBgPoll]);
 
+  const showRewriteWarning = useCallback((data: { artifact_id: string; files_changed: number; files_total: number }) => {
+    toast.warning(
+      `The model rewrote ${data.files_changed} of ${data.files_total} files — review changes?`,
+      {
+        action: {
+          label: "Revert",
+          onClick: async () => {
+            try {
+              const versions = await listArtifactVersions(data.artifact_id);
+              if (versions.length < 2) {
+                toast.error("No previous version to revert to");
+                return;
+              }
+              const previous = versions[versions.length - 2];
+              const reverted = await revertArtifact(data.artifact_id, previous.version_number);
+              const restored: ArtifactData = {
+                id: reverted.id,
+                type: "project",
+                title: reverted.title,
+                template: reverted.template ?? "react",
+                files: reverted.files ?? {},
+                dependencies: reverted.dependencies ?? {},
+              };
+              setArtifacts([restored]);
+              setActiveArtifact(restored);
+              toast.success(`Reverted to version ${previous.version_number}`);
+            } catch (e) {
+              toast.error(`Revert failed: ${(e as Error).message}`);
+            }
+          },
+        },
+        duration: 15000,
+      },
+    );
+  }, []);
+
   const mapMessages = useCallback((msgs: MessageOut[]): DisplayMessage[] => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return msgs.map((m) => {
@@ -253,6 +292,22 @@ export function useMessageStream(chatId: string) {
           }
           streamingArtifactRef.current = null;
         },
+        onArtifactToolEdit: (data) => {
+          // Surgical update from edit_artifact_file tool — replace one file
+          // in place on both the active artifact and the list entry.
+          setActiveArtifact((prev) => {
+            if (!prev || prev.id !== data.artifact_id) return prev;
+            return { ...prev, files: { ...prev.files, [data.path]: data.code } };
+          });
+          setArtifacts((prev) =>
+            prev.map((a) =>
+              a.id === data.artifact_id
+                ? { ...a, files: { ...a.files, [data.path]: data.code } }
+                : a,
+            ),
+          );
+        },
+        onArtifactEditWarning: showRewriteWarning,
         onWorkflow: (steps) => { setWorkflowSteps(steps); },
         onWorkflowStep: (step) => {
           setWorkflowSteps((prev) =>
@@ -360,10 +415,10 @@ export function useMessageStream(chatId: string) {
         bgPollRef.current = pollInterval;
       }
 
-      listArtifacts(chatId)
+      listArtifacts(chatId, 1)
         .then((arts) => {
           if (arts.length === 0) return;
-          const latest = arts[arts.length - 1];
+          const latest = arts[0];
           const latestData = {
             id: latest.id,
             type: "project" as const,
@@ -373,9 +428,20 @@ export function useMessageStream(chatId: string) {
             dependencies: latest.dependencies ?? {},
           };
           setArtifacts([latestData]);
-          // Auto-open the panel on reload — matches the streaming-time UX
-          // where the panel opens automatically when an artifact arrives.
-          setActiveArtifact(latestData);
+          // Auto-open the panel only when the latest artifact belongs to the
+          // last assistant message — the case where the user just asked for
+          // it. For older chats with a stale artifact, leave the panel closed
+          // so it doesn't eat half the screen; the card is still clickable.
+          const lastAssistant = [...(chat.messages || [])]
+            .reverse()
+            .find((m) => m.role === "assistant");
+          if (
+            lastAssistant &&
+            latest.message_public_id &&
+            latest.message_public_id === lastAssistant.id
+          ) {
+            setActiveArtifact(latestData);
+          }
         })
         .catch(() => {});
     } catch (e) {
@@ -554,6 +620,20 @@ export function useMessageStream(chatId: string) {
             }
             streamingArtifactRef.current = null;
           },
+          onArtifactToolEdit: (data) => {
+            setActiveArtifact((prev) => {
+              if (!prev || prev.id !== data.artifact_id) return prev;
+              return { ...prev, files: { ...prev.files, [data.path]: data.code } };
+            });
+            setArtifacts((prev) =>
+              prev.map((a) =>
+                a.id === data.artifact_id
+                  ? { ...a, files: { ...a.files, [data.path]: data.code } }
+                  : a,
+              ),
+            );
+          },
+          onArtifactEditWarning: showRewriteWarning,
           onArtifactWarnings: (data) => {
             setArtifactWarnings((prev) => ({
               ...prev,
@@ -588,9 +668,9 @@ export function useMessageStream(chatId: string) {
             // If the artifact is still in streaming state, fetch the real one
             setActiveArtifact((prev) => {
               if (prev?.id.startsWith("streaming-")) {
-                listArtifacts(chatId).then((arts) => {
+                listArtifacts(chatId, 1).then((arts) => {
                   if (arts.length > 0) {
-                    const latest = arts[arts.length - 1];
+                    const latest = arts[0];
                     const real: ArtifactData = {
                       id: latest.id,
                       type: "project",
@@ -623,8 +703,47 @@ export function useMessageStream(chatId: string) {
         artCtx
       );
     },
-    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll, activeArtifact, artifacts]
+    [chatId, startTypewriter, finalizeMessage, stopTypewriter, stopBgPoll, activeArtifact, artifacts, showRewriteWarning]
   );
+
+  const stop = useCallback(async () => {
+    // Close the SSE channel so the browser stops reading chunks.
+    abortStream(chatId);
+    // Tell the backend to finalize the assistant message to 'error' state.
+    // Best-effort — the background task may still run briefly until the
+    // SSE idle timeout fires, but the UI is freed immediately.
+    try { await stopGeneration(chatId); } catch { /* ignore */ }
+    // Persist whatever partial content we already received as a completed
+    // message so the user doesn't lose it.
+    stopTypewriter();
+    stopBgPoll();
+    if (fullTextRef.current) {
+      setMessages((msgs) => [
+        ...msgs,
+        {
+          id: nextMsgId(),
+          role: "assistant",
+          content: fullTextRef.current + "\n\n_[Stopped by user]_",
+          sources: null,
+          skillsUsed: null,
+          metrics: null,
+        },
+      ]);
+    }
+    setStreamingContent("");
+    fullTextRef.current = "";
+    revealedRef.current = 0;
+    doneRef.current = false;
+    sourcesRef.current = null;
+    metricsRef.current = null;
+    skillsUsedRef.current = [];
+    setActiveSkills([]);
+    setWorkflowSteps([]);
+    setIsLoading(false);
+    setActionText(null);
+    setIsStreaming(false);
+    sendingRef.current = false;
+  }, [chatId, stopTypewriter, stopBgPoll]);
 
   const retryLastSend = useCallback(() => {
     const args = lastSendArgsRef.current;
@@ -685,6 +804,7 @@ export function useMessageStream(chatId: string) {
     setChatModelId,
     loadOlderMessages,
     doSend,
+    stop,
     fixArtifactError,
     lastError,
     retryLastSend,

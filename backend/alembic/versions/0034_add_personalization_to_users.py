@@ -17,11 +17,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("personalization_nickname", sa.String(100), nullable=True))
-    op.add_column("users", sa.Column("personalization_role", sa.String(200), nullable=True))
-    op.add_column("users", sa.Column("personalization_tone", sa.String(30), nullable=True))
-    op.add_column("users", sa.Column("personalization_length", sa.String(20), nullable=True))
-    op.add_column("users", sa.Column("personalization_language", sa.String(50), nullable=True))
+    op.add_column(
+        "users", sa.Column("personalization_nickname", sa.String(100), nullable=True)
+    )
+    op.add_column(
+        "users", sa.Column("personalization_role", sa.String(200), nullable=True)
+    )
+    op.add_column(
+        "users", sa.Column("personalization_tone", sa.String(30), nullable=True)
+    )
+    op.add_column(
+        "users", sa.Column("personalization_length", sa.String(20), nullable=True)
+    )
+    op.add_column(
+        "users", sa.Column("personalization_language", sa.String(50), nullable=True)
+    )
     op.add_column("users", sa.Column("personalization_about", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("personalization_style", sa.Text(), nullable=True))
 

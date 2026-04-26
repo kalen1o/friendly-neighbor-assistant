@@ -2,6 +2,8 @@ import io
 import logging
 from datetime import datetime
 
+from app.utils.time import utcnow_naive
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -40,7 +42,7 @@ def _build_markdown(chat: Chat) -> str:
     title = chat.title or "Untitled Conversation"
     lines = [f"# {title}\n"]
     if chat.created_at:
-        lines.append(f"*Exported on {_format_timestamp(datetime.utcnow())}*\n")
+        lines.append(f"*Exported on {_format_timestamp(utcnow_naive())}*\n")
     lines.append("---\n")
 
     for msg in chat.messages:
@@ -73,7 +75,7 @@ def _build_pdf(chat: Chat) -> bytes:
     pdf.cell(
         0,
         6,
-        f"Exported on {_format_timestamp(datetime.utcnow())}",
+        f"Exported on {_format_timestamp(utcnow_naive())}",
         new_x="LMARGIN",
         new_y="NEXT",
     )

@@ -11,13 +11,16 @@ import {
   ArrowRight,
   ScrollText,
   Gauge,
+  Wrench,
 } from "lucide-react";
 import { AdminGuard } from "@/components/admin-guard";
 import { AdminNav } from "@/components/admin-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   adminGetAnalytics,
+  adminGetArtifactEditAnalytics,
   adminGetAudit,
+  type ArtifactEditAnalytics,
   type SystemAnalytics,
   type AuditEntry,
 } from "@/lib/api";
@@ -46,19 +49,29 @@ function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+function formatBytes(n: number): string {
+  if (n <= 0) return "0 B";
+  if (n < 1024) return `${Math.round(n)} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function AdminDashboardPage() {
   const [analytics, setAnalytics] = useState<SystemAnalytics | null>(null);
+  const [artifactEdits, setArtifactEdits] = useState<ArtifactEditAnalytics | null>(null);
   const [recentAudit, setRecentAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [analyticsData, auditData] = await Promise.all([
+      const [analyticsData, artifactData, auditData] = await Promise.all([
         adminGetAnalytics(30),
+        adminGetArtifactEditAnalytics(7),
         adminGetAudit(undefined, undefined),
       ]);
       setAnalytics(analyticsData);
+      setArtifactEdits(artifactData);
       setRecentAudit(auditData.entries.slice(0, 20));
     } catch {
       // ignore
@@ -112,6 +125,65 @@ export default function AdminDashboardPage() {
                 </Card>
               ))}
             </div>
+
+            {/* Artifact edit efficiency — tool vs whole-file migration tracker */}
+            {artifactEdits && artifactEdits.total_edits > 0 && (
+              <div className="mt-6">
+                <Card>
+                  <CardContent>
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Wrench className="h-4 w-4" />
+                        <span className="text-xs">
+                          Artifact Edit Efficiency · last {artifactEdits.days}d
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {artifactEdits.total_edits} edit{artifactEdits.total_edits === 1 ? "" : "s"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-2xl font-semibold">
+                        {artifactEdits.tool_adoption_pct.toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">via tools (vs. whole-file)</p>
+                    </div>
+
+                    {/* Per-path breakdown */}
+                    <div className="mt-4 space-y-2">
+                      {artifactEdits.by_path.map((p) => {
+                        const share = (p.edits / artifactEdits.total_edits) * 100;
+                        const isTool = p.path === "tool";
+                        const label = isTool ? "Tool edits" : "Whole-file emissions";
+                        return (
+                          <div key={p.path} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-medium">{label}</span>
+                              <span className="text-muted-foreground">
+                                {p.edits} · avg {formatBytes(p.avg_bytes_emitted)} emitted ·
+                                {" "}avg {p.avg_files_changed.toFixed(1)} file{p.avg_files_changed === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                              <div
+                                className={isTool ? "h-full bg-emerald-500" : "h-full bg-amber-500"}
+                                style={{ width: `${share}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="mt-3 text-[11px] text-muted-foreground">
+                      Tool edits send only the changed substring; whole-file emissions resend entire files.
+                      Lower avg bytes on the tool row means the migration is paying off.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Quick links */}
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
