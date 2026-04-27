@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 // icons used in ACTION_COLORS badges only
-import { AdminGuard } from "@/components/admin-guard";
-import { AdminNav } from "@/components/admin-nav";
 import { adminGetAudit, type AuditEntry } from "@/lib/api";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -96,11 +94,9 @@ export default function AdminAuditPage() {
   };
 
   return (
-    <AdminGuard>
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <AdminNav />
-        <h1 className="mb-1 text-xl font-semibold">Audit Log</h1>
-        <p className="mb-6 text-sm text-muted-foreground">System activity and event history</p>
+    <>
+      <h1 className="mb-1 text-xl font-semibold">Audit Log</h1>
+      <p className="mb-6 text-sm text-muted-foreground">System activity and event history</p>
 
         {/* Filter */}
         <div className="mb-4">
@@ -170,12 +166,11 @@ export default function AdminAuditPage() {
           </div>
         )}
 
-        {/* Sentinel for infinite scroll */}
-        <div ref={sentinelRef} className="h-4" />
-        {loadingMore && (
-          <div className="py-4 text-center text-sm text-muted-foreground">Loading more...</div>
-        )}
-      </div>
-    </AdminGuard>
+      {/* Sentinel for infinite scroll */}
+      <div ref={sentinelRef} className="h-4" />
+      {loadingMore && (
+        <div className="py-4 text-center text-sm text-muted-foreground">Loading more...</div>
+      )}
+    </>
   );
 }

@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
-import { AdminGuard } from "@/components/admin-guard";
-import { AdminNav } from "@/components/admin-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog, useConfirm } from "@/components/confirm-dialog";
@@ -179,18 +177,16 @@ export default function AdminQuotasPage() {
   );
 
   return (
-    <AdminGuard>
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <AdminNav />
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="mb-1 text-xl font-semibold">Quotas</h1>
-            <p className="text-sm text-muted-foreground">Set usage limits per user</p>
-          </div>
-          <Button size="sm" onClick={() => setShowAdd(true)} disabled={showAdd}>
-            <Plus className="mr-1 h-4 w-4" />
-            Add Quota
-          </Button>
+    <>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="mb-1 text-xl font-semibold">Quotas</h1>
+          <p className="text-sm text-muted-foreground">Set usage limits per user</p>
+        </div>
+        <Button size="sm" onClick={() => setShowAdd(true)} disabled={showAdd}>
+          <Plus className="mr-1 h-4 w-4" />
+          Add Quota
+        </Button>
         </div>
 
         {/* Add quota form */}
@@ -398,12 +394,11 @@ export default function AdminQuotasPage() {
           </div>
         )}
 
-        <ConfirmDialog
-          {...dialogProps}
-          title="Remove Quota"
-          description="Are you sure you want to remove this user's quota? They will have unlimited access."
-        />
-      </div>
-    </AdminGuard>
+      <ConfirmDialog
+        {...dialogProps}
+        title="Remove Quota"
+        description="Are you sure you want to remove this user's quota? They will have unlimited access."
+      />
+    </>
   );
 }

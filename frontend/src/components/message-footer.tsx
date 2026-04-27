@@ -17,7 +17,73 @@ interface Chip {
   tone: "warn" | "info"
 }
 
+/**
+ * Renders permanent warning chips for tool-loop diagnostics
+ * (timeouts, repeated calls, forced synthesis, max-rounds-hit).
+ *
+ * Always visible — these signal that something went sideways and the
+ * user should notice. Returns null when no diagnostic chips apply.
+ */
 export function MessageFooter({ metrics }: Props) {
+  const chips = collectChips(metrics)
+  if (chips.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      {chips.map((c, i) => (
+        <span
+          key={i}
+          className={
+            c.tone === "warn"
+              ? "inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+              : "inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground"
+          }
+        >
+          <AlertTriangle className="h-3 w-3" />
+          {c.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Renders an Info button that reveals a metrics table tooltip on hover.
+ *
+ * Designed to be placed in a hover-reveal action row (alongside copy/edit)
+ * — its container handles the opacity transition. Returns null when there's
+ * nothing useful to display.
+ */
+export function MessageDetailsButton({ metrics }: Props) {
+  const hasData =
+    metrics.tokens_total != null ||
+    metrics.latency != null ||
+    metrics.rounds_used != null ||
+    metrics.tools_called != null ||
+    metrics.provider != null
+  if (!hasData) return null
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Show response details"
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          />
+        }
+      >
+        <Info className="h-3.5 w-3.5" />
+      </TooltipTrigger>
+      <TooltipContent side="top" align="end">
+        <MetricsTable metrics={metrics} />
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function collectChips(metrics: MessageMetrics): Chip[] {
   const chips: Chip[] = []
   if ((metrics.timeouts ?? 0) > 0) {
     chips.push({
@@ -37,46 +103,7 @@ export function MessageFooter({ metrics }: Props) {
   if (metrics.max_rounds_hit) {
     chips.push({ label: "Hit round limit", tone: "warn" })
   }
-
-  const hasData =
-    metrics.tokens_total != null ||
-    metrics.latency != null ||
-    chips.length > 0
-  if (!hasData) return null
-
-  return (
-    <div className="mt-1.5 flex items-center gap-1.5 text-xs">
-      {chips.map((c, i) => (
-        <span
-          key={i}
-          className={
-            c.tone === "warn"
-              ? "inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-              : "inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground"
-          }
-        >
-          <AlertTriangle className="h-3 w-3" />
-          {c.label}
-        </span>
-      ))}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label="Show response details"
-              className="rounded text-muted-foreground/60 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            />
-          }
-        >
-          <Info className="h-3.5 w-3.5" />
-        </TooltipTrigger>
-        <TooltipContent side="top" align="end">
-          <MetricsTable metrics={metrics} />
-        </TooltipContent>
-      </Tooltip>
-    </div>
-  )
+  return chips
 }
 
 function MetricsTable({ metrics }: Props) {
@@ -124,6 +151,8 @@ function MetricsTable({ metrics }: Props) {
           : metrics.slowest_tool_name,
     })
   }
+
+  if (rows.length === 0) return null
 
   return (
     <div className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-xs">

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableHeader, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { SourceAttribution } from "@/components/source-attribution";
-import { MessageFooter } from "@/components/message-footer";
+import { MessageFooter, MessageDetailsButton } from "@/components/message-footer";
 import { CodeBlock, InlineCode } from "@/components/code-block";
 import { processChildren, enrichText } from "@/components/rich-text";
 import type { Source, MessageMetrics } from "@/lib/api";
@@ -353,21 +353,24 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
               )}
             </div>
           ) : (
-            <>
-              <div className="max-w-none overflow-hidden text-sm leading-relaxed">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                  {processCitations(content, messageId)}
-                </ReactMarkdown>
-              </div>
-              {metrics && <MessageFooter metrics={metrics} />}
-            </>
+            <div className="max-w-none overflow-hidden text-sm leading-relaxed">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                {processCitations(content, messageId)}
+              </ReactMarkdown>
+            </div>
           )}
         </div>
         {!isUser && (sources?.length || metrics) ? (
           <div className="flex items-center justify-between gap-1">
-            <SourceAttribution sources={sources || []} metrics={metrics} messageId={messageId} />
+            <div className="flex items-center gap-2">
+              {sources?.length ? (
+                <SourceAttribution sources={sources || []} messageId={messageId} />
+              ) : null}
+              {metrics ? <MessageFooter metrics={metrics} /> : null}
+            </div>
             {!isEditing && (
-              <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                {metrics ? <MessageDetailsButton metrics={metrics} /> : null}
                 <Button
                   variant="ghost"
                   size="icon"

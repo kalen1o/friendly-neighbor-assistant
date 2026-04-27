@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Search } from "lucide-react";
-import { AdminGuard } from "@/components/admin-guard";
-import { AdminNav } from "@/components/admin-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -80,11 +78,9 @@ export default function AdminUsersPage() {
   });
 
   return (
-    <AdminGuard>
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <AdminNav />
-        <h1 className="mb-1 text-xl font-semibold">Users</h1>
-        <p className="mb-6 text-sm text-muted-foreground">Manage users, roles, and access</p>
+    <>
+      <h1 className="mb-1 text-xl font-semibold">Users</h1>
+      <p className="mb-6 text-sm text-muted-foreground">Manage users, roles, and access</p>
 
         {/* Search */}
         <div className="relative mb-4">
@@ -184,12 +180,11 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        <ConfirmDialog
-          {...dialogProps}
-          title="Delete User"
-          description="Are you sure you want to delete this user? This action cannot be undone."
-        />
-      </div>
-    </AdminGuard>
+      <ConfirmDialog
+        {...dialogProps}
+        title="Delete User"
+        description="Are you sure you want to delete this user? This action cannot be undone."
+      />
+    </>
   );
 }

@@ -165,7 +165,7 @@ export function ModelSettings() {
           value={preferredModel || "__default__"}
           onValueChange={handlePreferredChange}
         >
-          <SelectTrigger className="mt-1">
+          <SelectTrigger className="mt-1 w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -233,7 +233,7 @@ export function ModelSettings() {
             <div>
               <Label className="text-xs">Provider</Label>
               <Select value={formProvider} onValueChange={(v) => { if (v) setFormProvider(v); }}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PROVIDERS.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
                 </SelectContent>
