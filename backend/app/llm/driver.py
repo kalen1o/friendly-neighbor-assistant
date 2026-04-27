@@ -168,6 +168,25 @@ class RoundEnd:
     result: RoundResult
 
 
+@dataclass
+class LoopEvent:
+    """Marker base for non-text events yielded by run_tool_loop.
+
+    Strings continue to flow through the loop's output as before; LoopEvent
+    subclasses are interleaved when the loop wants to communicate structured
+    side-channel data to the consumer (router).
+    """
+
+
+@dataclass
+class TelemetryEnd(LoopEvent):
+    """Final event yielded by run_tool_loop after the streaming response
+    completes, carrying the telemetry dict that previously was only logged.
+    """
+
+    data: dict
+
+
 # --- Adapter Protocol ---
 
 
@@ -252,7 +271,7 @@ async def run_tool_loop(
     on_tool_call,
     max_tool_rounds: int,
     _logger=None,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[str | LoopEvent]:
     """Provider-agnostic tool-calling loop.
 
     Replaces the duplicated _anthropic_stream_with_tools and
@@ -351,26 +370,23 @@ async def run_tool_loop(
                 completion_tokens += event.result.usage.completion_tokens
 
     slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(tool_timings)
-    _log.info(
-        "tool_loop done",
-        extra={
-            "provider": adapter.provider_name,
-            "rounds_used": rounds_used,
-            "tools_called": tools_called,
-            "unique_tools": len(unique_tools_seen),
-            "timeouts": timeouts,
-            "truncations": truncations,
-            "stuck_triggered": stuck_triggered,
-            "synthesis_fallback": synthesis_fallback_used,
-            "finished_normally": finished_normally,
-            "max_rounds_hit": (
-                rounds_used >= max_tool_rounds and not finished_normally
-            ),
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-            "slowest_tool_name": slowest_name,
-            "slowest_tool_ms": slowest_ms,
-            "total_tool_ms": total_tool_ms,
-        },
-    )
+    telemetry = {
+        "provider": adapter.provider_name,
+        "rounds_used": rounds_used,
+        "tools_called": tools_called,
+        "unique_tools": len(unique_tools_seen),
+        "timeouts": timeouts,
+        "truncations": truncations,
+        "stuck_triggered": stuck_triggered,
+        "synthesis_fallback": synthesis_fallback_used,
+        "finished_normally": finished_normally,
+        "max_rounds_hit": rounds_used >= max_tool_rounds and not finished_normally,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "slowest_tool_name": slowest_name,
+        "slowest_tool_ms": slowest_ms,
+        "total_tool_ms": total_tool_ms,
+    }
+    _log.info("tool_loop done", extra=telemetry)
+    yield TelemetryEnd(data=telemetry)

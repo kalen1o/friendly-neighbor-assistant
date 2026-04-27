@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableHeader, TableHead, TableRow, TableCell } from "@/components/ui/table";
 import { SourceAttribution } from "@/components/source-attribution";
+import { MessageFooter } from "@/components/message-footer";
 import { CodeBlock, InlineCode } from "@/components/code-block";
 import { processChildren, enrichText } from "@/components/rich-text";
 import type { Source, MessageMetrics } from "@/lib/api";
@@ -352,11 +353,14 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
               )}
             </div>
           ) : (
-            <div className="max-w-none overflow-hidden text-sm leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                {processCitations(content, messageId)}
-              </ReactMarkdown>
-            </div>
+            <>
+              <div className="max-w-none overflow-hidden text-sm leading-relaxed">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                  {processCitations(content, messageId)}
+                </ReactMarkdown>
+              </div>
+              {metrics && <MessageFooter metrics={metrics} />}
+            </>
           )}
         </div>
         {!isUser && (sources?.length || metrics) ? (

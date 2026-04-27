@@ -318,7 +318,7 @@ async def test_openai_loop_invalid_json_args_skips_tool_and_feeds_error_back():
         assert tool_msgs, "expected a tool result message in round 2"
         assert "invalid JSON" in tool_msgs[-1]["content"]
 
-        assert "".join(chunks).strip().endswith("done")
+        assert "".join(e for e in chunks if isinstance(e, str)).strip().endswith("done")
     finally:
         _stop_patch(cm)
 
@@ -387,7 +387,7 @@ async def test_openai_loop_clean_stop_does_not_trigger_extra_call():
         ):
             chunks.append(chunk)
 
-        assert "".join(chunks) == "hello"
+        assert "".join(e for e in chunks if isinstance(e, str)) == "hello"
         # Exactly one create() call for the round that produced the response.
         assert create.call_count == 1
     finally:
@@ -441,7 +441,9 @@ async def test_openai_loop_repeated_tool_calls_trigger_synthesis_nudge():
         ]
         assert nudge_msgs, "expected the synthesis nudge in round 3 messages"
 
-        assert "".join(chunks).strip().endswith("answer")
+        assert (
+            "".join(e for e in chunks if isinstance(e, str)).strip().endswith("answer")
+        )
     finally:
         _stop_patch(cm)
 
@@ -589,7 +591,7 @@ async def test_anthropic_loop_clean_stop_returns_immediately():
         ):
             chunks.append(chunk)
 
-        assert "".join(chunks) == "hello"
+        assert "".join(e for e in chunks if isinstance(e, str)) == "hello"
         # No tool_use → loop returns; no trailing fallback call
         assert len(captured) == 1
     finally:
@@ -698,7 +700,7 @@ async def test_anthropic_loop_repeated_tool_calls_trigger_synthesis_nudge():
             "expected the synthesis nudge as a text block alongside tool_result"
         )
 
-        assert "answer" in "".join(chunks)
+        assert "answer" in "".join(e for e in chunks if isinstance(e, str))
     finally:
         cm.stop()
 
@@ -947,3 +949,41 @@ async def test_openai_loop_telemetry_records_tool_latency(caplog):
         assert record.total_tool_ms == record.slowest_tool_ms
     finally:
         _stop_patch(cm)
+
+
+@pytest.mark.anyio
+async def test_wrappers_pass_through_non_string_events():
+    """The three post-processing wrappers (_filter_tool_leaks,
+    _buffered_stream, _with_idle_timeout) must pass non-string LoopEvent
+    items through unchanged so the router can see TelemetryEnd."""
+    from app.llm.driver import TelemetryEnd
+    from app.llm.provider import (
+        _buffered_stream,
+        _filter_tool_leaks,
+        _with_idle_timeout,
+    )
+
+    sentinel = TelemetryEnd(data={"marker": True})
+
+    async def source():
+        yield "hello"
+        yield " world"
+        yield sentinel
+
+    # _filter_tool_leaks
+    out = []
+    async for item in _filter_tool_leaks(source()):
+        out.append(item)
+    assert sentinel in out, "TelemetryEnd should pass through _filter_tool_leaks"
+
+    # _buffered_stream
+    out = []
+    async for item in _buffered_stream(source(), flush_interval=0.0, min_chars=1):
+        out.append(item)
+    assert sentinel in out, "TelemetryEnd should pass through _buffered_stream"
+
+    # _with_idle_timeout
+    out = []
+    async for item in _with_idle_timeout(source(), timeout_s=5):
+        out.append(item)
+    assert sentinel in out, "TelemetryEnd should pass through _with_idle_timeout"

@@ -4,7 +4,17 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -74,6 +84,9 @@ class Message(Base):
     tokens_input: Mapped[Optional[int]] = mapped_column(Integer, default=None)
     tokens_output: Mapped[Optional[int]] = mapped_column(Integer, default=None)
     tokens_total: Mapped[Optional[int]] = mapped_column(Integer, default=None)
+    extra_metrics: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, default=None
+    )
     status: Mapped[str] = mapped_column(
         String(20), server_default="completed", default="completed"
     )

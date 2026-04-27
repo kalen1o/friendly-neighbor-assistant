@@ -160,6 +160,20 @@ export interface MessageMetrics {
   tokens_input?: number;
   tokens_output?: number;
   tokens_total?: number;
+  // Agent-loop telemetry — populated from messages.extra_metrics
+  rounds_used?: number;
+  tools_called?: number;
+  unique_tools?: number;
+  timeouts?: number;
+  truncations?: number;
+  stuck_triggered?: boolean;
+  synthesis_fallback?: boolean;
+  finished_normally?: boolean;
+  max_rounds_hit?: boolean;
+  slowest_tool_name?: string;
+  slowest_tool_ms?: number;
+  total_tool_ms?: number;
+  provider?: string;
 }
 
 export interface MessageFileRef {

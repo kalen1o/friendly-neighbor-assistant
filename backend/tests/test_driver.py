@@ -108,7 +108,7 @@ async def test_driver_runs_until_no_tool_calls_then_emits_telemetry(caplog):
     ):
         chunks.append(chunk)
 
-    assert "done" in "".join(chunks)
+    assert "done" in "".join(e for e in chunks if isinstance(e, str))
 
     records = [r for r in caplog.records if r.message == "tool_loop done"]
     assert len(records) == 1
@@ -159,7 +159,7 @@ async def test_driver_detects_stuck_and_strips_tools():
     assert adapter.append_tool_results_calls[0][1] is False
     # Round 1 was stuck (signature already seen).
     assert adapter.append_tool_results_calls[1][1] is True
-    assert "answer" in "".join(chunks)
+    assert "answer" in "".join(e for e in chunks if isinstance(e, str))
 
 
 @pytest.mark.anyio
@@ -198,3 +198,47 @@ async def test_driver_skips_tool_executor_on_invalid_args():
     tid, content = results[0]
     assert tid == "t1"
     assert "invalid JSON arguments" in content
+
+
+@pytest.mark.anyio
+async def test_driver_yields_telemetry_end_as_final_event():
+    """run_tool_loop must yield a TelemetryEnd dataclass as its very last
+    item so the router can persist + stream the metrics."""
+    from app.llm.driver import TelemetryEnd
+
+    adapter = _FakeAdapter(
+        rounds=[
+            ([], [ToolCall(id="t1", name="search", raw_args={"q": "x"})]),
+            (["done"], []),
+        ]
+    )
+
+    async def fake_executor(name, args):
+        return "result"
+
+    events = []
+    async for ev in run_tool_loop(
+        adapter,
+        messages=[{"role": "user", "content": "hi"}],
+        settings=_settings(),
+        tools=[{"type": "function", "function": {"name": "search", "parameters": {}}}],
+        tool_executor=fake_executor,
+        on_tool_call=None,
+        max_tool_rounds=5,
+    ):
+        events.append(ev)
+
+    assert isinstance(events[-1], TelemetryEnd), (
+        f"expected TelemetryEnd as final event; got {type(events[-1]).__name__}"
+    )
+    data = events[-1].data
+    assert data["provider"] == "fake"
+    assert data["rounds_used"] == 2
+    assert data["tools_called"] == 1
+    assert data["finished_normally"] is True
+    assert "prompt_tokens" in data
+    assert "completion_tokens" in data
+    assert "total_tokens" in data
+    assert "slowest_tool_name" in data
+    # Text events that came before TelemetryEnd are still strings.
+    assert "done" in "".join(e for e in events if isinstance(e, str))

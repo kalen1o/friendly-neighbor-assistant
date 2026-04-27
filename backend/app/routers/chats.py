@@ -21,6 +21,7 @@ from app.db.engine import get_session_factory
 from app.db.session import get_db
 from app.hooks.executors import register_all_hook_executors
 from app.hooks.registry import HookContext, HookRegistry
+from app.llm.driver import TelemetryEnd
 from app.llm.provider import get_llm_response
 from app.models.artifact import Artifact
 from app.models.chat import Chat, Message
@@ -1527,6 +1528,7 @@ async def _llm_background_task(
             streamed_artifacts: list[dict] = []
             _pending_art_meta: dict = {}
             try:
+                loop_telemetry: dict = {}
                 async for chunk in stream_with_tools(
                     llm_messages,
                     settings,
@@ -1537,6 +1539,10 @@ async def _llm_background_task(
                     vision=has_vision,
                     model_config=resolved_model_config,
                 ):
+                    # Telemetry event: capture and skip — no text to append, no artifact parse.
+                    if isinstance(chunk, TelemetryEnd):
+                        loop_telemetry = chunk.data
+                        continue
                     # Drain action queue — send immediately
                     while not tool_action_queue.empty():
                         action = await tool_action_queue.get()
@@ -1718,21 +1724,53 @@ async def _llm_background_task(
                 hook_ctx.sources = sources_data
                 hook_ctx = await hook_registry.run_hooks("post_message", hook_ctx)
 
-                # Collect metrics from hooks and persist
+                # Seed metrics from the agent loop's telemetry (SDK-accurate counts).
+                # Hooks may override token/latency below.
                 metrics = {}
+                extra_metrics_keys = {
+                    "rounds_used",
+                    "tools_called",
+                    "unique_tools",
+                    "timeouts",
+                    "truncations",
+                    "stuck_triggered",
+                    "synthesis_fallback",
+                    "finished_normally",
+                    "max_rounds_hit",
+                    "slowest_tool_name",
+                    "slowest_tool_ms",
+                    "total_tool_ms",
+                    "provider",
+                }
+                extra_metrics = {
+                    k: v for k, v in loop_telemetry.items() if k in extra_metrics_keys
+                }
+                if loop_telemetry.get("prompt_tokens") is not None:
+                    metrics["tokens_input"] = loop_telemetry["prompt_tokens"]
+                    metrics["tokens_output"] = loop_telemetry["completion_tokens"]
+                    metrics["tokens_total"] = loop_telemetry["total_tokens"]
+
+                # Hooks override (last-write-wins for token/latency).
                 if "latency_seconds" in hook_ctx.metadata:
                     metrics["latency"] = hook_ctx.metadata["latency_seconds"]
                 if "tokens_total" in hook_ctx.metadata:
                     metrics["tokens_input"] = hook_ctx.metadata["tokens_input"]
                     metrics["tokens_output"] = hook_ctx.metadata["tokens_output"]
                     metrics["tokens_total"] = hook_ctx.metadata["tokens_total"]
-                if metrics:
+
+                if metrics or extra_metrics:
                     assistant_msg.latency = metrics.get("latency")
                     assistant_msg.tokens_input = metrics.get("tokens_input")
                     assistant_msg.tokens_output = metrics.get("tokens_output")
                     assistant_msg.tokens_total = metrics.get("tokens_total")
+                    if extra_metrics:
+                        assistant_msg.extra_metrics = extra_metrics
+                    # Combined SSE payload includes both flat metrics and extra_metrics fields.
+                    sse_payload = {**metrics, **extra_metrics}
                     await db.commit()
-                    await queue.put({"event": "metrics", "data": json.dumps(metrics)})
+                    await queue.put(
+                        {"event": "metrics", "data": json.dumps(sse_payload)}
+                    )
 
                 # Track usage analytics
                 from app.usage import track_message

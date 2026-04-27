@@ -63,7 +63,7 @@ async def _anthropic_stream_with_tools(
     on_tool_call=None,
     max_tool_rounds: int = 5,
     model_config: Optional[ModelConfig] = None,
-) -> AsyncIterator[str]:
+) -> AsyncIterator:
     """Compat shim — tests import this name. Dispatches to run_tool_loop."""
     adapter = AnthropicAdapter(settings, model_config)
     async for chunk in run_tool_loop(
@@ -79,9 +79,7 @@ async def _anthropic_stream_with_tools(
         yield chunk
 
 
-async def _with_idle_timeout(
-    source: AsyncIterator[str], timeout_s: float
-) -> AsyncIterator[str]:
+async def _with_idle_timeout(source: AsyncIterator, timeout_s: float) -> AsyncIterator:
     """Abort if no chunk arrives within `timeout_s` of the previous one.
 
     Prevents silent hangs when an upstream provider holds the connection open
@@ -104,10 +102,10 @@ async def _with_idle_timeout(
 
 
 async def _buffered_stream(
-    source: AsyncIterator[str],
+    source: AsyncIterator,
     flush_interval: float = 0.06,
     min_chars: int = 8,
-) -> AsyncIterator[str]:
+) -> AsyncIterator:
     """Buffer token stream and yield multi-word chunks like ChatGPT.
 
     Flushes on newlines (markdown block boundaries) or every flush_interval
@@ -119,6 +117,9 @@ async def _buffered_stream(
     last_flush = time.monotonic()
 
     async for token in source:
+        if not isinstance(token, str):
+            yield token
+            continue
         buffer += token
         now = time.monotonic()
 
@@ -144,7 +145,7 @@ async def stream_with_tools(
     max_tool_rounds: int = None,
     vision: bool = False,
     model_config: Optional[ModelConfig] = None,
-) -> AsyncIterator[str]:
+) -> AsyncIterator:
     """Stream LLM response with native tool calling support."""
     adapter = _get_adapter(settings, model_config, vision=vision)
     rounds = max_tool_rounds or settings.max_tool_rounds
@@ -169,7 +170,7 @@ async def stream_with_tools(
         yield chunk
 
 
-async def _filter_tool_leaks(source: AsyncIterator[str]) -> AsyncIterator[str]:
+async def _filter_tool_leaks(source: AsyncIterator) -> AsyncIterator:
     """Strip leaked tool call syntax from streamed chunks.
 
     Some models (GLM, DeepSeek, Qwen) leak internal markup like
@@ -179,6 +180,9 @@ async def _filter_tool_leaks(source: AsyncIterator[str]) -> AsyncIterator[str]:
     in_tool_leak = False
 
     async for chunk in source:
+        if not isinstance(chunk, str):
+            yield chunk
+            continue
         buffer += chunk
 
         # Check if we're inside a leaked tool call block
@@ -223,7 +227,7 @@ async def _openai_stream_with_tools(
     max_tool_rounds: int = 5,
     vision: bool = False,
     model_config: Optional[ModelConfig] = None,
-) -> AsyncIterator[str]:
+) -> AsyncIterator:
     """Compat shim — tests import this name. Dispatches to run_tool_loop."""
     adapter = OpenAIAdapter(settings, model_config, vision=vision)
     async for chunk in run_tool_loop(

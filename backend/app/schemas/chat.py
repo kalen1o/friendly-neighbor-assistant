@@ -26,6 +26,21 @@ class MessageMetrics(BaseModel):
     tokens_input: Optional[int] = None
     tokens_output: Optional[int] = None
     tokens_total: Optional[int] = None
+    # Agent-loop telemetry — populated from the message's extra_metrics
+    # JSON column. All optional; non-tool-loop messages leave them None.
+    rounds_used: Optional[int] = None
+    tools_called: Optional[int] = None
+    unique_tools: Optional[int] = None
+    timeouts: Optional[int] = None
+    truncations: Optional[int] = None
+    stuck_triggered: Optional[bool] = None
+    synthesis_fallback: Optional[bool] = None
+    finished_normally: Optional[bool] = None
+    max_rounds_hit: Optional[bool] = None
+    slowest_tool_name: Optional[str] = None
+    slowest_tool_ms: Optional[float] = None
+    total_tool_ms: Optional[float] = None
+    provider: Optional[str] = None
 
 
 class MessageOut(BaseModel):
@@ -52,12 +67,32 @@ class MessageOut(BaseModel):
             except (json.JSONDecodeError, TypeError):
                 pass
         metrics = None
-        if msg.latency is not None or msg.tokens_total is not None:
+        extra = getattr(msg, "extra_metrics", None) or {}
+        if msg.latency is not None or msg.tokens_total is not None or extra:
+            # Filter extra_metrics to only the keys MessageMetrics declares so
+            # unrelated content in the JSON column doesn't leak through.
+            known_extra_keys = {
+                "rounds_used",
+                "tools_called",
+                "unique_tools",
+                "timeouts",
+                "truncations",
+                "stuck_triggered",
+                "synthesis_fallback",
+                "finished_normally",
+                "max_rounds_hit",
+                "slowest_tool_name",
+                "slowest_tool_ms",
+                "total_tool_ms",
+                "provider",
+            }
+            filtered_extra = {k: v for k, v in extra.items() if k in known_extra_keys}
             metrics = MessageMetrics(
                 latency=msg.latency,
                 tokens_input=msg.tokens_input,
                 tokens_output=msg.tokens_output,
                 tokens_total=msg.tokens_total,
+                **filtered_extra,
             )
         files = None
         if hasattr(msg, "files") and msg.files:
