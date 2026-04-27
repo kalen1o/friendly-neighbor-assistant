@@ -100,4 +100,5 @@ async def serve_file(
         chat_file.storage_path,
         media_type=chat_file.file_type,
         filename=chat_file.filename,
+        content_disposition_type="inline",
     )

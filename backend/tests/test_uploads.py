@@ -52,6 +52,31 @@ async def test_serve_uploaded_file(client):
 
 
 @pytest.mark.anyio
+async def test_serve_uploaded_file_uses_inline_content_disposition(client):
+    """The /api/uploads/{id} response must use Content-Disposition: inline so
+    that browsers display PDFs (and other displayable types) inline in a new
+    tab rather than triggering a download."""
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+        b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+        b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    upload = await client.post(
+        "/api/uploads",
+        files={"file": ("test.png", io.BytesIO(png_bytes), "image/png")},
+    )
+    file_id = upload.json()["id"]
+
+    response = await client.get(f"/api/uploads/{file_id}")
+    assert response.status_code == 200
+    disposition = response.headers.get("content-disposition", "")
+    assert disposition.lower().startswith("inline"), (
+        f"expected Content-Disposition to start with 'inline'; got: {disposition!r}"
+    )
+
+
+@pytest.mark.anyio
 async def test_upload_requires_auth(anon_client):
     response = await anon_client.post(
         "/api/uploads",
