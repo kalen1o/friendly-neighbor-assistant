@@ -10,6 +10,7 @@ import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { SidebarContent } from "@/components/sidebar-content";
 import { ThemeProvider } from "@/components/theme-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { DottedSurface } from "@/components/ui/dotted-surface";
 import { Toaster } from "sonner";
 import { AuthGuard } from "@/components/auth-guard";
@@ -69,7 +70,8 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Toaster position="top-right" richColors closeButton />
+          <TooltipProvider>
+            <Toaster position="top-right" richColors closeButton />
           <DottedSurface />
           <AuthGuard>
             <div className="flex h-screen">
@@ -120,6 +122,7 @@ export default function RootLayout({
               </main>
             </div>
           </AuthGuard>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
