@@ -298,76 +298,89 @@ async def run_tool_loop(
     completion_tokens = 0
     tool_timings: list[tuple[str, float]] = []
 
-    for round_num in range(max_tool_rounds):
-        rounds_used = round_num + 1
+    # Capture any exception raised inside the loop so we still emit a final
+    # TelemetryEnd (with partial state) before re-raising. Without this,
+    # consumers that depend on TelemetryEnd to persist metrics would see
+    # nothing for errored responses.
+    exc: Optional[BaseException] = None
+    try:
+        for round_num in range(max_tool_rounds):
+            rounds_used = round_num + 1
 
-        round_result: Optional[RoundResult] = None
-        async for event in adapter.stream_round(kwargs):
-            if isinstance(event, str):
-                yield event
-            elif isinstance(event, RoundEnd):
-                round_result = event.result
+            round_result: Optional[RoundResult] = None
+            async for event in adapter.stream_round(kwargs):
+                if isinstance(event, str):
+                    yield event
+                elif isinstance(event, RoundEnd):
+                    round_result = event.result
 
-        if round_result is None:
-            # Defensive — adapter should always yield a RoundEnd.
-            round_result = RoundResult(tool_calls=[], usage=Usage())
+            if round_result is None:
+                # Defensive — adapter should always yield a RoundEnd.
+                round_result = RoundResult(tool_calls=[], usage=Usage())
 
-        prompt_tokens += round_result.usage.prompt_tokens
-        completion_tokens += round_result.usage.completion_tokens
+            prompt_tokens += round_result.usage.prompt_tokens
+            completion_tokens += round_result.usage.completion_tokens
 
-        if not round_result.tool_calls:
-            finished_normally = True
-            break
+            if not round_result.tool_calls:
+                finished_normally = True
+                break
 
-        adapter.append_assistant_turn(kwargs, round_result)
+            adapter.append_assistant_turn(kwargs, round_result)
 
-        round_signatures = {
-            _tool_call_signature(c.name, c.raw_args) for c in round_result.tool_calls
-        }
-        stuck = round_num > 0 and round_signatures.issubset(seen_signatures)
-        seen_signatures.update(round_signatures)
-        if stuck:
-            stuck_triggered = True
-
-        tools_called += len(round_result.tool_calls)
-        unique_tools_seen.update(c.name for c in round_result.tool_calls)
-
-        tool_results = await asyncio.gather(
-            *[
-                _execute_one(
-                    adapter,
-                    c,
-                    tool_executor,
-                    on_tool_call,
-                    settings.tool_call_timeout_s,
-                    tool_timings,
-                )
+            round_signatures = {
+                _tool_call_signature(c.name, c.raw_args)
                 for c in round_result.tool_calls
-            ]
-        )
+            }
+            stuck = round_num > 0 and round_signatures.issubset(seen_signatures)
+            seen_signatures.update(round_signatures)
+            if stuck:
+                stuck_triggered = True
 
-        timeout_marker = f"timed out after {settings.tool_call_timeout_s}s"
-        timeouts += sum(1 for _, r in tool_results if timeout_marker in r)
-        if settings.tool_result_max_chars > 0:
-            truncations += sum(
-                1 for _, r in tool_results if len(r) > settings.tool_result_max_chars
+            tools_called += len(round_result.tool_calls)
+            unique_tools_seen.update(c.name for c in round_result.tool_calls)
+
+            tool_results = await asyncio.gather(
+                *[
+                    _execute_one(
+                        adapter,
+                        c,
+                        tool_executor,
+                        on_tool_call,
+                        settings.tool_call_timeout_s,
+                        tool_timings,
+                    )
+                    for c in round_result.tool_calls
+                ]
             )
 
-        truncated = [
-            (tid, _truncate_tool_result(r, settings.tool_result_max_chars))
-            for tid, r in tool_results
-        ]
-        adapter.append_tool_results(kwargs, truncated, with_synthesis_nudge=stuck)
+            timeout_marker = f"timed out after {settings.tool_call_timeout_s}s"
+            timeouts += sum(1 for _, r in tool_results if timeout_marker in r)
+            if settings.tool_result_max_chars > 0:
+                truncations += sum(
+                    1
+                    for _, r in tool_results
+                    if len(r) > settings.tool_result_max_chars
+                )
 
-    if not finished_normally:
-        synthesis_fallback_used = True
-        kwargs.pop("tools", None)
-        async for event in adapter.stream_round(kwargs):
-            if isinstance(event, str):
-                yield event
-            elif isinstance(event, RoundEnd):
-                prompt_tokens += event.result.usage.prompt_tokens
-                completion_tokens += event.result.usage.completion_tokens
+            truncated = [
+                (tid, _truncate_tool_result(r, settings.tool_result_max_chars))
+                for tid, r in tool_results
+            ]
+            adapter.append_tool_results(kwargs, truncated, with_synthesis_nudge=stuck)
+
+        if not finished_normally:
+            # Synthesis fallback is a real LLM round — count it.
+            rounds_used += 1
+            synthesis_fallback_used = True
+            kwargs.pop("tools", None)
+            async for event in adapter.stream_round(kwargs):
+                if isinstance(event, str):
+                    yield event
+                elif isinstance(event, RoundEnd):
+                    prompt_tokens += event.result.usage.prompt_tokens
+                    completion_tokens += event.result.usage.completion_tokens
+    except BaseException as e:
+        exc = e
 
     slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(tool_timings)
     telemetry = {
@@ -390,3 +403,6 @@ async def run_tool_loop(
     }
     _log.info("tool_loop done", extra=telemetry)
     yield TelemetryEnd(data=telemetry)
+
+    if exc is not None:
+        raise exc

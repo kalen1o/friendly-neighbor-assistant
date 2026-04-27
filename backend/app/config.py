@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     # Either gate is enough to skip; both must clear to run.
     memory_extraction_min_interval_s: int = 60
     memory_extraction_min_user_chars: int = 30
+    # Optional: route memory-extraction calls through a cheaper/faster model
+    # (e.g. GLM-4.5-Flash). Leave model_id empty to use the main settings.
+    # All four must form a coherent set when used; api_key is required to
+    # enable the override (so a typo doesn't silently fall back).
+    memory_extraction_model_id: str = ""
+    memory_extraction_provider: str = "openai_compatible"
+    memory_extraction_api_key: str = ""
+    memory_extraction_base_url: str = ""
     # Phase 3: artifact edits happen via list/read/edit tools instead of
     # whole-file <artifact> re-emission. Whole-file remains as the fallback
     # for new artifacts and models that don't handle tools well. Set to

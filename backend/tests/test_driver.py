@@ -242,3 +242,119 @@ async def test_driver_yields_telemetry_end_as_final_event():
     assert "slowest_tool_name" in data
     # Text events that came before TelemetryEnd are still strings.
     assert "done" in "".join(e for e in events if isinstance(e, str))
+
+
+@pytest.mark.anyio
+async def test_driver_counts_synthesis_fallback_round():
+    """When the loop exhausts max_tool_rounds without finished_normally, the
+    synthesis fallback runs an additional LLM round — that round must be
+    reflected in rounds_used."""
+    from app.llm.driver import TelemetryEnd
+
+    # Every scripted round returns a tool call → loop exhausts → synthesis
+    # fallback runs.
+    adapter = _FakeAdapter(
+        rounds=[
+            ([], [ToolCall(id=f"t{i}", name="search", raw_args={"q": str(i)})])
+            for i in range(2)
+        ]
+        + [(["fallback-text"], [])],  # synthesis fallback yields a final answer
+    )
+
+    async def fake_executor(name, args):
+        return "result"
+
+    settings = _settings()
+    settings.max_tool_rounds = 2
+
+    events = []
+    async for ev in run_tool_loop(
+        adapter,
+        messages=[{"role": "user", "content": "hi"}],
+        settings=settings,
+        tools=[{"type": "function", "function": {"name": "search", "parameters": {}}}],
+        tool_executor=fake_executor,
+        on_tool_call=None,
+        max_tool_rounds=2,
+    ):
+        events.append(ev)
+
+    telemetry_events = [e for e in events if isinstance(e, TelemetryEnd)]
+    assert len(telemetry_events) == 1
+    data = telemetry_events[-1].data
+
+    # 2 in-loop rounds + 1 synthesis fallback round = 3
+    assert data["rounds_used"] == 3, (
+        f"expected rounds_used=3 (2 main + 1 fallback); got {data['rounds_used']}"
+    )
+    assert data["synthesis_fallback"] is True
+    assert data["finished_normally"] is False
+    assert data["max_rounds_hit"] is True
+    # Fallback text was yielded as a real string event before TelemetryEnd.
+    assert "fallback-text" in "".join(e for e in events if isinstance(e, str))
+
+
+@pytest.mark.anyio
+async def test_driver_emits_telemetry_on_exception():
+    """If the loop body raises mid-stream, run_tool_loop must still yield a
+    TelemetryEnd (carrying partial telemetry) before re-raising the exception
+    so consumers persist diagnostics for errored responses."""
+    from app.llm.driver import TelemetryEnd
+
+    class _ThrowingAdapter(_FakeAdapter):
+        def __init__(self, rounds, throw_on_round=1):
+            super().__init__(rounds=rounds)
+            self._throw_on_round = throw_on_round
+            self._round_call = 0
+
+        async def stream_round(self, kwargs):
+            self._round_call += 1
+            if self._round_call == self._throw_on_round:
+                raise RuntimeError("simulated provider error")
+            async for ev in super().stream_round(kwargs):
+                yield ev
+
+    adapter = _ThrowingAdapter(
+        rounds=[
+            ([], [ToolCall(id="t1", name="search", raw_args={"q": "x"})]),
+        ],
+        throw_on_round=2,  # round 1 succeeds, round 2 throws
+    )
+
+    async def fake_executor(name, args):
+        return "result"
+
+    events = []
+    raised = None
+    try:
+        async for ev in run_tool_loop(
+            adapter,
+            messages=[{"role": "user", "content": "hi"}],
+            settings=_settings(),
+            tools=[
+                {"type": "function", "function": {"name": "search", "parameters": {}}}
+            ],
+            tool_executor=fake_executor,
+            on_tool_call=None,
+            max_tool_rounds=5,
+        ):
+            events.append(ev)
+    except RuntimeError as e:
+        raised = e
+
+    # The exception eventually propagates.
+    assert raised is not None
+    assert "simulated provider error" in str(raised)
+
+    # But TelemetryEnd was yielded before the exception — partial telemetry
+    # captured for diagnostics.
+    telemetry_events = [e for e in events if isinstance(e, TelemetryEnd)]
+    assert len(telemetry_events) == 1
+    data = telemetry_events[-1].data
+    # Round 1 completed cleanly; round 2 was started (rounds_used incremented)
+    # before stream_round threw. So rounds_used reflects rounds-attempted.
+    assert data["rounds_used"] == 2, (
+        f"expected rounds_used=2 (round 1 completed, round 2 attempted); "
+        f"got {data['rounds_used']}"
+    )
+    assert data["finished_normally"] is False

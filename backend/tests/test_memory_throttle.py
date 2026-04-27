@@ -129,3 +129,91 @@ async def test_runs_when_both_gates_clear(memory_session_factory):
     call_args = cache_set.call_args
     assert call_args.args[0] == f"memories:last_run:{user_id}"
     assert isinstance(call_args.args[1], float)
+
+
+@pytest.mark.anyio
+async def test_memory_extraction_uses_override_model_when_configured(
+    memory_session_factory,
+):
+    """When memory_extraction_model_id + api_key are set, build a ModelConfig
+    and pass it to get_llm_response so the cheap model is used."""
+    from app.llm.model_config import ModelConfig
+
+    user_id = await _create_user(memory_session_factory)
+    settings = _settings()
+    settings.memory_extraction_model_id = "glm-4.5-flash"
+    settings.memory_extraction_provider = "openai_compatible"
+    settings.memory_extraction_api_key = "sk-cheap-test"
+    settings.memory_extraction_base_url = "https://open.bigmodel.cn/api/paas/v4"
+
+    cache_get = AsyncMock(return_value=None)
+    cache_set = AsyncMock(return_value=True)
+    llm = AsyncMock(return_value="[]")
+
+    with (
+        patch("app.agent.memory.cache_get_json", cache_get),
+        patch("app.agent.memory.cache_set_json", cache_set),
+        patch("app.agent.memory.get_llm_response", llm),
+    ):
+        await extract_memories(
+            user_id,
+            [
+                {
+                    "role": "user",
+                    "content": "I work as a senior data scientist building pipelines",
+                }
+            ],
+            settings,
+            memory_session_factory,
+        )
+
+    llm.assert_called_once()
+    # The model_config kwarg must be a ModelConfig with the extraction values.
+    kwargs = llm.call_args.kwargs
+    mc = kwargs.get("model_config")
+    assert isinstance(mc, ModelConfig), (
+        f"expected get_llm_response called with a ModelConfig; got {mc!r}"
+    )
+    assert mc.provider == "openai_compatible"
+    assert mc.model_id == "glm-4.5-flash"
+    assert mc.api_key == "sk-cheap-test"
+    assert mc.base_url == "https://open.bigmodel.cn/api/paas/v4"
+
+
+@pytest.mark.anyio
+async def test_memory_extraction_no_override_when_settings_empty(
+    memory_session_factory,
+):
+    """When extraction settings are empty (default), pass model_config=None
+    so the main settings/model are used — preserves existing behavior."""
+    user_id = await _create_user(memory_session_factory)
+    settings = _settings()
+    # Defaults: memory_extraction_model_id="" and memory_extraction_api_key=""
+
+    cache_get = AsyncMock(return_value=None)
+    cache_set = AsyncMock(return_value=True)
+    llm = AsyncMock(return_value="[]")
+
+    with (
+        patch("app.agent.memory.cache_get_json", cache_get),
+        patch("app.agent.memory.cache_set_json", cache_set),
+        patch("app.agent.memory.get_llm_response", llm),
+    ):
+        await extract_memories(
+            user_id,
+            [
+                {
+                    "role": "user",
+                    "content": "I work as a senior data scientist building pipelines",
+                }
+            ],
+            settings,
+            memory_session_factory,
+        )
+
+    llm.assert_called_once()
+    kwargs = llm.call_args.kwargs
+    assert kwargs.get("model_config") is None, (
+        f"expected model_config=None when extraction settings are empty; "
+        f"got {kwargs.get('model_config')!r}"
+    )

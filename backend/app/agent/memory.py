@@ -9,13 +9,14 @@ import asyncio
 import json
 import logging
 import time
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.cache.redis import cache_delete, cache_get_json, cache_set_json
 from app.config import Settings
+from app.llm.model_config import ModelConfig
 from app.llm.provider import get_llm_response
 from app.models.user import User
 
@@ -31,6 +32,23 @@ def _cache_key(user_id: int) -> str:
 
 def _last_run_key(user_id: int) -> str:
     return f"memories:last_run:{user_id}"
+
+
+def _build_extraction_model_config(settings: Settings) -> Optional[ModelConfig]:
+    """Build a ModelConfig for memory extraction if both model_id and api_key
+    are set in settings. Returns None to fall through to the main model.
+
+    Both fields are required to enable the override — a typo in just one
+    shouldn't silently use the main (more expensive) model.
+    """
+    if not settings.memory_extraction_model_id or not settings.memory_extraction_api_key:
+        return None
+    return ModelConfig(
+        provider=settings.memory_extraction_provider,
+        model_id=settings.memory_extraction_model_id,
+        api_key=settings.memory_extraction_api_key,
+        base_url=settings.memory_extraction_base_url or None,
+    )
 
 
 def _load_memories(user: User) -> list:
@@ -170,8 +188,13 @@ async def extract_memories(
                 conversation=conversation,
             )
             try:
+                model_config = _build_extraction_model_config(settings)
                 response = await asyncio.wait_for(
-                    get_llm_response([{"role": "user", "content": prompt}], settings),
+                    get_llm_response(
+                        [{"role": "user", "content": prompt}],
+                        settings,
+                        model_config=model_config,
+                    ),
                     timeout=settings.memory_extraction_timeout_s,
                 )
             except asyncio.TimeoutError:
