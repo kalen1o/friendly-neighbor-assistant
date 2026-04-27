@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Optional
 
@@ -13,6 +14,16 @@ from tenacity import (
 
 from app.config import Settings
 from app.llm.model_config import ModelConfig
+
+# Re-export shared symbols so existing imports
+# (`from app.llm.provider import _tool_call_signature`, etc.) keep working.
+from app.llm.driver import (  # noqa: F401
+    SYSTEM_PROMPT,
+    _SYNTHESIS_NUDGE,
+    _summarize_tool_timings,
+    _tool_call_signature,
+    _truncate_tool_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,72 +74,7 @@ _llm_retry = retry(
     reraise=True,
 )
 
-SYSTEM_PROMPT = (
-    "You are Friendly Neighbor, a helpful AI assistant. "
-    "You answer questions clearly and concisely.\n\n"
-    "When the user asks you to build, create, or generate a UI component, "
-    "web page, or interactive application, wrap your code in an artifact tag.\n\n"
-    "Always use the project format with a JSON manifest:\n\n"
-    '<artifact type="project" title="Project Name" template="react">\n'
-    "{\n"
-    '  "files": {\n'
-    '    "/App.js": "export default function App() { return <h1>Hello</h1>; }"\n'
-    "  },\n"
-    '  "dependencies": {}\n'
-    "}\n"
-    "</artifact>\n\n"
-    "For multi-file projects:\n\n"
-    '<artifact type="project" title="Todo App" template="react">\n'
-    "{\n"
-    '  "files": {\n'
-    '    "/App.js": "import Counter from \'./Counter\';\\nexport default function App() { return <Counter />; }",\n'
-    '    "/Counter.js": "export default function Counter() { ... }",\n'
-    '    "/styles.css": "body { font-family: sans-serif; }"\n'
-    "  },\n"
-    '  "dependencies": {\n'
-    '    "uuid": "latest"\n'
-    "  }\n"
-    "}\n"
-    "</artifact>\n\n"
-    "STRICT rules for artifacts:\n"
-    '- Always use type="project" with a JSON manifest.\n'
-    '- template: "react" (JS/JSX files, entry /App.js), "react-ts" (TS/TSX files, entry /App.tsx), or "vanilla" (plain HTML/JS, entry /index.html).\n'
-    '- If using TypeScript or type annotations, use template="react-ts" with .tsx/.ts files and /App.tsx entry point.\n'
-    '- If using plain JavaScript, use template="react" with .js/.jsx files and /App.js entry point.\n'
-    "- CSS files use .css extension. Import them as './styles.css' in JS/TSX files.\n"
-    "- The files object has file paths as keys (starting with /) and code strings as values.\n"
-    "- The dependencies object maps npm package names to version strings. Use {} if none.\n"
-    "- Even simple single-component UIs use this format (one file is fine).\n"
-    "- Always include the artifact tag when generating UI code.\n"
-    "- Emit exactly ONE <artifact> tag per response. Do not include a preliminary version followed by a refined version; pick your best answer and emit it once. Only emit multiple artifact tags if the user explicitly asks for several separate projects.\n"
-    "- Keep artifacts concise — prefer inline styles or a single CSS file over many small files.\n"
-    "- You can still include explanation text outside the artifact tag.\n"
-    '- The JSON must be valid. Escape all special characters in strings properly (newlines as \\n, quotes as \\", backslashes as \\\\).'
-    "\n\nEditing an existing artifact (EXTREMELY IMPORTANT):\n"
-    '- Whenever the context contains "[Active artifact context —" with an Id, you are almost always modifying that artifact. '
-    'You MUST include that exact id on the artifact tag: <artifact id="art-xyz" type="project" title="..." template="...">. '
-    "Forgetting the id will create a duplicate artifact and lose the user's project — this is a hard requirement, not a suggestion.\n"
-    "- In edit mode, emit ONLY the files you are changing. Unchanged files are preserved automatically — do not repeat them.\n"
-    '- To delete a file, add "deleted_files": ["/path/to/file"] in the manifest alongside "files".\n'
-    "- Keep the same id, template, and title unless the user explicitly asks to rename.\n"
-    "- Edit mode example — renaming a button label in one file of a multi-file project:\n"
-    '  <artifact id="art-abc123" type="project" title="Landing Page" template="react">\n'
-    "  {\n"
-    '    "files": {\n'
-    '      "/Hero.tsx": "export default function Hero() { return <button>BUILD faster</button>; }"\n'
-    "    }\n"
-    "  }\n"
-    "  </artifact>\n"
-    "- Only omit the id (treat as a brand-new artifact) when the user is asking for something distinct from the current project, not a modification of it.\n"
-    "\nFull-stack templates (use ONLY when the user explicitly asks for these frameworks or needs server-side features):\n"
-    '- template="nextjs": Next.js App Router. Files: /next.config.js, /app/layout.tsx, /app/page.tsx. Include dependencies like "next", "react", "react-dom".\n'
-    '- template="node-server": Express or Fastify API server. Entry file: /server.js or /server.ts. No browser UI needed.\n'
-    '- template="vite": Vite-based frontend. Files: /vite.config.ts, /index.html, /src/main.tsx. For projects needing real npm packages that don\'t work in the browser bundler.\n'
-    '- PREFER template="react" or "react-ts" for simple components — they load instantly. Only use nextjs/node-server/vite when truly needed.'
-)
-
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-
 
 async def get_llm_response(
     messages: list[dict], settings: Settings, model_config: Optional[ModelConfig] = None
@@ -299,7 +245,24 @@ async def _anthropic_stream_with_tools(
         kwargs["tools"] = anthropic_tools
 
     needs_separator = False
+    seen_signatures: set[str] = set()
+    finished_normally = False
+
+    # Telemetry: aggregated at the end into one structured log line.
+    rounds_used = 0
+    tools_called = 0
+    timeouts = 0
+    truncations = 0
+    stuck_triggered = False
+    synthesis_fallback_used = False
+    unique_tools_seen: set[str] = set()
+    prompt_tokens = 0
+    completion_tokens = 0
+    # (tool_name, duration_ms) per executed tool call.
+    tool_timings: list[tuple[str, float]] = []
+
     for round_num in range(max_tool_rounds):
+        rounds_used = round_num + 1
         # Stream response — text yields immediately to the user
         tool_uses = []
         had_text = False
@@ -315,6 +278,12 @@ async def _anthropic_stream_with_tools(
             # After stream completes, get the full message to check for tool calls
             response = await stream.get_final_message()
 
+        # Pull token usage off the final message (Anthropic always includes it).
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            prompt_tokens += getattr(usage, "input_tokens", 0) or 0
+            completion_tokens += getattr(usage, "output_tokens", 0) or 0
+
         # Extract tool calls from the final message
         for block in response.content:
             if block.type == "tool_use":
@@ -322,9 +291,11 @@ async def _anthropic_stream_with_tools(
                     {"id": block.id, "name": block.name, "input": block.input}
                 )
 
-        # If no tool calls, we're done
+        # If no tool calls, we're done. Break (rather than return) so we still
+        # emit the telemetry log on the way out.
         if not tool_uses:
-            return
+            finished_normally = True
+            break
 
         if had_text:
             needs_separator = True
@@ -332,55 +303,124 @@ async def _anthropic_stream_with_tools(
         # Add assistant response to messages
         kwargs["messages"].append({"role": "assistant", "content": response.content})
 
-        fetch_cache = getattr(tool_executor, "fetch_cache", None)
-        urls_before = set(fetch_cache.keys()) if fetch_cache is not None else set()
+        # Detect a stuck loop: every (tool, args) this round was already requested
+        # in a prior round. Generalizes the older URL-only check to all tools.
+        round_signatures = {
+            _tool_call_signature(tu["name"], tu.get("input", {})) for tu in tool_uses
+        }
+        stuck = round_num > 0 and round_signatures.issubset(seen_signatures)
+        seen_signatures.update(round_signatures)
+        if stuck:
+            stuck_triggered = True
 
-        # Execute tools in parallel
+        # Telemetry: count tools and unique tool names this round.
+        tools_called += len(tool_uses)
+        unique_tools_seen.update(tu["name"] for tu in tool_uses if tu.get("name"))
+
+        # Execute tools in parallel (with a per-tool timeout so one slow
+        # tool can't stall the whole round)
+        tool_timeout = settings.tool_call_timeout_s
+
         async def _execute_tool(tu):
             if on_tool_call:
                 await on_tool_call(tu["name"], tu.get("input", {}))
-            if tool_executor:
-                try:
-                    result = await tool_executor(tu["name"], tu["input"])
-                except Exception as e:
-                    result = f"Tool error: {str(e)}"
-            else:
-                result = f"Tool {tu['name']} not available"
+            start = time.perf_counter()
+            try:
+                if tool_executor:
+                    try:
+                        result = await _asyncio.wait_for(
+                            tool_executor(tu["name"], tu["input"]),
+                            timeout=tool_timeout,
+                        )
+                    except _asyncio.TimeoutError:
+                        result = (
+                            f"Tool error: '{tu['name']}' timed out after "
+                            f"{tool_timeout}s"
+                        )
+                    except Exception as e:
+                        result = f"Tool error: {str(e)}"
+                else:
+                    result = f"Tool {tu['name']} not available"
+            finally:
+                tool_timings.append(
+                    (tu["name"], (time.perf_counter() - start) * 1000)
+                )
             return tu["id"], str(result) if not isinstance(result, str) else result
 
         results = await _asyncio.gather(*[_execute_tool(tu) for tu in tool_uses])
 
-        # Add tool results
-        tool_result_content = [
+        # Telemetry: count timeouts and truncations.
+        timeout_marker = f"timed out after {tool_timeout}s"
+        timeouts += sum(1 for _, r in results if timeout_marker in r)
+        result_limit = settings.tool_result_max_chars
+        if result_limit > 0:
+            truncations += sum(
+                1 for _, r in results if len(r) > result_limit
+            )
+
+        # Add tool results (truncated so a single huge fetch can't dominate context)
+        tool_result_content: list = [
             {
                 "type": "tool_result",
                 "tool_use_id": tool_id,
-                "content": result_text,
+                "content": _truncate_tool_result(result_text, result_limit),
             }
             for tool_id, result_text in results
         ]
-        kwargs["messages"].append({"role": "user", "content": tool_result_content})
 
-        # If no new URLs were fetched, the model is spinning — strip tools and
-        # force a final synthesis next round.
-        urls_after = set(fetch_cache.keys()) if fetch_cache is not None else set()
-        stuck = (
-            fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
-        )
         if stuck:
             logger.info(
-                "Anthropic tool round %d: no new URLs — forcing synthesis",
+                "Anthropic tool round %d: repeated tool calls — forcing synthesis",
                 round_num + 1,
             )
+            # Anthropic requires alternating user/assistant, so the nudge rides
+            # along inside the same user message as the tool_result blocks.
+            tool_result_content.append({"type": "text", "text": _SYNTHESIS_NUDGE})
             kwargs.pop("tools", None)
+
+        kwargs["messages"].append({"role": "user", "content": tool_result_content})
 
         # Loop back for next response
 
-    # Hit max rounds — final response without tools
-    kwargs.pop("tools", None)
-    async with client.messages.stream(**kwargs) as stream:
-        async for text in stream.text_stream:
-            yield text
+    # Only fire the no-tools synthesis fallback when we genuinely exhausted
+    # rounds — never on a clean stop, which would double-bill and risk
+    # appending unrelated text to the user's response.
+    if not finished_normally:
+        synthesis_fallback_used = True
+        kwargs.pop("tools", None)
+        async with client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                yield text
+            fallback_msg = await stream.get_final_message()
+        fallback_usage = getattr(fallback_msg, "usage", None)
+        if fallback_usage is not None:
+            prompt_tokens += getattr(fallback_usage, "input_tokens", 0) or 0
+            completion_tokens += getattr(fallback_usage, "output_tokens", 0) or 0
+
+    slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(tool_timings)
+    logger.info(
+        "tool_loop done",
+        extra={
+            "provider": "anthropic",
+            "rounds_used": rounds_used,
+            "tools_called": tools_called,
+            "unique_tools": len(unique_tools_seen),
+            "timeouts": timeouts,
+            "truncations": truncations,
+            "stuck_triggered": stuck_triggered,
+            "synthesis_fallback": synthesis_fallback_used,
+            "finished_normally": finished_normally,
+            "max_rounds_hit": (
+                rounds_used >= max_tool_rounds and not finished_normally
+            ),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "slowest_tool_name": slowest_name,
+            "slowest_tool_ms": slowest_ms,
+            "total_tool_ms": total_tool_ms,
+        },
+    )
 
 
 async def _openai_stream(
@@ -588,6 +628,10 @@ async def _openai_stream_with_tools(
         "model": model,
         "messages": full_messages,
         "stream": True,
+        # Ask the server to emit a final usage-only chunk so we can record
+        # token spend per response. Compatible endpoints that don't support
+        # this should ignore it; we degrade to zero counts.
+        "stream_options": {"include_usage": True},
     }
     if tools and not vision:
         kwargs["tools"] = tools
@@ -599,8 +643,25 @@ async def _openai_stream_with_tools(
     total_content_yielded = 0
     finished_normally = False
     needs_separator = False
+    seen_signatures: set[str] = set()
+
+    # Telemetry: aggregated at the end into one structured log line. Lets us
+    # tell in prod whether the various guards (stuck detection, per-tool
+    # timeouts, truncation, trailing synthesis fallback) ever fire.
+    rounds_used = 0
+    tools_called = 0
+    timeouts = 0
+    truncations = 0
+    stuck_triggered = False
+    synthesis_fallback_used = False
+    unique_tools_seen: set[str] = set()
+    prompt_tokens = 0
+    completion_tokens = 0
+    # (tool_name, duration_ms) per executed tool call.
+    tool_timings: list[tuple[str, float]] = []
 
     for round_num in range(max_tool_rounds):
+        rounds_used = round_num + 1
         logger.info(
             "Tool round %d: calling LLM with %d messages",
             round_num + 1,
@@ -613,6 +674,18 @@ async def _openai_stream_with_tools(
         tool_calls_in_progress = {}  # index -> {id, name, arguments}
 
         async for chunk in stream:
+            # Final usage-only chunks (when stream_options.include_usage is
+            # set) carry no choices but do carry a `usage` object. Pull it
+            # out before checking choices so we don't IndexError.
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                prompt_tokens += getattr(chunk_usage, "prompt_tokens", 0) or 0
+                completion_tokens += (
+                    getattr(chunk_usage, "completion_tokens", 0) or 0
+                )
+            if not chunk.choices:
+                continue
+
             delta = chunk.choices[0].delta
 
             # Stream text content to user
@@ -645,13 +718,14 @@ async def _openai_stream_with_tools(
                                 tc.function.arguments
                             )
 
-            # Check finish reason
+            # Check finish reason. Don't break here — OpenAI emits the
+            # usage-only chunk *after* finish_reason when stream_options.
+            # include_usage is set, so we keep iterating to drain it. The
+            # subsequent chunks have no content / no tool_calls.
             if chunk.choices[0].finish_reason == "stop":
                 finished_normally = True
-                break  # Done, no more tool calls — but fall through to fallback check
-
-            if chunk.choices[0].finish_reason == "tool_calls":
-                break  # Need to execute tools
+            # finish_reason="tool_calls" doesn't need its own flag; we'll
+            # detect it below by the presence of accumulated tool calls.
 
         # Model signalled end of turn — exit the tool loop.
         if finished_normally:
@@ -707,67 +781,97 @@ async def _openai_stream_with_tools(
 
         async def _execute_single_tool(tc_data):
             tool_name = tc_data["name"]
-            try:
-                import json as _json
+            import json as _json
 
-                arguments = (
-                    _json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+            raw_args = tc_data["arguments"]
+            try:
+                arguments = _json.loads(raw_args) if raw_args else {}
+            except _json.JSONDecodeError as e:
+                # Don't run the tool with empty args — let the model see the
+                # parse error so it can retry with valid JSON.
+                snippet = raw_args[:200] if raw_args else "<empty>"
+                err = (
+                    f"Tool error: invalid JSON arguments ({e.msg}). "
+                    f"Received: {snippet}"
                 )
-            except _json.JSONDecodeError:
-                arguments = {}
+                return tc_data["id"], err
 
             if on_tool_call:
                 await on_tool_call(tool_name, arguments)
 
-            if tool_executor:
-                try:
-                    result = await tool_executor(tool_name, arguments)
-                except Exception as e:
-                    result = f"Tool error: {str(e)}"
-            else:
-                result = f"Tool {tool_name} not available"
+            start = time.perf_counter()
+            try:
+                if tool_executor:
+                    try:
+                        result = await _asyncio.wait_for(
+                            tool_executor(tool_name, arguments),
+                            timeout=settings.tool_call_timeout_s,
+                        )
+                    except _asyncio.TimeoutError:
+                        result = (
+                            f"Tool error: '{tool_name}' timed out after "
+                            f"{settings.tool_call_timeout_s}s"
+                        )
+                    except Exception as e:
+                        result = f"Tool error: {str(e)}"
+                else:
+                    result = f"Tool {tool_name} not available"
+            finally:
+                tool_timings.append(
+                    (tool_name, (time.perf_counter() - start) * 1000)
+                )
 
             return tc_data["id"], str(result) if not isinstance(result, str) else result
 
-        # Snapshot fetch cache before tools run so we can detect "nothing new"
-        fetch_cache = getattr(tool_executor, "fetch_cache", None)
-        urls_before = set(fetch_cache.keys()) if fetch_cache is not None else set()
+        # Detect a stuck loop: every (tool, args) this round was already requested
+        # in a prior round. Generalizes the older URL-only check to all tools.
+        round_signatures = {
+            _tool_call_signature(tc["name"], tc["arguments"])
+            for tc in tool_calls_in_progress.values()
+        }
+        stuck = round_num > 0 and round_signatures.issubset(seen_signatures)
+        seen_signatures.update(round_signatures)
+        if stuck:
+            stuck_triggered = True
+
+        # Telemetry: count tools and unique tool names this round.
+        tools_called += len(tool_calls_in_progress)
+        unique_tools_seen.update(
+            tc["name"] for tc in tool_calls_in_progress.values() if tc.get("name")
+        )
 
         # Run all tools in parallel
         tool_results = await _asyncio.gather(
             *[_execute_single_tool(tc) for tc in tool_calls_in_progress.values()]
         )
 
-        # Add results to messages in order
+        # Telemetry: count timeout markers in the results.
+        timeout_marker = (
+            f"timed out after {settings.tool_call_timeout_s}s"
+        )
+        timeouts += sum(1 for _, r in tool_results if timeout_marker in r)
+
+        # Add results to messages in order (truncated so a single huge fetch
+        # can't dominate context across rounds)
+        result_limit = settings.tool_result_max_chars
         for tc_call_id, result_content in tool_results:
+            if result_limit > 0 and len(result_content) > result_limit:
+                truncations += 1
             kwargs["messages"].append(
                 {
                     "role": "tool",
                     "tool_call_id": tc_call_id,
-                    "content": result_content,
+                    "content": _truncate_tool_result(result_content, result_limit),
                 }
             )
 
-        # If this round fetched no new URLs, the model is spinning.
-        # Nudge it to synthesize and strip tools for the next call.
-        urls_after = set(fetch_cache.keys()) if fetch_cache is not None else set()
-        stuck = (
-            fetch_cache is not None and round_num > 0 and not (urls_after - urls_before)
-        )
         if stuck:
             logger.info(
-                "Tool round %d: no new URLs fetched — forcing synthesis next round",
+                "Tool round %d: repeated tool calls — forcing synthesis next round",
                 round_num + 1,
             )
             kwargs["messages"].append(
-                {
-                    "role": "system",
-                    "content": (
-                        "You already have sufficient information from prior tool "
-                        "calls. Do not call any more tools. Answer the user now "
-                        "using the content already gathered."
-                    ),
-                }
+                {"role": "user", "content": _SYNTHESIS_NUDGE}
             )
             kwargs.pop("tools", None)
 
@@ -782,8 +886,30 @@ async def _openai_stream_with_tools(
         )
         continue
 
-    # Tool loop finished (either exhausted rounds or model stopped) but no
-    # response text was yielded. Emit a fallback so the user sees something.
+    # If the model didn't finish on its own and we never streamed any text,
+    # try one last synthesis call without tools — the model often produces a
+    # real answer once freed from the tool-calling contract. Previously this
+    # ran unconditionally, double-billing every response and risking extra
+    # text appended after a clean stop.
+    if not finished_normally and total_content_yielded == 0:
+        synthesis_fallback_used = True
+        kwargs.pop("tools", None)
+        stream = await _create_stream(**kwargs)
+        async for chunk in stream:
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                prompt_tokens += getattr(chunk_usage, "prompt_tokens", 0) or 0
+                completion_tokens += (
+                    getattr(chunk_usage, "completion_tokens", 0) or 0
+                )
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                total_content_yielded += len(delta.content)
+                yield delta.content
+
+    # Last-resort canned fallback if synthesis also produced nothing.
     if total_content_yielded == 0:
         logger.warning(
             "Tool loop exited with no response text (finished_normally=%s)",
@@ -812,10 +938,28 @@ async def _openai_stream_with_tools(
                 "Please try rephrasing your question."
             )
 
-    # Hit max tool rounds — force a final text response without tools
-    kwargs.pop("tools", None)
-    stream = await _create_stream(**kwargs)
-    async for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            yield delta.content
+    slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(tool_timings)
+    logger.info(
+        "tool_loop done",
+        extra={
+            "provider": "openai",
+            "rounds_used": rounds_used,
+            "tools_called": tools_called,
+            "unique_tools": len(unique_tools_seen),
+            "timeouts": timeouts,
+            "truncations": truncations,
+            "stuck_triggered": stuck_triggered,
+            "synthesis_fallback": synthesis_fallback_used,
+            "finished_normally": finished_normally,
+            "max_rounds_hit": (
+                rounds_used >= max_tool_rounds and not finished_normally
+            ),
+            "chars_yielded": total_content_yielded,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "slowest_tool_name": slowest_name,
+            "slowest_tool_ms": slowest_ms,
+            "total_tool_ms": total_tool_ms,
+        },
+    )
