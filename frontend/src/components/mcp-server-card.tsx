@@ -38,7 +38,10 @@ export function ServerCard({
   }, [server.id]);
 
   useEffect(() => {
-    if (expanded) loadTools();
+    if (!expanded) return;
+    queueMicrotask(() => {
+      void loadTools();
+    });
   }, [expanded, loadTools]);
 
   const handleRefresh = async () => {

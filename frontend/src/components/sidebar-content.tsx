@@ -116,10 +116,12 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
 
   // Read persisted view mode after hydration to avoid SSR mismatch
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("sidebar-view-mode") as "all" | "folders" | null;
-      if (saved) setViewMode(saved);
-    } catch {}
+    queueMicrotask(() => {
+      try {
+        const saved = localStorage.getItem("sidebar-view-mode") as "all" | "folders" | null;
+        if (saved) setViewMode(saved);
+      } catch {}
+    });
   }, []);
 
   useEffect(() => {
@@ -239,7 +241,9 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
   }, []);
 
   useEffect(() => {
-    fetchChats();
+    queueMicrotask(() => {
+      void fetchChats();
+    });
   }, [fetchChats, pathname]);
 
   // Handle notification click navigation
@@ -260,7 +264,9 @@ export function SidebarContent({ showCollapseToggle, onToggle, chatListOnly }: S
   }, [isAuthenticated, fetchChats]);
 
   useEffect(() => {
-    fetchFolders();
+    queueMicrotask(() => {
+      void fetchFolders();
+    });
   }, [fetchFolders]);
 
   useEffect(() => {

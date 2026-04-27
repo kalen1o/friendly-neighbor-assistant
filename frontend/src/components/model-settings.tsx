@@ -78,7 +78,9 @@ export function ModelSettings() {
   };
 
   useEffect(() => {
-    fetchModels();
+    queueMicrotask(() => {
+      void fetchModels();
+    });
   }, [fetchModels]);
 
   const resetForm = () => {

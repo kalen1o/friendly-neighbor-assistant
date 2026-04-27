@@ -29,9 +29,12 @@ export default function DocumentsPage() {
     }
   }, []);
 
-  // Poll for processing documents
+  // Poll for processing documents. Defer the initial fetch to a microtask so
+  // setState happens outside the synchronous effect body.
   useEffect(() => {
-    fetchDocuments();
+    queueMicrotask(() => {
+      void fetchDocuments();
+    });
 
     pollingRef.current = setInterval(async () => {
       const docs = await fetchDocuments();

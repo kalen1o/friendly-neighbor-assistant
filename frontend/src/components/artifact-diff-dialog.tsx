@@ -165,7 +165,9 @@ export function ArtifactDiffDialog({ open, onOpenChange, artifactId }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    void loadVersions();
+    queueMicrotask(() => {
+      void loadVersions();
+    });
   }, [open, loadVersions]);
 
   const fetchDiff = useCallback(async () => {
@@ -184,7 +186,9 @@ export function ArtifactDiffDialog({ open, onOpenChange, artifactId }: Props) {
   useEffect(() => {
     if (!open) return;
     if (vFrom == null || vTo == null) return;
-    void fetchDiff();
+    queueMicrotask(() => {
+      void fetchDiff();
+    });
   }, [open, fetchDiff, vFrom, vTo]);
 
   return (

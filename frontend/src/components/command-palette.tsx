@@ -57,13 +57,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   // Focus input when opened
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    queueMicrotask(() => {
       setQuery("");
       setResults([]);
       setActiveIndex(0);
-      // Small delay to let animation start before focusing
       requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    });
   }, [open]);
 
   // Search on query change (debounced)
@@ -71,8 +71,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (!query.trim()) {
-      setResults([]);
-      setActiveIndex(0);
+      queueMicrotask(() => {
+        setResults([]);
+        setActiveIndex(0);
+      });
       return;
     }
 
@@ -93,9 +95,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     };
   }, [query]);
 
-  // Clamp active index
+  // Clamp active index when item count drops
   useEffect(() => {
-    if (activeIndex >= totalItems) setActiveIndex(Math.max(0, totalItems - 1));
+    if (activeIndex >= totalItems) {
+      queueMicrotask(() => setActiveIndex(Math.max(0, totalItems - 1)));
+    }
   }, [totalItems, activeIndex]);
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
