@@ -5,8 +5,10 @@ and facts, then saves them as a JSON array on the User model.
 Runs as a background task via asyncio.create_task.
 """
 
+import asyncio
 import json
 import logging
+import time
 from typing import List
 
 from sqlalchemy import select
@@ -25,6 +27,10 @@ MEMORY_CACHE_TTL = 120  # seconds
 
 def _cache_key(user_id: int) -> str:
     return f"memories:{user_id}"
+
+
+def _last_run_key(user_id: int) -> str:
+    return f"memories:last_run:{user_id}"
 
 
 def _load_memories(user: User) -> list:
@@ -113,6 +119,38 @@ async def extract_memories(
             if not user or not user.memory_enabled:
                 return
 
+            # Throttle: extraction fires after every assistant turn, so skip
+            # when the call would obviously be wasteful — either we ran very
+            # recently, or the latest user message has too little signal to
+            # learn from. Either gate alone is enough to skip.
+            now = time.time()
+            last_run = await cache_get_json(_last_run_key(user_id))
+            recently_ran = (
+                isinstance(last_run, (int, float))
+                and (now - last_run) < settings.memory_extraction_min_interval_s
+            )
+
+            latest_user_msg = next(
+                (
+                    m.get("content", "")
+                    for m in reversed(messages)
+                    if m.get("role") == "user" and isinstance(m.get("content"), str)
+                ),
+                "",
+            )
+            no_signal = (
+                len(latest_user_msg.strip()) < settings.memory_extraction_min_user_chars
+            )
+            if recently_ran or no_signal:
+                logger.debug(
+                    "Skipping memory extraction for user %s "
+                    "(recently_ran=%s, no_signal=%s)",
+                    user_id,
+                    recently_ran,
+                    no_signal,
+                )
+                return
+
             existing = _load_memories(user)
             existing_text = "\n".join(f"- {m['content']}" for m in existing) or "(none)"
 
@@ -131,8 +169,25 @@ async def extract_memories(
                 existing_memories=existing_text,
                 conversation=conversation,
             )
-            response = await get_llm_response(
-                [{"role": "user", "content": prompt}], settings
+            try:
+                response = await asyncio.wait_for(
+                    get_llm_response([{"role": "user", "content": prompt}], settings),
+                    timeout=settings.memory_extraction_timeout_s,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Memory extraction timed out after %ss for user %s",
+                    settings.memory_extraction_timeout_s,
+                    user_id,
+                )
+                return
+
+            # Mark the run time even if parsing finds nothing: we already paid
+            # for the LLM call and shouldn't retry it before min_interval_s.
+            await cache_set_json(
+                _last_run_key(user_id),
+                now,
+                ttl_seconds=settings.memory_extraction_min_interval_s * 4,
             )
 
             actions = _parse_actions(response)

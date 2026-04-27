@@ -41,6 +41,24 @@ class Settings(BaseSettings):
 
     max_tool_rounds: int = 5
     max_output_tokens: int = 16384
+    # Cap per-tool-call result size before it's appended to the LLM message
+    # history. Large web-page fetches or knowledge-base hits can otherwise
+    # dominate context across multiple rounds.
+    tool_result_max_chars: int = 12000
+    # Hard timeout for a single tool execution. Tools run in parallel within
+    # a round, so any one slow tool blocks the round from advancing. On
+    # timeout the model sees a clear error and can decide to retry or give up.
+    tool_call_timeout_s: int = 60
+    # Timeout for the cross-chat memory extraction LLM call. Runs in a
+    # background task — without a cap, a hung provider leaks the task.
+    memory_extraction_timeout_s: int = 30
+    # Memory extraction fires after every assistant turn. Two gates throttle
+    # it to avoid paying for low-value calls:
+    #   - min_interval_s: skip if last extraction was less than this long ago
+    #   - min_user_chars: skip if the latest user message is shorter than this
+    # Either gate is enough to skip; both must clear to run.
+    memory_extraction_min_interval_s: int = 60
+    memory_extraction_min_user_chars: int = 30
     # Phase 3: artifact edits happen via list/read/edit tools instead of
     # whole-file <artifact> re-emission. Whole-file remains as the fallback
     # for new artifacts and models that don't handle tools well. Set to

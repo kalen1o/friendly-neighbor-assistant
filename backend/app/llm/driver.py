@@ -180,35 +180,27 @@ class ProviderAdapter(Protocol):
 
     provider_name: str  # "anthropic" | "openai" — used for telemetry tagging
 
-    def build_kwargs(self, messages: list, tools: Optional[list]) -> dict:
-        ...
+    def build_kwargs(self, messages: list, tools: Optional[list]) -> dict: ...
 
-    def stream_round(self, kwargs: dict) -> AsyncIterator:
-        ...
+    def stream_round(self, kwargs: dict) -> AsyncIterator: ...
 
     def append_assistant_turn(
         self, kwargs: dict, round_result: RoundResult
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def append_tool_results(
         self,
         kwargs: dict,
         results: list[tuple[str, str]],
         with_synthesis_nudge: bool,
-    ) -> None:
+    ) -> None: ...
+
+    def extract_tool_call_args(self, call: ToolCall):  # -> dict | ToolCallParseError
         ...
 
-    def extract_tool_call_args(
-        self, call: ToolCall
-    ):  # -> dict | ToolCallParseError
-        ...
+    def stream_simple(self, kwargs: dict) -> AsyncIterator[str]: ...
 
-    def stream_simple(self, kwargs: dict) -> AsyncIterator[str]:
-        ...
-
-    async def respond(self, messages: list) -> str:
-        ...
+    async def respond(self, messages: list) -> str: ...
 
 
 async def _execute_one(
@@ -242,15 +234,11 @@ async def _execute_one(
                 timeout=timeout_s,
             )
         except asyncio.TimeoutError:
-            result = (
-                f"Tool error: '{call.name}' timed out after {timeout_s}s"
-            )
+            result = f"Tool error: '{call.name}' timed out after {timeout_s}s"
         except Exception as e:
             result = f"Tool error: {str(e)}"
     finally:
-        tool_timings.append(
-            (call.name, (time.perf_counter() - start) * 1000)
-        )
+        tool_timings.append((call.name, (time.perf_counter() - start) * 1000))
 
     return call.id, str(result) if not isinstance(result, str) else result
 
@@ -315,8 +303,7 @@ async def run_tool_loop(
         adapter.append_assistant_turn(kwargs, round_result)
 
         round_signatures = {
-            _tool_call_signature(c.name, c.raw_args)
-            for c in round_result.tool_calls
+            _tool_call_signature(c.name, c.raw_args) for c in round_result.tool_calls
         }
         stuck = round_num > 0 and round_signatures.issubset(seen_signatures)
         seen_signatures.update(round_signatures)
@@ -344,18 +331,14 @@ async def run_tool_loop(
         timeouts += sum(1 for _, r in tool_results if timeout_marker in r)
         if settings.tool_result_max_chars > 0:
             truncations += sum(
-                1
-                for _, r in tool_results
-                if len(r) > settings.tool_result_max_chars
+                1 for _, r in tool_results if len(r) > settings.tool_result_max_chars
             )
 
         truncated = [
             (tid, _truncate_tool_result(r, settings.tool_result_max_chars))
             for tid, r in tool_results
         ]
-        adapter.append_tool_results(
-            kwargs, truncated, with_synthesis_nudge=stuck
-        )
+        adapter.append_tool_results(kwargs, truncated, with_synthesis_nudge=stuck)
 
     if not finished_normally:
         synthesis_fallback_used = True
@@ -367,9 +350,7 @@ async def run_tool_loop(
                 prompt_tokens += event.result.usage.prompt_tokens
                 completion_tokens += event.result.usage.completion_tokens
 
-    slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(
-        tool_timings
-    )
+    slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(tool_timings)
     _log.info(
         "tool_loop done",
         extra={

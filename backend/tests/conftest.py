@@ -26,6 +26,24 @@ def anyio_backend(request):
     return request.param
 
 
+@pytest.fixture(autouse=True)
+def _reset_llm_client_cache():
+    """Clear the LLM provider client caches between tests.
+
+    Both AnthropicAdapter and OpenAIAdapter cache instantiated SDK clients
+    keyed on api_key. Tests that instantiate adapters with a default key
+    (e.g. "sk-ant-test") populate the cache with a real client; later tests
+    that patch the SDK constructor and expect a fresh mock then hit the
+    cached real client instead. This fixture flushes both caches before
+    every test to keep tests independent.
+    """
+    from app.llm.adapters import _anthropic_clients, _openai_clients
+
+    _anthropic_clients.clear()
+    _openai_clients.clear()
+    yield
+
+
 _test_settings = Settings(
     database_url=TEST_DATABASE_URL,
     jwt_secret="test-secret",

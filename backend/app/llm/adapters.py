@@ -99,17 +99,11 @@ class AnthropicAdapter:
 
     provider_name = "anthropic"
 
-    def __init__(
-        self, settings: Settings, model_config: Optional[ModelConfig] = None
-    ):
+    def __init__(self, settings: Settings, model_config: Optional[ModelConfig] = None):
         self._settings = settings
-        api_key = (
-            model_config.api_key if model_config else settings.anthropic_api_key
-        )
+        api_key = model_config.api_key if model_config else settings.anthropic_api_key
         self._client = _get_anthropic_client(api_key)
-        self._model = (
-            model_config.model_id if model_config else ANTHROPIC_MODEL
-        )
+        self._model = model_config.model_id if model_config else ANTHROPIC_MODEL
 
     def build_kwargs(self, messages: list, tools: Optional[list]) -> dict:
         converted_messages = _convert_to_anthropic_format(messages)
@@ -150,9 +144,7 @@ class AnthropicAdapter:
 
         yield RoundEnd(result=RoundResult(tool_calls=tool_calls, usage=usage))
 
-    def append_assistant_turn(
-        self, kwargs: dict, round_result: RoundResult
-    ) -> None:
+    def append_assistant_turn(self, kwargs: dict, round_result: RoundResult) -> None:
         # Anthropic requires the assistant turn to carry the original block
         # list (text + tool_use blocks). stream_round stashed it on kwargs.
         content = kwargs.pop("_last_assistant_content", [])
@@ -184,9 +176,7 @@ class AnthropicAdapter:
             parsed = _json.loads(call.raw_args) if call.raw_args else {}
             return parsed if isinstance(parsed, dict) else {}
         except _json.JSONDecodeError as e:
-            return ToolCallParseError(
-                raw_args=str(call.raw_args), reason=e.msg
-            )
+            return ToolCallParseError(raw_args=str(call.raw_args), reason=e.msg)
 
     async def stream_simple(self, kwargs: dict) -> AsyncIterator[str]:
         async with self._client.messages.stream(**kwargs) as stream:
@@ -231,7 +221,9 @@ _llm_retry = retry(
 )
 
 
-def _get_openai_client(api_key: str, base_url: Optional[str] = None) -> openai.AsyncOpenAI:
+def _get_openai_client(
+    api_key: str, base_url: Optional[str] = None
+) -> openai.AsyncOpenAI:
     cache_key = f"{api_key}:{base_url or ''}"
     if cache_key not in _openai_clients:
         kwargs: dict = {"api_key": api_key, "timeout": 300.0}
@@ -246,9 +238,7 @@ def _build_openai_client(
 ) -> openai.AsyncOpenAI:
     if model_config:
         return _get_openai_client(model_config.api_key, model_config.base_url)
-    return _get_openai_client(
-        settings.openai_api_key, settings.openai_base_url or None
-    )
+    return _get_openai_client(settings.openai_api_key, settings.openai_base_url or None)
 
 
 def _build_vision_client(settings: Settings) -> openai.AsyncOpenAI:
@@ -310,9 +300,7 @@ class OpenAIAdapter:
             chunk_usage = getattr(chunk, "usage", None)
             if chunk_usage is not None:
                 prompt_tokens += getattr(chunk_usage, "prompt_tokens", 0) or 0
-                completion_tokens += (
-                    getattr(chunk_usage, "completion_tokens", 0) or 0
-                )
+                completion_tokens += getattr(chunk_usage, "completion_tokens", 0) or 0
             if not chunk.choices:
                 continue
 
@@ -333,9 +321,7 @@ class OpenAIAdapter:
                         }
                     if tc.function:
                         if tc.function.name:
-                            tool_calls_in_progress[tc_id]["name"] = (
-                                tc.function.name
-                            )
+                            tool_calls_in_progress[tc_id]["name"] = tc.function.name
                             tool_calls_in_progress[tc_id]["id"] = (
                                 tc.id or tool_calls_in_progress[tc_id]["id"]
                             )
@@ -353,14 +339,10 @@ class OpenAIAdapter:
             ToolCall(id=tc["id"], name=tc["name"], raw_args=tc["arguments"])
             for tc in tool_calls_in_progress.values()
         ]
-        usage = Usage(
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens
-        )
+        usage = Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
         yield RoundEnd(result=RoundResult(tool_calls=tool_calls, usage=usage))
 
-    def append_assistant_turn(
-        self, kwargs: dict, round_result: RoundResult
-    ) -> None:
+    def append_assistant_turn(self, kwargs: dict, round_result: RoundResult) -> None:
         text = kwargs.pop("_last_assistant_text", "")
         tc_struct = kwargs.pop("_last_tool_calls_struct", [])
         assistant_tool_calls = [
@@ -390,9 +372,7 @@ class OpenAIAdapter:
                 {"role": "tool", "tool_call_id": tid, "content": text}
             )
         if with_synthesis_nudge:
-            kwargs["messages"].append(
-                {"role": "user", "content": _SYNTHESIS_NUDGE}
-            )
+            kwargs["messages"].append({"role": "user", "content": _SYNTHESIS_NUDGE})
             kwargs.pop("tools", None)
 
     def extract_tool_call_args(self, call: ToolCall):

@@ -1,5 +1,4 @@
 import logging
-import time
 from collections.abc import AsyncIterator
 from typing import Optional
 
@@ -31,9 +30,7 @@ def _get_adapter(
     vision: bool = False,
 ):
     """Provider dispatch. The only place provider strings are matched."""
-    provider = (
-        model_config.provider if model_config else settings.ai_provider
-    )
+    provider = model_config.provider if model_config else settings.ai_provider
     if provider == "anthropic":
         return AnthropicAdapter(settings, model_config)
     if provider in ("openai", "openai_compatible"):

@@ -61,17 +61,13 @@ class _FakeAdapter:
             text_chunks, tool_calls = [], []
         for t in text_chunks:
             yield t
-        yield RoundEnd(
-            result=RoundResult(tool_calls=tool_calls, usage=Usage(1, 1))
-        )
+        yield RoundEnd(result=RoundResult(tool_calls=tool_calls, usage=Usage(1, 1)))
 
     def append_assistant_turn(self, kwargs, round_result):
         kwargs["messages"].append({"role": "assistant", "content": "..."})
 
     def append_tool_results(self, kwargs, results, with_synthesis_nudge):
-        self.append_tool_results_calls.append(
-            (list(results), with_synthesis_nudge)
-        )
+        self.append_tool_results_calls.append((list(results), with_synthesis_nudge))
         for tid, text in results:
             kwargs["messages"].append(
                 {"role": "tool", "tool_call_id": tid, "content": text}
@@ -105,9 +101,7 @@ async def test_driver_runs_until_no_tool_calls_then_emits_telemetry(caplog):
         adapter,
         messages=[{"role": "user", "content": "hi"}],
         settings=_settings(),
-        tools=[
-            {"type": "function", "function": {"name": "search", "parameters": {}}}
-        ],
+        tools=[{"type": "function", "function": {"name": "search", "parameters": {}}}],
         tool_executor=fake_executor,
         on_tool_call=None,
         max_tool_rounds=5,
@@ -132,7 +126,10 @@ async def test_driver_runs_until_no_tool_calls_then_emits_telemetry(caplog):
 async def test_driver_detects_stuck_and_strips_tools():
     """Same (tool, args) in rounds 0 and 1 → append_tool_results called with
     with_synthesis_nudge=True on the second tool round."""
-    same_call = lambda i: ToolCall(id=f"t{i}", name="search", raw_args={"q": "x"})
+
+    def same_call(i):
+        return ToolCall(id=f"t{i}", name="search", raw_args={"q": "x"})
+
     adapter = _FakeAdapter(
         rounds=[
             ([], [same_call(1)]),
@@ -149,9 +146,7 @@ async def test_driver_detects_stuck_and_strips_tools():
         adapter,
         messages=[{"role": "user", "content": "hi"}],
         settings=_settings(),
-        tools=[
-            {"type": "function", "function": {"name": "search", "parameters": {}}}
-        ],
+        tools=[{"type": "function", "function": {"name": "search", "parameters": {}}}],
         tool_executor=fake_executor,
         on_tool_call=None,
         max_tool_rounds=5,
@@ -188,9 +183,7 @@ async def test_driver_skips_tool_executor_on_invalid_args():
         adapter,
         messages=[{"role": "user", "content": "hi"}],
         settings=_settings(),
-        tools=[
-            {"type": "function", "function": {"name": "search", "parameters": {}}}
-        ],
+        tools=[{"type": "function", "function": {"name": "search", "parameters": {}}}],
         tool_executor=executor,
         on_tool_call=None,
         max_tool_rounds=5,

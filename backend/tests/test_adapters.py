@@ -30,9 +30,7 @@ def test_anthropic_adapter_build_kwargs_converts_image_blocks_and_tools():
             "content": [
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": "data:image/png;base64,iVBORw0KGgoAAAA="
-                    },
+                    "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAA="},
                 },
                 {"type": "text", "text": "describe this"},
             ],
@@ -77,9 +75,7 @@ def test_anthropic_adapter_build_kwargs_converts_image_blocks_and_tools():
 
 def test_anthropic_adapter_build_kwargs_omits_tools_key_when_none():
     adapter = AnthropicAdapter(_settings(), model_config=None)
-    kwargs = adapter.build_kwargs(
-        [{"role": "user", "content": "hi"}], tools=None
-    )
+    kwargs = adapter.build_kwargs([{"role": "user", "content": "hi"}], tools=None)
     assert "tools" not in kwargs
 
 
@@ -151,12 +147,8 @@ def _openai_settings() -> Settings:
 
 def test_openai_adapter_build_kwargs_streams_with_usage_and_tools():
     adapter = OpenAIAdapter(_openai_settings(), model_config=None, vision=False)
-    tools = [
-        {"type": "function", "function": {"name": "web_search", "parameters": {}}}
-    ]
-    kwargs = adapter.build_kwargs(
-        [{"role": "user", "content": "hi"}], tools=tools
-    )
+    tools = [{"type": "function", "function": {"name": "web_search", "parameters": {}}}]
+    kwargs = adapter.build_kwargs([{"role": "user", "content": "hi"}], tools=tools)
     assert kwargs["stream"] is True
     assert kwargs["stream_options"] == {"include_usage": True}
     assert kwargs["tools"] == tools
@@ -167,12 +159,8 @@ def test_openai_adapter_build_kwargs_streams_with_usage_and_tools():
 
 def test_openai_adapter_build_kwargs_omits_tools_in_vision_mode():
     adapter = OpenAIAdapter(_openai_settings(), model_config=None, vision=True)
-    tools = [
-        {"type": "function", "function": {"name": "web_search", "parameters": {}}}
-    ]
-    kwargs = adapter.build_kwargs(
-        [{"role": "user", "content": "hi"}], tools=tools
-    )
+    tools = [{"type": "function", "function": {"name": "web_search", "parameters": {}}}]
+    kwargs = adapter.build_kwargs([{"role": "user", "content": "hi"}], tools=tools)
     assert "tools" not in kwargs
 
 
@@ -216,9 +204,7 @@ def test_openai_adapter_append_tool_results_without_nudge_keeps_tools():
             }
         ],
     }
-    adapter.append_tool_results(
-        kwargs, [("call_x", "ok")], with_synthesis_nudge=False
-    )
+    adapter.append_tool_results(kwargs, [("call_x", "ok")], with_synthesis_nudge=False)
     assert kwargs["tools"]
     msgs = kwargs["messages"]
     assert all(m["role"] == "tool" for m in msgs)

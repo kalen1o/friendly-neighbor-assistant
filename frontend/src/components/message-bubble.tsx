@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Check, Pencil, X, Send } from "lucide-react";
+import { Copy, Check, Pencil, X, Send, FileText, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -277,18 +277,29 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
                         className="max-h-48 max-w-full rounded-lg object-contain"
                       />
                     ) : (
-                      <a
+                      <Button
                         key={i}
-                        href={f.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 rounded-lg bg-primary-foreground/10 px-3 py-1.5 text-xs text-primary-foreground/80 hover:text-primary-foreground"
+                        variant="ghost"
+                        size="sm"
+                        nativeButton={false}
+                        className="h-auto gap-2 rounded-lg bg-primary-foreground/10 px-3 py-1.5 text-xs text-primary-foreground/80 hover:bg-primary-foreground/20 hover:text-primary-foreground"
+                        render={
+                          <a
+                            href={f.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            role="link"
+                            aria-label={`Open ${f.name} in a new tab`}
+                          />
+                        }
                       >
-                        <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        {f.name}
-                      </a>
+                        {f.type === "application/pdf" ? (
+                          <FileText className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <Paperclip className="h-4 w-4 shrink-0" />
+                        )}
+                        <span className="truncate max-w-[18rem]">{f.name}</span>
+                      </Button>
                     )
                   )}
                 </div>

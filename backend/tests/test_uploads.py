@@ -3,17 +3,20 @@ import io
 import pytest
 
 
+# Minimal valid 1x1 PNG — used by multiple upload/serve tests.
+_PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+    b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+    b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+    b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
 @pytest.mark.anyio
 async def test_upload_image(client):
-    png_bytes = (
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-        b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-        b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
     response = await client.post(
         "/api/uploads",
-        files={"file": ("test.png", io.BytesIO(png_bytes), "image/png")},
+        files={"file": ("test.png", io.BytesIO(_PNG_1X1), "image/png")},
     )
     assert response.status_code == 201
     data = response.json()
@@ -34,15 +37,9 @@ async def test_upload_unsupported_type(client):
 
 @pytest.mark.anyio
 async def test_serve_uploaded_file(client):
-    png_bytes = (
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-        b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-        b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
     upload = await client.post(
         "/api/uploads",
-        files={"file": ("test.png", io.BytesIO(png_bytes), "image/png")},
+        files={"file": ("test.png", io.BytesIO(_PNG_1X1), "image/png")},
     )
     file_id = upload.json()["id"]
 
@@ -56,15 +53,9 @@ async def test_serve_uploaded_file_uses_inline_content_disposition(client):
     """The /api/uploads/{id} response must use Content-Disposition: inline so
     that browsers display PDFs (and other displayable types) inline in a new
     tab rather than triggering a download."""
-    png_bytes = (
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-        b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-        b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
     upload = await client.post(
         "/api/uploads",
-        files={"file": ("test.png", io.BytesIO(png_bytes), "image/png")},
+        files={"file": ("test.png", io.BytesIO(_PNG_1X1), "image/png")},
     )
     file_id = upload.json()["id"]
 
