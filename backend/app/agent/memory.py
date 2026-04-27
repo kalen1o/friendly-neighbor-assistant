@@ -41,7 +41,10 @@ def _build_extraction_model_config(settings: Settings) -> Optional[ModelConfig]:
     Both fields are required to enable the override — a typo in just one
     shouldn't silently use the main (more expensive) model.
     """
-    if not settings.memory_extraction_model_id or not settings.memory_extraction_api_key:
+    if (
+        not settings.memory_extraction_model_id
+        or not settings.memory_extraction_api_key
+    ):
         return None
     return ModelConfig(
         provider=settings.memory_extraction_provider,
