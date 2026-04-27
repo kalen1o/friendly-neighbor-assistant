@@ -6,6 +6,7 @@ adapters.py. The public entry points in provider.py orchestrate both.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
 import time
@@ -208,3 +209,187 @@ class ProviderAdapter(Protocol):
 
     async def respond(self, messages: list) -> str:
         ...
+
+
+async def _execute_one(
+    adapter: ProviderAdapter,
+    call: ToolCall,
+    tool_executor,
+    on_tool_call,
+    timeout_s: int,
+    tool_timings: list,
+) -> tuple:
+    """Parse args, run executor with timeout + per-tool latency timing.
+
+    Returns (tool_call_id, result_text). On JSON parse failure, returns a
+    descriptive error result *without* invoking the executor.
+    """
+    parsed = adapter.extract_tool_call_args(call)
+    if isinstance(parsed, ToolCallParseError):
+        return call.id, (
+            f"Tool error: invalid JSON arguments ({parsed.reason}). "
+            f"Received: {parsed.raw_args[:200]}"
+        )
+
+    if on_tool_call:
+        await on_tool_call(call.name, parsed)
+
+    start = time.perf_counter()
+    try:
+        try:
+            result = await asyncio.wait_for(
+                tool_executor(call.name, parsed),
+                timeout=timeout_s,
+            )
+        except asyncio.TimeoutError:
+            result = (
+                f"Tool error: '{call.name}' timed out after {timeout_s}s"
+            )
+        except Exception as e:
+            result = f"Tool error: {str(e)}"
+    finally:
+        tool_timings.append(
+            (call.name, (time.perf_counter() - start) * 1000)
+        )
+
+    return call.id, str(result) if not isinstance(result, str) else result
+
+
+async def run_tool_loop(
+    adapter: ProviderAdapter,
+    messages: list,
+    settings,
+    tools: list,
+    tool_executor,
+    on_tool_call,
+    max_tool_rounds: int,
+    _logger=None,
+) -> AsyncIterator[str]:
+    """Provider-agnostic tool-calling loop.
+
+    Replaces the duplicated _anthropic_stream_with_tools and
+    _openai_stream_with_tools. Owns: stuck detection, parallel tool execution
+    with per-tool timeout, result truncation, telemetry, synthesis fallback
+    gating, max-rounds enforcement.
+
+    _logger: optional logger override (defaults to module logger). Used by
+    provider.py compat shims so telemetry appears under app.llm.provider.
+    """
+    _log = _logger if _logger is not None else logger
+    kwargs = adapter.build_kwargs(messages, tools)
+    seen_signatures: set[str] = set()
+    finished_normally = False
+
+    rounds_used = 0
+    tools_called = 0
+    timeouts = 0
+    truncations = 0
+    stuck_triggered = False
+    synthesis_fallback_used = False
+    unique_tools_seen: set[str] = set()
+    prompt_tokens = 0
+    completion_tokens = 0
+    tool_timings: list[tuple[str, float]] = []
+
+    for round_num in range(max_tool_rounds):
+        rounds_used = round_num + 1
+
+        round_result: Optional[RoundResult] = None
+        async for event in adapter.stream_round(kwargs):
+            if isinstance(event, str):
+                yield event
+            elif isinstance(event, RoundEnd):
+                round_result = event.result
+
+        if round_result is None:
+            # Defensive — adapter should always yield a RoundEnd.
+            round_result = RoundResult(tool_calls=[], usage=Usage())
+
+        prompt_tokens += round_result.usage.prompt_tokens
+        completion_tokens += round_result.usage.completion_tokens
+
+        if not round_result.tool_calls:
+            finished_normally = True
+            break
+
+        adapter.append_assistant_turn(kwargs, round_result)
+
+        round_signatures = {
+            _tool_call_signature(c.name, c.raw_args)
+            for c in round_result.tool_calls
+        }
+        stuck = round_num > 0 and round_signatures.issubset(seen_signatures)
+        seen_signatures.update(round_signatures)
+        if stuck:
+            stuck_triggered = True
+
+        tools_called += len(round_result.tool_calls)
+        unique_tools_seen.update(c.name for c in round_result.tool_calls)
+
+        tool_results = await asyncio.gather(
+            *[
+                _execute_one(
+                    adapter,
+                    c,
+                    tool_executor,
+                    on_tool_call,
+                    settings.tool_call_timeout_s,
+                    tool_timings,
+                )
+                for c in round_result.tool_calls
+            ]
+        )
+
+        timeout_marker = f"timed out after {settings.tool_call_timeout_s}s"
+        timeouts += sum(1 for _, r in tool_results if timeout_marker in r)
+        if settings.tool_result_max_chars > 0:
+            truncations += sum(
+                1
+                for _, r in tool_results
+                if len(r) > settings.tool_result_max_chars
+            )
+
+        truncated = [
+            (tid, _truncate_tool_result(r, settings.tool_result_max_chars))
+            for tid, r in tool_results
+        ]
+        adapter.append_tool_results(
+            kwargs, truncated, with_synthesis_nudge=stuck
+        )
+
+    if not finished_normally:
+        synthesis_fallback_used = True
+        kwargs.pop("tools", None)
+        async for event in adapter.stream_round(kwargs):
+            if isinstance(event, str):
+                yield event
+            elif isinstance(event, RoundEnd):
+                prompt_tokens += event.result.usage.prompt_tokens
+                completion_tokens += event.result.usage.completion_tokens
+
+    slowest_name, slowest_ms, total_tool_ms = _summarize_tool_timings(
+        tool_timings
+    )
+    _log.info(
+        "tool_loop done",
+        extra={
+            "provider": adapter.provider_name,
+            "rounds_used": rounds_used,
+            "tools_called": tools_called,
+            "unique_tools": len(unique_tools_seen),
+            "timeouts": timeouts,
+            "truncations": truncations,
+            "stuck_triggered": stuck_triggered,
+            "synthesis_fallback": synthesis_fallback_used,
+            "finished_normally": finished_normally,
+            "max_rounds_hit": (
+                rounds_used >= max_tool_rounds and not finished_normally
+            ),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "slowest_tool_name": slowest_name,
+            "slowest_tool_ms": slowest_ms,
+            "total_tool_ms": total_tool_ms,
+        },
+    )
