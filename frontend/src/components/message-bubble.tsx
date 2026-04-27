@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Check, Pencil, X, Send, FileText, Paperclip } from "lucide-react";
+import { Copy, Check, Pencil, X, Send, FileText, FileType, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -269,13 +269,21 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
                 <div className="mb-2 flex flex-wrap gap-2">
                   {files.map((f, i) =>
                     f.type.startsWith("image/") ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <a
                         key={i}
-                        src={f.url}
-                        alt={f.name}
-                        className="max-h-48 max-w-full rounded-lg object-contain"
-                      />
+                        href={f.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${f.name} in a new tab`}
+                        className="inline-block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={f.url}
+                          alt={f.name}
+                          className="max-h-48 max-w-full rounded-lg object-contain"
+                        />
+                      </a>
                     ) : (
                       <Button
                         key={i}
@@ -295,6 +303,8 @@ export function MessageBubble({ role, content, isStreaming, sources, metrics, on
                       >
                         {f.type === "application/pdf" ? (
                           <FileText className="h-4 w-4 shrink-0" />
+                        ) : f.type === "text/markdown" || f.type === "text/plain" ? (
+                          <FileType className="h-4 w-4 shrink-0" />
                         ) : (
                           <Paperclip className="h-4 w-4 shrink-0" />
                         )}
