@@ -110,8 +110,19 @@ class AnthropicAdapter:
         kwargs: dict = {
             "model": self._model,
             "max_tokens": self._settings.max_output_tokens,
-            "system": SYSTEM_PROMPT,
+            # Explicit breakpoint after the static prefix (tools + system),
+            # so it is reused even when the conversation tail changes.
+            "system": [
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             "messages": converted_messages,
+            # Automatic breakpoint on the last block — moves forward with the
+            # history and with each tool round.
+            "cache_control": {"type": "ephemeral"},
         }
         if tools:
             kwargs["tools"] = _convert_tools_to_anthropic(tools)
@@ -133,9 +144,16 @@ class AnthropicAdapter:
                 )
 
         usage_obj = getattr(response, "usage", None)
+        # Anthropic's input_tokens excludes cached tokens; add them back so
+        # prompt_tokens means "total input" for every provider.
+        uncached = getattr(usage_obj, "input_tokens", 0) or 0
+        cache_read = getattr(usage_obj, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(usage_obj, "cache_creation_input_tokens", 0) or 0
         usage = Usage(
-            prompt_tokens=getattr(usage_obj, "input_tokens", 0) or 0,
+            prompt_tokens=uncached + cache_read + cache_write,
             completion_tokens=getattr(usage_obj, "output_tokens", 0) or 0,
+            cached_tokens=cache_read,
+            cache_write_tokens=cache_write,
         )
 
         # Stash the raw assistant content so append_assistant_turn can use it
@@ -295,12 +313,17 @@ class OpenAIAdapter:
         tool_calls_in_progress: dict = {}
         prompt_tokens = 0
         completion_tokens = 0
+        cached_tokens = 0
 
         async for chunk in stream:
             chunk_usage = getattr(chunk, "usage", None)
             if chunk_usage is not None:
                 prompt_tokens += getattr(chunk_usage, "prompt_tokens", 0) or 0
                 completion_tokens += getattr(chunk_usage, "completion_tokens", 0) or 0
+                # OpenAI, Z.ai (GLM) and DeepSeek cache prefixes automatically
+                # and report hits here.
+                details = getattr(chunk_usage, "prompt_tokens_details", None)
+                cached_tokens += getattr(details, "cached_tokens", 0) or 0
             if not chunk.choices:
                 continue
 
@@ -339,7 +362,11 @@ class OpenAIAdapter:
             ToolCall(id=tc["id"], name=tc["name"], raw_args=tc["arguments"])
             for tc in tool_calls_in_progress.values()
         ]
-        usage = Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+        usage = Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+        )
         yield RoundEnd(result=RoundResult(tool_calls=tool_calls, usage=usage))
 
     def append_assistant_turn(self, kwargs: dict, round_result: RoundResult) -> None:

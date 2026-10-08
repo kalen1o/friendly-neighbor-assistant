@@ -1,10 +1,14 @@
 """Sliding window context management for chat history.
 
 When conversation history exceeds the token budget:
-1. Keep the most recent N messages verbatim
+1. Keep the most recent messages verbatim (at least N)
 2. Summarize older messages via LLM
 3. Store the summary on the Chat model for reuse
 4. Send: [system summary] + [recent messages] to the LLM
+
+The summary boundary moves in steps of N messages instead of every turn, so
+the [summary] + [recent...] prefix stays byte-identical for several turns and
+provider prompt caches (Anthropic, OpenAI, GLM) keep hitting.
 """
 
 import logging
@@ -62,9 +66,9 @@ async def build_context_messages(
     )
 
     # Split: keep recent messages verbatim, summarize the rest
-    recent_count = min(settings.context_recent_messages, len(all_messages))
-    recent = all_messages[-recent_count:]
-    older = all_messages[:-recent_count]
+    older_count = _summary_boundary(len(all_messages), settings.context_recent_messages)
+    older = all_messages[:older_count]
+    recent = all_messages[older_count:]
 
     if not older:
         # All messages are "recent" — just return them (edge case)
@@ -86,6 +90,22 @@ async def build_context_messages(
     return [summary_message] + recent
 
 
+def _summary_boundary(total: int, recent_min: int) -> int:
+    """Number of leading messages to summarize.
+
+    Rounded down to a multiple of `recent_min`, so the boundary (and the
+    summary) only changes once every `recent_min` messages; in between, the
+    verbatim window grows from `recent_min` up to `2 * recent_min - 1`.
+    Before the first full step, summarize everything beyond `recent_min`.
+    """
+    excess = total - recent_min
+    if excess <= 0:
+        return 0
+    if recent_min <= 0:
+        return excess
+    return (excess // recent_min) * recent_min or excess
+
+
 async def _get_or_create_summary(
     chat: Chat,
     older_messages: List[dict],
@@ -93,12 +113,10 @@ async def _get_or_create_summary(
 ) -> str:
     """Get existing summary or generate a new one.
 
-    Reuses chat.context_summary if the older message count hasn't changed much.
+    Reuses chat.context_summary if it covers exactly these older messages.
     Otherwise regenerates.
     """
-    # Simple heuristic: regenerate if no summary exists or if older messages
-    # have grown significantly (every 10 new messages)
-    older_hash = len(older_messages)  # rough change detector
+    older_hash = len(older_messages)  # boundary marker; moves in fixed steps
 
     if chat.context_summary and _summary_is_fresh(chat.context_summary, older_hash):
         logger.debug("Reusing existing context summary for chat %s", chat.public_id)
@@ -118,13 +136,16 @@ async def _get_or_create_summary(
 
 
 def _summary_is_fresh(stored_summary: str, current_count: int) -> bool:
-    """Check if stored summary is still fresh enough."""
+    """Check if the stored summary covers exactly `current_count` messages.
+
+    An exact match is required: a summary of fewer messages would silently
+    drop the ones between it and the verbatim window.
+    """
     try:
         # Extract stored count from "[n=42]\n..." format
         first_line = stored_summary.split("\n", 1)[0]
         stored_count = int(first_line.split("=")[1].rstrip("]"))
-        # Regenerate if 10+ new messages have been added to the older bucket
-        return abs(current_count - stored_count) < 10
+        return current_count == stored_count
     except (IndexError, ValueError):
         return False
 

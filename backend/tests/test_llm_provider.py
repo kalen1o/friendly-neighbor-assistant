@@ -182,13 +182,20 @@ class _FakeChoice:
         self.finish_reason = finish_reason
 
 
+class _FakePromptDetails:
+    def __init__(self, cached_tokens=0):
+        self.cached_tokens = cached_tokens
+
+
 class _FakeUsage:
     """OpenAI-style usage payload: chunk.usage on the final usage-only chunk."""
 
-    def __init__(self, prompt_tokens=0, completion_tokens=0):
+    def __init__(self, prompt_tokens=0, completion_tokens=0, cached_tokens=None):
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
         self.total_tokens = prompt_tokens + completion_tokens
+        if cached_tokens is not None:
+            self.prompt_tokens_details = _FakePromptDetails(cached_tokens)
 
 
 class _FakeChunk:
@@ -199,9 +206,9 @@ class _FakeChunk:
         self.usage = usage
 
 
-def _usage_chunk(prompt_tokens, completion_tokens):
+def _usage_chunk(prompt_tokens, completion_tokens, cached_tokens=None):
     """Build an OpenAI usage-only chunk like the API emits at end of stream."""
-    return _FakeChunk(usage=_FakeUsage(prompt_tokens, completion_tokens))
+    return _FakeChunk(usage=_FakeUsage(prompt_tokens, completion_tokens, cached_tokens))
 
 
 def _stream(chunks):
@@ -472,9 +479,17 @@ class _FakeToolUseBlock:
 
 
 class _AnthroUsage:
-    def __init__(self, input_tokens=0, output_tokens=0):
+    def __init__(
+        self,
+        input_tokens=0,
+        output_tokens=0,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    ):
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        self.cache_read_input_tokens = cache_read_input_tokens
+        self.cache_creation_input_tokens = cache_creation_input_tokens
 
 
 class _FakeFinalMessage:
@@ -885,6 +900,72 @@ async def test_anthropic_loop_telemetry_includes_token_usage(caplog):
         assert record.prompt_tokens == 15
         assert record.completion_tokens == 4
         assert record.total_tokens == 19
+    finally:
+        cm.stop()
+
+
+@pytest.mark.anyio
+async def test_openai_loop_telemetry_includes_cached_tokens(caplog):
+    """prompt_tokens_details.cached_tokens (OpenAI, GLM, DeepSeek) is recorded."""
+    from app.llm.provider import _openai_stream_with_tools
+
+    streams = [
+        [
+            _FakeChunk(_FakeChoice(_FakeDelta(content="hi"), finish_reason="stop")),
+            _usage_chunk(prompt_tokens=1200, completion_tokens=7, cached_tokens=800),
+        ]
+    ]
+    cm, _ = _patch_openai_streams(streams)
+    caplog.set_level(logging.INFO, logger="app.llm.provider")
+    try:
+        async for _ in _openai_stream_with_tools(
+            messages=[{"role": "user", "content": "hi"}],
+            settings=_openai_settings(),
+            tools=None,
+            tool_executor=None,
+        ):
+            pass
+
+        record = _telemetry_record(caplog)
+        assert record.prompt_tokens == 1200
+        assert record.cached_tokens == 800
+        assert record.cache_write_tokens == 0
+    finally:
+        cm.stop()
+
+
+@pytest.mark.anyio
+async def test_anthropic_loop_telemetry_includes_cache_usage(caplog):
+    """Cache reads/writes are reported and folded into prompt_tokens."""
+    from app.llm.provider import _anthropic_stream_with_tools
+
+    usage = _AnthroUsage(
+        input_tokens=50,
+        output_tokens=4,
+        cache_read_input_tokens=2000,
+        cache_creation_input_tokens=300,
+    )
+    cm, _ = _patch_anthropic_streams([(["hello"], [], usage)])
+    caplog.set_level(logging.INFO, logger="app.llm.provider")
+    try:
+        async for _ in _anthropic_stream_with_tools(
+            messages=[{"role": "user", "content": "hi"}],
+            settings=_anthropic_settings(),
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": "web_search", "parameters": {}},
+                }
+            ],
+            tool_executor=AsyncMock(),
+        ):
+            pass
+
+        record = _telemetry_record(caplog)
+        assert record.prompt_tokens == 2350
+        assert record.cached_tokens == 2000
+        assert record.cache_write_tokens == 300
+        assert record.total_tokens == 2354
     finally:
         cm.stop()
 

@@ -8,7 +8,12 @@ the existing test_llm_provider.py tests using SDK-level mocks.
 
 from app.config import Settings
 from app.llm.adapters import AnthropicAdapter
-from app.llm.driver import _SYNTHESIS_NUDGE, ToolCall, ToolCallParseError
+from app.llm.driver import (
+    SYSTEM_PROMPT,
+    _SYNTHESIS_NUDGE,
+    ToolCall,
+    ToolCallParseError,
+)
 
 
 def _settings() -> Settings:
@@ -71,6 +76,22 @@ def test_anthropic_adapter_build_kwargs_converts_image_blocks_and_tools():
     img = next(b for b in user_blocks if b.get("type") == "image")
     assert img["source"]["type"] == "base64"
     assert img["source"]["media_type"] == "image/png"
+
+
+def test_anthropic_adapter_build_kwargs_enables_prompt_caching():
+    adapter = AnthropicAdapter(_settings(), model_config=None)
+    kwargs = adapter.build_kwargs([{"role": "user", "content": "hi"}], tools=None)
+
+    # Explicit breakpoint on the static system prompt...
+    assert kwargs["system"] == [
+        {
+            "type": "text",
+            "text": SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    # ...plus automatic caching for the growing conversation tail.
+    assert kwargs["cache_control"] == {"type": "ephemeral"}
 
 
 def test_anthropic_adapter_build_kwargs_omits_tools_key_when_none():

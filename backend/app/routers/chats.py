@@ -645,6 +645,20 @@ async def _resolve_llm_model_config(
     return None
 
 
+def _append_to_last_user_message(llm_messages: list, text: str) -> None:
+    """Append text to the last message in-place (plain or content-array form)."""
+    last_msg = llm_messages[-1]
+    content = last_msg.get("content")
+    if isinstance(content, list):
+        for block in content:
+            if block.get("type") == "text":
+                block["text"] += text
+                return
+        content.append({"type": "text", "text": text})
+    else:
+        llm_messages[-1] = {**last_msg, "content": (content or "") + text}
+
+
 def _inject_artifact_context(
     llm_messages: list,
     artifact_context: Optional[dict],
@@ -1300,17 +1314,6 @@ async def _llm_background_task(
             # Persist any new summary that was generated
             await db.commit()
 
-            # Inject user memories as context
-            if memory_prompt:
-                llm_messages.insert(0, {"role": "user", "content": memory_prompt})
-                llm_messages.insert(
-                    1,
-                    {
-                        "role": "assistant",
-                        "content": "Understood, I'll keep these in mind.",
-                    },
-                )
-
             # Inject personalization preferences as context
             if personalization_prompt:
                 llm_messages.insert(
@@ -1487,6 +1490,13 @@ async def _llm_background_task(
 
             # Inject active artifact context if provided.
             _inject_artifact_context(llm_messages, artifact_context, settings)
+
+            # User memories go on the latest message, not the start of the
+            # history: they change after most turns (background extraction),
+            # and anything at the front would invalidate the prompt cache for
+            # the whole conversation.
+            if memory_prompt:
+                _append_to_last_user_message(llm_messages, memory_prompt)
 
             # 4. pre_llm hooks
             hook_ctx.llm_messages = llm_messages
@@ -1741,6 +1751,8 @@ async def _llm_background_task(
                     "slowest_tool_ms",
                     "total_tool_ms",
                     "provider",
+                    "cached_tokens",
+                    "cache_write_tokens",
                 }
                 extra_metrics = {
                     k: v for k, v in loop_telemetry.items() if k in extra_metrics_keys

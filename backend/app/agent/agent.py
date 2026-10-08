@@ -233,6 +233,9 @@ def build_tool_definitions(registry: SkillRegistry) -> List[Dict[str, Any]]:
             }
         )
 
+    # Deterministic order: user skills and MCP tools come from unordered DB
+    # queries, and tools sit at the very front of the prompt cache prefix.
+    tools.sort(key=lambda t: t["function"]["name"])
     return tools
 
 

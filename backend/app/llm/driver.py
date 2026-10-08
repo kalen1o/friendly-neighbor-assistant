@@ -151,6 +151,10 @@ class ToolCallParseError:
 class Usage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # Subset of prompt_tokens served from the provider's prompt cache.
+    cached_tokens: int = 0
+    # Subset of prompt_tokens written to the cache (Anthropic only).
+    cache_write_tokens: int = 0
 
 
 @dataclass
@@ -296,6 +300,8 @@ async def run_tool_loop(
     unique_tools_seen: set[str] = set()
     prompt_tokens = 0
     completion_tokens = 0
+    cached_tokens = 0
+    cache_write_tokens = 0
     tool_timings: list[tuple[str, float]] = []
 
     # Capture any exception raised inside the loop so we still emit a final
@@ -320,6 +326,8 @@ async def run_tool_loop(
 
             prompt_tokens += round_result.usage.prompt_tokens
             completion_tokens += round_result.usage.completion_tokens
+            cached_tokens += round_result.usage.cached_tokens
+            cache_write_tokens += round_result.usage.cache_write_tokens
 
             if not round_result.tool_calls:
                 finished_normally = True
@@ -379,6 +387,8 @@ async def run_tool_loop(
                 elif isinstance(event, RoundEnd):
                     prompt_tokens += event.result.usage.prompt_tokens
                     completion_tokens += event.result.usage.completion_tokens
+                    cached_tokens += event.result.usage.cached_tokens
+                    cache_write_tokens += event.result.usage.cache_write_tokens
     except BaseException as e:
         exc = e
 
@@ -397,6 +407,8 @@ async def run_tool_loop(
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": prompt_tokens + completion_tokens,
+        "cached_tokens": cached_tokens,
+        "cache_write_tokens": cache_write_tokens,
         "slowest_tool_name": slowest_name,
         "slowest_tool_ms": slowest_ms,
         "total_tool_ms": total_tool_ms,
